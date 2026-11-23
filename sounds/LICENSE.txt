@@ -1,0 +1,418 @@
+FRONT ZERO - recorded weapon sounds
+
+Every file in this folder (shots/ and handling/) is an edit of recordings from:
+
+  The Free Firearm Sound Library
+  Recorded and released by Ben Jaszczak and the contributors to the 2014 Kickstarter project "The Firearm Sound Library".
+  Licence: Creative Commons CC0 1.0 Universal (public domain dedication)
+  https://creativecommons.org/publicdomain/zero/1.0/
+
+Sources:
+  https://opengameart.org/content/the-free-firearm-sound-library
+  https://github.com/buddingmonkey/FreeFirearmsSFXLibrary (mirror; its LICENSE file is the CC0 1.0 legal code)
+  https://www.kickstarter.com/projects/bjjaszcz/the-firearm-sound-library
+
+CC0 does not require attribution; it is given here as a courtesy and for traceability.
+Edits made for the game: takes cut out of the recordings, 25 Hz high-pass, fades, loudness normalisation with at most 3 dB of
+look-ahead peak limiting on a few takes, 48 kHz, MP3 (LAME VBR). The edited files are released under the same CC0 1.0 terms.
+The recordings are of real firearms; the weapons in the game are fictional and are not the recorded models.
+
+Source recording -> shipped files
+
+Master_Tracks/1911/A_10.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/1911/A_10.wav
+    handling/pistol45-slideForward-1.mp3 (from 0.644 s)
+Master_Tracks/1911/A_11.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/1911/A_11.wav
+    handling/pistol45-slideForward-2.mp3 (from 0.743 s)
+    handling/pistol45-slideForward-3.mp3 (from 2.572 s)
+Master_Tracks/1911/A_16.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/1911/A_16.wav
+    handling/pistol45-slideForward-4.mp3 (from 0.832 s)
+Master_Tracks/1911/A_19.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/1911/A_19.wav
+    handling/pistol45-dry-1.mp3 (from 0.697 s)
+Master_Tracks/1911/A_2.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/1911/A_2.wav
+    handling/pistol45-magIn-1.mp3 (from 0.878 s)
+    handling/pistol45-magIn-2.mp3 (from 2.255 s)
+Master_Tracks/1911/A_3.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/1911/A_3.wav
+    handling/pistol45-magOut-1.mp3 (from 1.150 s)
+Master_Tracks/1911/A_39.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/1911/A_39.wav
+    shots/pistol45-far-1.mp3 (from 1.044 s)
+    shots/pistol45-far-2.mp3 (from 5.117 s)
+Master_Tracks/1911/A_4.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/1911/A_4.wav
+    handling/pistol45-magIn-3.mp3 (from 0.897 s)
+    handling/pistol45-magIn-4.mp3 (from 2.954 s)
+Master_Tracks/1911/A_5.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/1911/A_5.wav
+    handling/pistol45-magOut-2.mp3 (from 0.197 s)
+Master_Tracks/1911/A_7.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/1911/A_7.wav
+    handling/pistol45-slideBack-1.mp3 (from 0.261 s)
+    handling/pistol45-slideBack-2.mp3 (from 1.083 s)
+Master_Tracks/1911/A_8.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/1911/A_8.wav
+    handling/pistol45-slideBack-3.mp3 (from 0.461 s)
+Master_Tracks/1917/B_22.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/1917/B_22.wav
+    shots/rifle3006a-far-1.mp3 (from 1.497 s)
+    shots/rifle3006a-far-2.mp3 (from 6.582 s)
+Master_Tracks/AK-47/C_0.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AK-47/C_0.wav
+    handling/rifle762-boltBack-1.mp3 (from 0.394 s)
+    handling/rifle762-boltBack-2.mp3 (from 1.314 s)
+Master_Tracks/AK-47/C_1.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AK-47/C_1.wav
+    handling/rifle762-boltForward-1.mp3 (from 0.290 s)
+    handling/rifle762-boltForward-2.mp3 (from 0.913 s)
+Master_Tracks/AK-47/C_10.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AK-47/C_10.wav
+    handling/rifle762-magIn-1.mp3 (from 0.218 s)
+Master_Tracks/AK-47/C_11.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AK-47/C_11.wav
+    handling/rifle762-magOut-1.mp3 (from 0.295 s)
+Master_Tracks/AK-47/C_12.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AK-47/C_12.wav
+    handling/rifle762-boltBack-3.mp3 (from 0.214 s)
+    handling/rifle762-boltBack-4.mp3 (from 0.899 s)
+Master_Tracks/AK-47/C_13.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AK-47/C_13.wav
+    handling/rifle762-boltForward-3.mp3 (from 0.178 s)
+Master_Tracks/AK-47/C_17.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AK-47/C_17.wav
+    shots/rifle762-far-1.mp3 (from 0.340 s)
+    shots/rifle762-far-2.mp3 (from 4.404 s)
+Master_Tracks/AK-47/C_7.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AK-47/C_7.wav
+    handling/rifle762-dry-1.mp3 (from 0.334 s)
+Master_Tracks/AR-15/D_10.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AR-15/D_10.wav
+    handling/rifle556-boltForward-5.mp3 (from 0.313 s)
+Master_Tracks/AR-15/D_11.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AR-15/D_11.wav
+    handling/rifle556-boltForward-2.mp3 (from 0.416 s)
+Master_Tracks/AR-15/D_13.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AR-15/D_13.wav
+    handling/rifle556-boltForward-3.mp3 (from 0.340 s)
+    handling/rifle556-boltForward-4.mp3 (from 1.191 s)
+Master_Tracks/AR-15/D_16.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AR-15/D_16.wav
+    handling/rifle556-dry-1.mp3 (from 0.367 s)
+Master_Tracks/AR-15/D_26.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AR-15/D_26.wav
+    shots/rifle556-far-1.mp3 (from 0.418 s)
+    shots/rifle556-far-2.mp3 (from 3.645 s)
+Master_Tracks/AR-15/D_4.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AR-15/D_4.wav
+    handling/rifle556-magIn-1.mp3 (from 1.163 s)
+Master_Tracks/AR-15/D_5.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AR-15/D_5.wav
+    handling/rifle556-magOut-1.mp3 (from 1.271 s)
+Master_Tracks/AR-15/D_6.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AR-15/D_6.wav
+    handling/rifle556-boltBack-1.mp3 (from 0.532 s)
+Master_Tracks/AR-15/D_7.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AR-15/D_7.wav
+    handling/rifle556-boltForward-1.mp3 (from 0.373 s)
+Master_Tracks/AR-15/D_9.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AR-15/D_9.wav
+    handling/rifle556-boltBack-2.mp3 (from 0.472 s)
+Master_Tracks/Carl_Gustav_M45_Swedish_K/G_10.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Carl%20Gustav%20M45_Swedish%20K/G_10.wav
+    handling/smg9-boltBack-1.mp3 (from 0.230 s)
+    handling/smg9-boltBack-2.mp3 (from 0.982 s)
+Master_Tracks/Carl_Gustav_M45_Swedish_K/G_19.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Carl%20Gustav%20M45_Swedish%20K/G_19.wav
+    shots/smg9-far-1.mp3 (from 0.529 s)
+    shots/smg9-far-2.mp3 (from 2.441 s)
+    shots/smg9-far-3.mp3 (from 5.449 s)
+Master_Tracks/Carl_Gustav_M45_Swedish_K/G_3.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Carl%20Gustav%20M45_Swedish%20K/G_3.wav
+    handling/smg9-boltForward-1.mp3 (from 0.713 s)
+    handling/smg9-boltForward-2.mp3 (from 2.404 s)
+Master_Tracks/Carl_Gustav_M45_Swedish_K/G_8.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Carl%20Gustav%20M45_Swedish%20K/G_8.wav
+    handling/smg9-magIn-1.mp3 (from 0.401 s)
+    handling/smg9-magIn-2.mp3 (from 1.768 s)
+Master_Tracks/Carl_Gustav_M45_Swedish_K/G_9.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Carl%20Gustav%20M45_Swedish%20K/G_9.wav
+    handling/smg9-magOut-1.mp3 (from 0.465 s)
+    handling/smg9-magOut-2.mp3 (from 1.213 s)
+Master_Tracks/Charles_Daly/H_0.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Charles%20Daly/H_0.wav
+    handling/shotgun-boltBack-1.mp3 (from 1.406 s)
+Master_Tracks/Charles_Daly/H_1.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Charles%20Daly/H_1.wav
+    handling/shotgun-boltForward-1.mp3 (from 1.105 s)
+Master_Tracks/Charles_Daly/H_3.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Charles%20Daly/H_3.wav
+    handling/shotgun-shell-1.mp3 (from 0.796 s)
+    handling/shotgun-shell-2.mp3 (from 3.274 s)
+Master_Tracks/Charles_Daly/H_5.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Charles%20Daly/H_5.wav
+    handling/shotgun-boltForward-2.mp3 (from 1.221 s)
+Master_Tracks/Charles_Daly/H_6.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Charles%20Daly/H_6.wav
+    handling/shotgun-pump-2.mp3 (from 1.246 s)
+Master_Tracks/Charles_Daly/H_8.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Charles%20Daly/H_8.wav
+    handling/shotgun-dry-1.mp3 (from 1.010 s)
+Master_Tracks/Nova/O_17.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Nova/O_17.wav
+    shots/shotgun12a-far-1.mp3 (from 0.898 s)
+    shots/shotgun12a-far-2.mp3 (from 6.770 s)
+Master_Tracks/Nova/O_3.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Nova/O_3.wav
+    handling/shotgun-shell-3.mp3 (from 1.428 s)
+Master_Tracks/Nova/O_6.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Nova/O_6.wav
+    handling/shotgun-pump-1.mp3 (from 1.060 s)
+Master_Tracks/Nova/O_7.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Nova/O_7.wav
+    handling/shotgun-shell-4.mp3 (from 0.185 s)
+    handling/shotgun-shell-5.mp3 (from 1.585 s)
+Master_Tracks/Nova/O_8.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Nova/O_8.wav
+    handling/shotgun-dry-2.mp3 (from 0.251 s)
+Master_Tracks/PPSh/P_6.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/PPSh/P_6.wav
+    handling/smg762-magIn-1.mp3 (from 0.426 s)
+    handling/smg762-magIn-2.mp3 (from 2.544 s)
+Master_Tracks/PPSh/P_7.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/PPSh/P_7.wav
+    handling/smg762-magOut-1.mp3 (from 0.154 s)
+    handling/smg762-magOut-2.mp3 (from 0.539 s)
+Master_Tracks/Smith_Wesson_642/V_0.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Smith%20%26%20Wesson%20642/V_0.wav
+    handling/revolver-cylOpen-1.mp3 (from 1.483 s)
+Master_Tracks/Smith_Wesson_642/V_1.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Smith%20%26%20Wesson%20642/V_1.wav
+    handling/revolver-cylClose-1.mp3 (from 1.205 s)
+Master_Tracks/Smith_Wesson_642/V_11.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Smith%20%26%20Wesson%20642/V_11.wav
+    handling/revolver-cylOpen-2.mp3 (from 1.505 s)
+Master_Tracks/Smith_Wesson_642/V_12.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Smith%20%26%20Wesson%20642/V_12.wav
+    handling/revolver-cylClose-2.mp3 (from 0.875 s)
+    handling/revolver-cylClose-3.mp3 (from 3.731 s)
+Master_Tracks/Smith_Wesson_642/V_2.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Smith%20%26%20Wesson%20642/V_2.wav
+    handling/revolver-cylLoad-1.mp3 (from 1.079 s)
+    handling/revolver-cylLoad-2.mp3 (from 4.002 s)
+    handling/revolver-cylLoad-3.mp3 (from 6.741 s)
+Master_Tracks/Smith_Wesson_642/V_23.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Smith%20%26%20Wesson%20642/V_23.wav
+    shots/revolver38-far-1.mp3 (from 0.756 s)
+    shots/revolver38-far-2.mp3 (from 5.590 s)
+Master_Tracks/Smith_Wesson_642/V_3.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Smith%20%26%20Wesson%20642/V_3.wav
+    handling/revolver-cylEject-1.mp3 (from 1.164 s)
+Master_Tracks/Smith_Wesson_642/V_5.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Smith%20%26%20Wesson%20642/V_5.wav
+    handling/revolver-dry-1.mp3 (from 1.542 s)
+Master_Tracks/Tikka/W_11.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Tikka/W_11.wav
+    handling/boltrifle-boltForward-1.mp3 (from 0.549 s)
+Master_Tracks/Tikka/W_12.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Tikka/W_12.wav
+    handling/boltrifle-boltForward-2.mp3 (from 0.531 s)
+    handling/boltrifle-boltForward-3.mp3 (from 2.459 s)
+Master_Tracks/Tikka/W_13.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Tikka/W_13.wav
+    handling/boltrifle-dry-1.mp3 (from 0.413 s)
+Master_Tracks/Tikka/W_2.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Tikka/W_2.wav
+    handling/boltrifle-magIn-1.mp3 (from 0.957 s)
+Master_Tracks/Tikka/W_25.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Tikka/W_25.wav
+    shots/rifle3006b-far-1.mp3 (from 0.710 s)
+    shots/rifle3006b-far-2.mp3 (from 7.341 s)
+Master_Tracks/Tikka/W_3.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Tikka/W_3.wav
+    handling/boltrifle-magOut-1.mp3 (from 0.917 s)
+Master_Tracks/Tikka/W_4.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Tikka/W_4.wav
+    handling/boltrifle-magIn-2.mp3 (from 1.093 s)
+Master_Tracks/Tikka/W_5.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Tikka/W_5.wav
+    handling/boltrifle-magOut-2.mp3 (from 1.080 s)
+Master_Tracks/Tikka/W_8.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Tikka/W_8.wav
+    handling/boltrifle-boltBack-1.mp3 (from 0.467 s)
+Master_Tracks/Tikka/W_9.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Tikka/W_9.wav
+    handling/boltrifle-boltBack-2.mp3 (from 0.374 s)
+    handling/boltrifle-boltBack-3.mp3 (from 2.145 s)
+Master_Tracks/Walther_PPQ/X_11.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Walther%20PPQ/X_11.wav
+    handling/pistol9-slideForward-1.mp3 (from 0.763 s)
+Master_Tracks/Walther_PPQ/X_16.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Walther%20PPQ/X_16.wav
+    handling/pistol9-slideForward-2.mp3 (from 0.900 s)
+Master_Tracks/Walther_PPQ/X_17.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Walther%20PPQ/X_17.wav
+    handling/pistol9-slideForward-3.mp3 (from 1.149 s)
+Master_Tracks/Walther_PPQ/X_18.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Walther%20PPQ/X_18.wav
+    handling/pistol9-dry-1.mp3 (from 0.585 s)
+Master_Tracks/Walther_PPQ/X_2.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Walther%20PPQ/X_2.wav
+    handling/pistol9-magIn-1.mp3 (from 0.724 s)
+Master_Tracks/Walther_PPQ/X_3.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Walther%20PPQ/X_3.wav
+    handling/pistol9-magOut-1.mp3 (from 0.817 s)
+Master_Tracks/Walther_PPQ/X_33.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Walther%20PPQ/X_33.wav
+    shots/pistol9-far-1.mp3 (from 0.932 s)
+    shots/pistol9-far-2.mp3 (from 5.372 s)
+Master_Tracks/Walther_PPQ/X_4.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Walther%20PPQ/X_4.wav
+    handling/pistol9-magIn-2.mp3 (from 0.888 s)
+    handling/pistol9-magIn-3.mp3 (from 3.016 s)
+Master_Tracks/Walther_PPQ/X_5.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Walther%20PPQ/X_5.wav
+    handling/pistol9-magOut-2.mp3 (from 1.356 s)
+    handling/pistol9-magOut-3.mp3 (from 3.627 s)
+Master_Tracks/Walther_PPQ/X_7.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Walther%20PPQ/X_7.wav
+    handling/pistol9-slideBack-1.mp3 (from 1.096 s)
+Master_Tracks/Walther_PPQ/X_8.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Walther%20PPQ/X_8.wav
+    handling/pistol9-slideBack-2.mp3 (from 0.873 s)
+Prepared_SFX/1911/A_34P.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/1911/A_34P.wav
+    shots/pistol45-mid-1.mp3 (from 1.542 s)
+    shots/pistol45-mid-2.mp3 (from 6.655 s)
+Prepared_SFX/1911/A_42P.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/1911/A_42P.wav
+    shots/pistol45-near-1.mp3 (from 0.941 s)
+    shots/pistol45-near-2.mp3 (from 5.002 s)
+Prepared_SFX/1917/B_24P.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/1917/B_24P.wav
+    shots/rifle3006a-near-1.mp3 (from 1.308 s)
+    shots/rifle3006a-near-2.mp3 (from 6.731 s)
+Prepared_SFX/AK-47/C_28P.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/AK-47/C_28P.wav
+    shots/rifle762-near-1.mp3 (from 0.611 s)
+    shots/rifle762-near-2.mp3 (from 3.257 s)
+    shots/rifle762-near-3.mp3 (from 6.021 s)
+    shots/rifle762-near-4.mp3 (from 9.156 s)
+Prepared_SFX/AK-47/C_31P.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/AK-47/C_31P.wav
+    shots/rifle762-mid-1.mp3 (from 0.338 s)
+    shots/rifle762-mid-2.mp3 (from 4.401 s)
+Prepared_SFX/AR-15/D_24P.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/AR-15/D_24P.wav
+    shots/rifle556-mid-1.mp3 (from 0.549 s)
+    shots/rifle556-mid-2.mp3 (from 3.910 s)
+Prepared_SFX/AR-15/D_32P.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/AR-15/D_32P.wav
+    shots/rifle556-near-1.mp3 (from 0.704 s)
+    shots/rifle556-near-2.mp3 (from 5.647 s)
+Prepared_SFX/Arisaka/E_18P.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/Arisaka/E_18P.wav
+    shots/boltrifle-mid-1.mp3 (from 4.487 s)
+Prepared_SFX/Arisaka/E_25P.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/Arisaka/E_25P.wav
+    shots/boltrifle-near-1.mp3 (from 0.524 s)
+    shots/boltrifle-near-2.mp3 (from 4.030 s)
+Prepared_SFX/Bersa/F_41P.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/Bersa/F_41P.wav
+    shots/pistol380-mid-1.mp3 (from 0.438 s)
+    shots/pistol380-mid-2.mp3 (from 4.808 s)
+Prepared_SFX/Bersa/F_47P.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/Bersa/F_47P.wav
+    shots/pistol380-near-1.mp3 (from 0.334 s)
+    shots/pistol380-near-2.mp3 (from 4.410 s)
+Prepared_SFX/CD/H_16P.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/CD/H_16P.wav
+    shots/shotgun12c-mid-1.mp3 (from 4.117 s)
+Prepared_SFX/CD/H_21P.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/CD/H_21P.wav
+    shots/shotgun12c-near-1.mp3 (from 0.464 s)
+    shots/shotgun12c-near-2.mp3 (from 3.075 s)
+Prepared_SFX/Carl_Gustav_M45/G_20P.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/Carl%20Gustav%20M45/G_20P.wav
+    shots/smg9-mid-1.mp3 (from 0.348 s)
+    shots/smg9-mid-2.mp3 (from 2.259 s)
+    shots/smg9-mid-3.mp3 (from 5.267 s)
+Prepared_SFX/Carl_Gustav_M45/G_31P.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/Carl%20Gustav%20M45/G_31P.wav
+    shots/smg9-near-1.mp3 (from 0.310 s)
+    shots/smg9-near-2.mp3 (from 3.501 s)
+    shots/smg9-near-3.mp3 (from 6.728 s)
+Prepared_SFX/Model_12/K_17P.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/Model%2012/K_17P.wav
+    shots/shotgun12b-mid-1.mp3 (from 0.907 s)
+    shots/shotgun12b-mid-2.mp3 (from 7.057 s)
+Prepared_SFX/Model_12/K_22P.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/Model%2012/K_22P.wav
+    shots/shotgun12b-near-1.mp3 (from 0.842 s)
+    shots/shotgun12b-near-2.mp3 (from 7.445 s)
+Prepared_SFX/Mosin_Nagant/M_21P.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/Mosin%20Nagant/M_21P.wav
+    shots/rifle76254-near-1.mp3 (from 1.034 s)
+    shots/rifle76254-near-2.mp3 (from 5.020 s)
+    shots/rifle76254-near-3.mp3 (from 9.156 s)
+    shots/rifle76254-near-4.mp3 (from 14.137 s)
+Prepared_SFX/Mosin_Nagant/M_26P.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/Mosin%20Nagant/M_26P.wav
+    shots/rifle76254-mid-1.mp3 (from 1.138 s)
+    shots/rifle76254-mid-2.mp3 (from 6.105 s)
+    shots/rifle76254-mid-3.mp3 (from 10.743 s)
+Prepared_SFX/Nova/O_17P.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/Nova/O_17P.wav
+    shots/shotgun12a-mid-1.mp3 (from 0.694 s)
+    shots/shotgun12a-mid-2.mp3 (from 3.708 s)
+Prepared_SFX/Nova/O_21P.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/Nova/O_21P.wav
+    shots/shotgun12a-near-1.mp3 (from 0.431 s)
+    shots/shotgun12a-near-2.mp3 (from 3.465 s)
+Prepared_SFX/PPSh/P_16P.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/PPSh/P_16P.wav
+    shots/smg762-mid-1.mp3 (from 0.292 s)
+    shots/smg762-mid-2.mp3 (from 5.251 s)
+    shots/smg762-mid-3.mp3 (from 9.047 s)
+    shots/smg762-mid-4.mp3 (from 12.999 s)
+Prepared_SFX/PPSh/P_30P.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/PPSh/P_30P.wav
+    shots/smg762-near-1.mp3 (from 0.969 s)
+    shots/smg762-near-2.mp3 (from 4.387 s)
+    shots/smg762-near-3.mp3 (from 8.243 s)
+    shots/smg762-near-4.mp3 (from 11.421 s)
+    shots/smg762-near-5.mp3 (from 15.090 s)
+Prepared_SFX/SKS/U_14P.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/SKS/U_14P.wav
+    shots/carbine762-near-1.mp3 (from 3.577 s)
+    shots/carbine762-near-2.mp3 (from 6.755 s)
+    shots/carbine762-near-3.mp3 (from 10.211 s)
+    shots/carbine762-near-4.mp3 (from 13.291 s)
+    shots/carbine762-near-5.mp3 (from 16.778 s)
+Prepared_SFX/Smith_Wesson_642/V_22P.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/Smith%20%26%20Wesson%20642/V_22P.wav
+    shots/revolver38-mid-1.mp3 (from 0.673 s)
+    shots/revolver38-mid-2.mp3 (from 5.506 s)
+Prepared_SFX/Smith_Wesson_642/V_27P.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/Smith%20%26%20Wesson%20642/V_27P.wav
+    shots/revolver38-near-1.mp3 (from 0.805 s)
+    shots/revolver38-near-2.mp3 (from 6.219 s)
+Prepared_SFX/Tikka/W_24P.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/Tikka/W_24P.wav
+    shots/rifle3006b-mid-1.mp3 (from 0.754 s)
+Prepared_SFX/Tikka/W_29P.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/Tikka/W_29P.wav
+    shots/rifle3006b-near-1.mp3 (from 0.577 s)
+    shots/rifle3006b-near-2.mp3 (from 5.665 s)
+Prepared_SFX/Walther_PPQ/X_31P.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/Walther%20PPQ/X_31P.wav
+    shots/pistol9-mid-1.mp3 (from 1.085 s)
+    shots/pistol9-mid-2.mp3 (from 5.243 s)
+Prepared_SFX/Walther_PPQ/X_39P.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/Walther%20PPQ/X_39P.wav
+    shots/pistol9-near-1.mp3 (from 1.407 s)
+    shots/pistol9-near-2.mp3 (from 6.444 s)
+    shots/pistol9-near-3.mp3 (from 10.660 s)

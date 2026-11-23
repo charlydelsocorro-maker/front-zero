@@ -1,0 +1,16 @@
+{
+  "name": "front-zero-server",
+  "version": "1.0.0",
+  "description": "Static host and authoritative WebSocket referee for FRONT ZERO",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "8.18.3"
+  }
+}
