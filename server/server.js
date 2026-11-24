@@ -109,7 +109,7 @@ for (const id of Object.keys(WEAPONS)) prepWeapon(WEAPONS[id]);
 const RELAY_ACTIONS = new Set(['reload', 'emote', 'chat', 'jump', 'marker']);
 const LIMITS = {
   state: [30, 40], shot: [40, 40], hit: [120, 120], action: [40, 60], boom: [8, 12],
-  lobby: [8, 16], join: [2, 5], ping: [2, 5], all: [200, 300], err: [10, 20],
+  lobby: [8, 16], join: [2, 5], ping: [2, 5], all: [200, 300], err: [10, 20], loot: [20, 30],
 };
 
 /* ---------- static files ---------- */
@@ -293,10 +293,11 @@ function resetLife(p) {
   p.hp = c.hp; p.maxHp = c.hp; p.armor = c.armor; p.status = 'alive'; p.snap = true;
   p.respawnAt = 0; p.bleedAt = 0; p.regenAt = 0; p.damageBy.clear(); p.credits.length = 0; p.revive = null;
   p.used = {};      // rounds fired this life with limited-reserve weapons (live projectiles and detonations outlive their owner on purpose)
+  p.inv = null; p.life = (p.life | 0) + 1;      // what this life carries (reported by loot-aware clients, then kept by the server); null = older client
 }
 function respawn(room, p, extra) {
   resetLife(p);
-  all(room, { t: 'respawn', id: p.id, hp: p.hp, armor: p.armor, team: p.team, ...extra });
+  all(room, { t: 'respawn', id: p.id, hp: p.hp, armor: p.armor, team: p.team, life: p.life, ...extra });
 }
 function applyDamage(room, target, amount, attacker, weapon, head) {
   const absorbed = Math.min(target.armor, amount * 0.6);
@@ -322,6 +323,7 @@ function killPlayer(room, victim, killer, weapon, head) {
   const self = killer === victim;       // own explosive: a death, no kill, no point
   if (!self) { killer.kills++; killer.score += head ? 125 : 100; }
   all(room, { t: 'death', id: victim.id, by: self ? null : killer.id, weapon, head: !!head, assists });
+  dropLoot(room, victim);
   if (m.mode === 'bomb') { clearActs(m, victim); sendScore(room); checkBombElimination(room); return; }
   victim.respawnAt = now + T(RESPAWN_MS);
   if (m.mode === 'tdm' && !self) m.teamScore[killer.team]++;
@@ -331,19 +333,135 @@ function killPlayer(room, victim, killer, weapon, head) {
   else if (m.mode === 'tdm' && m.teamScore[killer.team] >= MODE_RULES.tdm.limit) endMatch(room, killer.team, 'score');
 }
 
+/* ---------- loot: what a dead soldier leaves on the ground ----------
+   The server owns every drop (id, contents, lifetime) and every pickup, so an item cannot be duplicated. Clients that know about loot
+   report what they carry ('inv'); from then on the server counts their shots against it. Older clients never report: no drop, old rules. */
+const LOOT = { ttl: 30000, cap: 24, takeR: 4.5, takeY: 3.2 };
+const SIDEARMS = new Set(['p9', 'hp', 'rev', 'mp', 'knife']);
+const slotOf = id => (WEAPONS[id].kind === 'thrown' ? 2 : SIDEARMS.has(id) ? 1 : 0);
+const lootView = (d, now) => ({ id: d.id, k: d.k, w: d.w, a: d.a, r: d.r, x: d.x, y: d.y, z: d.z, ttl: Math.max(0, d.exp - now) });
+const lootLeft = e => e.a + Math.max(e.r, 0);
+function carried(p, id) {
+  if (!p.inv) return null;
+  if (p.inv.g && p.inv.g.id === id) return p.inv.g;
+  return p.inv.w.find(e => e.id === id) || null;
+}
+function addDrops(room, list, x, y, z) {
+  const m = room.match;
+  if (!m || !m.drops || !list.length) return;
+  const now = Date.now(), items = [], gone = [];
+  for (const o of list) {
+    const d = { id: ++m.lootId, k: o.k, w: o.w, a: o.a, r: o.r, x: r2(x), y: r2(y), z: r2(z), exp: now + T(LOOT.ttl) };
+    m.drops.set(d.id, d); items.push(lootView(d, now));
+  }
+  while (m.drops.size > LOOT.cap) { const id = m.drops.keys().next().value; m.drops.delete(id); gone.push(id); }      // oldest first
+  if (gone.length) all(room, { t: 'loot', op: 'del', ids: gone });
+  all(room, { t: 'loot', op: 'add', items: items.filter(i => m.drops.has(i.id)) });
+}
+function dropLoot(room, v) {
+  const inv = v.inv;
+  v.inv = null;
+  if (!inv || !v.hasPos || !room.match || room.mode === 'zombie') return;
+  const list = [];
+  for (const e of inv.w) if (WEAPONS[e.id].life === Infinity || lootLeft(e) > 0) list.push({ k: 'w', w: e.id, a: e.a, r: e.r });
+  if (inv.g && inv.g.a > 0) list.push({ k: 'g', w: inv.g.id, a: inv.g.a, r: 0 });
+  addDrops(room, list, v.x, v.y, v.z);
+}
+function clearLoot(room) {
+  const m = room.match;
+  if (!m || !m.drops || !m.drops.size) return;
+  m.drops.clear();
+  all(room, { t: 'loot', op: 'clear' });
+}
+function tickLoot(room, now) {
+  const m = room.match;
+  if (!m.drops || !m.drops.size) return;
+  let gone = null;
+  for (const d of m.drops.values()) {       // same lifetime for all: the map is in expiry order
+    if (now < d.exp) break;
+    (gone || (gone = [])).push(d.id);
+  }
+  if (!gone) return;
+  for (const id of gone) m.drops.delete(id);
+  all(room, { t: 'loot', op: 'del', ids: gone });
+}
+function onInv(p, m) {
+  const room = p.room;
+  if (!room || !room.match || room.mode === 'zombie' || p.status !== 'alive' || m.l !== p.life) return;      // a report from a previous life is stale, not abuse
+  if (!Array.isArray(m.w) || m.w.length < 1 || m.w.length > 2) return strike(p, 'bad_inv');
+  const list = [];
+  for (const e of m.w) {
+    const w = isObj(e) && typeof e.id === 'string' && Object.hasOwn(WEAPONS, e.id) ? WEAPONS[e.id] : null;
+    if (!w || w.kind === 'thrown' || !Number.isInteger(e.a) || !Number.isInteger(e.r) || e.a < 0 || e.a > w.mag) return strike(p, 'bad_inv');
+    if (w.reserve === undefined ? e.r !== -1 : e.r < 0 || e.r > w.reserve) return strike(p, 'bad_inv');
+    if (list.some(q => slotOf(q.id) === slotOf(e.id))) return strike(p, 'bad_inv');
+    list.push({ id: e.id, a: e.a, r: e.r });
+  }
+  let g = null;
+  if (m.g !== undefined && m.g !== null) {
+    const w = isObj(m.g) && typeof m.g.id === 'string' && Object.hasOwn(WEAPONS, m.g.id) ? WEAPONS[m.g.id] : null;
+    if (!w || w.kind !== 'thrown' || !Number.isInteger(m.g.n) || m.g.n < 0 || m.g.n > w.life) return strike(p, 'bad_inv');
+    g = { id: m.g.id, a: m.g.n, r: 0 };
+  }
+  if (!p.inv) { p.inv = { w: list, g }; return; }
+  // After the first report of a life the server owns the contents: a report moves rounds between magazine and reserve, it never adds any.
+  for (const e of list) {
+    const cur = p.inv.w.find(q => q.id === e.id), w = WEAPONS[e.id];
+    if (!cur) continue;       // crossed a swap on the wire
+    if (w.life === Infinity) { cur.a = e.a; continue; }
+    const total = Math.min(lootLeft(e), lootLeft(cur));
+    cur.a = Math.min(e.a, total); cur.r = total - cur.a;
+  }
+  // Grenades are not read back from later reports: the client may count one as gone while the throw animation runs, before its shot arrives.
+  // The server's own count (first report, accepted throws, pickups) stays right, and a grenade still in hand at death falls with the body.
+}
+function onTake(p, m) {
+  const room = p.room, g = room && room.match;
+  if (!g || !g.drops || room.mode === 'zombie') return;
+  if (!Number.isInteger(m.id)) return strike(p, 'bad_take');
+  const fail = () => send(p, { t: 'loot', op: 'fail', id: m.id });
+  const d = g.drops.get(m.id);
+  if (!d || p.status !== 'alive' || !p.inv || !p.hasPos || !canFight(room)) return fail();
+  if (Math.hypot(p.x - d.x, p.z - d.z) > LOOT.takeR || Math.abs(p.y - d.y) > LOOT.takeY) return fail();
+  const w = WEAPONS[d.w], gone = () => { g.drops.delete(d.id); all(room, { t: 'loot', op: 'del', ids: [d.id] }); };
+  const left = () => { if (lootLeft(d) > 0) all(room, { t: 'loot', op: 'upd', id: d.id, a: d.a, r: d.r }); else gone(); };
+  if (d.k === 'g') {
+    const cur = p.inv.g && p.inv.g.id === d.w ? p.inv.g : null, have = cur ? cur.a : 0, n = Math.min(w.life - have, d.a);
+    if (!(n > 0)) return fail();
+    if (cur) cur.a += n; else p.inv.g = { id: d.w, a: n, r: 0 };
+    d.a -= n; left();
+    return send(p, { t: 'loot', op: 'got', id: d.id, k: 'g', w: d.w, n });
+  }
+  const mine = p.inv.w.find(e => e.id === d.w);
+  if (m.swap !== true) {       // walking over: only spare rounds for a limited weapon already carried
+    if (!mine || w.life === Infinity) return fail();
+    const n = Math.min(w.reserve - mine.r, lootLeft(d));
+    if (!(n > 0)) return fail();
+    mine.r += n;
+    const fromR = Math.min(n, Math.max(d.r, 0)); d.r -= fromR; d.a -= n - fromR; left();
+    return send(p, { t: 'loot', op: 'got', id: d.id, k: 'a', w: d.w, n });
+  }
+  if (mine) return fail();
+  const slot = slotOf(d.w), i = p.inv.w.findIndex(e => slotOf(e.id) === slot), out = i >= 0 ? p.inv.w[i] : null, item = { id: d.w, a: d.a, r: d.r };
+  if (i >= 0) p.inv.w[i] = item; else p.inv.w.push(item);
+  gone();
+  if (out && (WEAPONS[out.id].life === Infinity || lootLeft(out) > 0)) addDrops(room, [{ k: 'w', w: out.id, a: out.a, r: out.r }], p.x, p.y, p.z);
+  send(p, { t: 'loot', op: 'got', id: d.id, k: 'w', w: d.w, a: d.a, r: d.r });
+}
+
 /* ---------- match flow ---------- */
 function startMatch(room) {
   balance(room);
   for (const q of room.players.values()) { q.kills = q.deaths = q.assists = q.score = 0; resetLife(q); }
   const now = Date.now();
-  const m = room.match = { mode: room.mode, startedAt: now, phase: 'live', phaseEnds: 0, endsAt: 0, teamScore: { A: 0, B: 0 }, lastScoreTick: now };
+  const m = room.match = { mode: room.mode, startedAt: now, phase: 'live', phaseEnds: 0, endsAt: 0, teamScore: { A: 0, B: 0 }, lastScoreTick: now, drops: new Map(), lootId: 0 };
   room.state = 'playing';
   if (MODE_RULES[m.mode]) m.endsAt = now + T(MODE_RULES[m.mode].time);
   if (m.mode === 'dom') m.points = room.domPoints ? buildPoints(room.domPoints) : null;
   if (m.mode === 'bomb') { m.round = 0; m.attackers = 'A'; m.bomb = null; m.plantAct = null; m.defuseAct = null; }
   if (m.mode === 'zombie') { m.wave = 0; m.remaining = 0; m.seen = new Set(); m.phase = 'intermission'; m.phaseEnds = now + T(ZOMBIE.first); }
   const view = roomView(room);
-  for (const q of room.players.values()) send(q, { t: 'start', ...view, you: q.id, hp: q.hp, armor: q.armor });
+  for (const q of room.players.values()) send(q, { t: 'start', ...view, you: q.id, hp: q.hp, armor: q.armor, life: q.life });
   if (m.mode === 'bomb') beginBombRound(room);
   else if (m.mode === 'zombie') sendRound(room);
   sendScore(room);
@@ -413,7 +531,7 @@ function beginBombRound(room) {
   const m = room.match;
   m.round++;
   if (m.round === BOMB.half + 1) { m.attackers = other(m.attackers); notify(room, 'side_swap', { attackers: m.attackers }); }
-  m.phase = 'freeze'; m.phaseEnds = Date.now() + T(BOMB.freeze); m.bomb = null; clearActs(m);
+  m.phase = 'freeze'; m.phaseEnds = Date.now() + T(BOMB.freeze); m.bomb = null; clearActs(m); clearLoot(room);
   for (const q of room.players.values()) if (q.team) respawn(room, q, { round: m.round });
   sendRound(room);
 }
@@ -532,6 +650,7 @@ function tickRoom(room, now, dt) {
   else if (m.mode === 'bomb') tickBomb(room);
   else if (m.mode === 'zombie') tickZombie(room);
   if (!room.match) return;
+  tickLoot(room, now);
   const batch = [];
   for (const q of room.players.values()) {
     if (!q.dirty) continue;
@@ -571,7 +690,8 @@ function addToRoom(p, room, name) {
     resetLife(p);
     if (room.mode === 'bomb' || (room.mode === 'zombie' && room.match.phase === 'live')) { p.status = 'dead'; p.hp = 0; }
     sendRoom(room);
-    send(p, { t: 'start', ...roomView(room), you: p.id, hp: p.hp, armor: p.armor, late: true });
+    send(p, { t: 'start', ...roomView(room), you: p.id, hp: p.hp, armor: p.armor, late: true, life: p.life });
+    if (room.match.drops && room.match.drops.size) { const now = Date.now(); send(p, { t: 'loot', op: 'sync', items: [...room.match.drops.values()].map(d => lootView(d, now)) }); }
     if (room.mode === 'bomb' || room.mode === 'zombie') send(p, { t: 'round', ...roundView(room) });
     sendScore(room);
   } else sendRoom(room);
@@ -683,10 +803,12 @@ function onShot(p, m) {
   if (b.n < 1) return reject(p, 'fire_rate');
   if (w.life !== Infinity && room.mode !== 'zombie') {       // limited spare rounds per life (zombie waves resupply, so no cap there)
     const used = p.used[m.weapon] || 0;
-    if (used >= w.life) return reject(p, 'no_ammo');
+    if (p.inv) { const e = carried(p, m.weapon); if (!e || lootLeft(e) <= 0) return reject(p, 'no_ammo'); }      // loot-aware client: the rounds it really carries
+    else if (used >= w.life) return reject(p, 'no_ammo');
     p.used[m.weapon] = used + 1;
   }
   b.n -= 1;
+  if (p.inv && w.kind !== 'melee') { const e = carried(p, m.weapon); if (e) { if (e.a > 0) e.a--; else if (e.r > 0) e.r--; } }
   if (w.blast) {       // explosive: no direct-hit credit; the detonation ('boom') opens the splash hits
     p.live.push({ weapon: m.weapon, pid, at: now, x: m.ox, y: m.oy, z: m.oz });
     if (p.live.length > 16) p.live.shift();
@@ -938,7 +1060,7 @@ function onAction(p, msg) {
 
 const HANDLERS = {
   create: ['join', onCreate], join: ['join', onJoin], ready: ['lobby', onReady], team: ['lobby', onTeam], config: ['lobby', onConfig],
-  start: ['lobby', onStart], state: ['state', onState], shot: ['shot', onShot], hit: ['hit', onHit], boom: ['boom', onBoom], action: ['action', onAction],
+  start: ['lobby', onStart], state: ['state', onState], shot: ['shot', onShot], hit: ['hit', onHit], boom: ['boom', onBoom], action: ['action', onAction], inv: ['loot', onInv], take: ['loot', onTake],
   ping: ['ping', (p, m) => { if (num(m.c, 0, 1e15)) send(p, { t: 'pong', c: m.c, ts: Date.now() }); else strike(p, 'bad_ping'); }],
 };
 
@@ -1016,7 +1138,7 @@ function onConnection(ws, ip) {
     if (!take(p, bucket)) return strike(p, 'rate_limited');
     try { fn(p, m); } catch (e) { console.error('handler error', m.t, e); reject(p, 'server_error'); }
   });
-  send(p, { t: 'welcome', id: p.id, ts: Date.now() });
+  send(p, { t: 'welcome', id: p.id, ts: Date.now(), loot: 1 });
 }
 
 setInterval(() => {
