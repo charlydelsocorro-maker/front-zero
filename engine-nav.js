@@ -8,7 +8,7 @@ export function createNav(grid) {
   let N = 0, half = 0, n = 0;
   let cellFirst = new Int32Array(0), cellCnt = new Uint8Array(0), nCell = new Int32Array(0), nH = new Float32Array(0), nei = new Int32Array(0);
   let gS = new Float32Array(0), fS = new Float32Array(0), par = new Int32Array(0), st = new Int32Array(0), heap = new Int32Array(0), sid = 0;
-  let ground = new Int32Array(0);
+  let ground = new Int32Array(0), levelFn = null; /* cartes à rues surélevées : le « sol » est la surface principale donnée par la carte (world.levelAt), pas y=0 */ const isG = i => (levelFn ? Math.abs(nH[i] - levelFn(nodeX(i), nodeZ(i))) <= 0.4 : nH[i] <= 0.35);
   const buf = [], cand = [];
   const nodeX = i => -half + ((nCell[i] % N) + 0.5) * CS, nodeZ = i => -half + (Math.floor(nCell[i] / N) + 0.5) * CS;
   const cellOf = (x, z) => { const cx = Math.floor((x + half) / CS), cz = Math.floor((z + half) / CS); return cx < 0 || cz < 0 || cx >= N || cz >= N ? -1 : cz * N + cx; };
@@ -99,7 +99,7 @@ export function createNav(grid) {
     const map = new Int32Array(m).fill(-1); let k = 0;
     for (let i = 0; i < m; i++) if (comp[i] === main) map[i] = k++;
     const c2 = new Int32Array(k), h2 = new Float32Array(k), ne2 = new Int32Array(k * 8).fill(-1), gl = [];
-    for (let i = 0; i < m; i++) { const q = map[i]; if (q < 0) continue; c2[q] = nCell[i]; h2[q] = nH[i]; if (nH[i] <= 0.35) gl.push(q); for (let d = 0; d < 8; d++) { const j = nei[i * 8 + d]; ne2[q * 8 + d] = j >= 0 ? map[j] : -1; } }
+    for (let i = 0; i < m; i++) { const q = map[i]; if (q < 0) continue; c2[q] = nCell[i]; h2[q] = nH[i]; if (isG(i)) gl.push(q); for (let d = 0; d < 8; d++) { const j = nei[i * 8 + d]; ne2[q * 8 + d] = j >= 0 ? map[j] : -1; } }
     nCell = c2; nH = h2; nei = ne2; n = k; ground = Int32Array.from(gl);
     cellFirst.fill(-1); cellCnt.fill(0);
     for (let i = 0; i < n; i++) { const c = nCell[i]; if (cellFirst[c] < 0) cellFirst[c] = i; cellCnt[c]++; }
@@ -110,7 +110,7 @@ export function createNav(grid) {
     const c0 = cellOf(x, z); if (c0 < 0) return -1; const cx = c0 % N, cz = (c0 - cx) / N;
     for (let r = 0; r < 12; r++) for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) {
       if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue; const x2 = cx + dx, z2 = cz + dz; if (x2 < 0 || z2 < 0 || x2 >= N || z2 >= N) continue;
-      const c = z2 * N + x2; for (let i = cellFirst[c], e = i + cellCnt[c]; i < e && i >= 0; i++) if (nH[i] <= 0.35) return i;
+      const c = z2 * N + x2; for (let i = cellFirst[c], e = i + cellCnt[c]; i < e && i >= 0; i++) if (isG(i)) return i;
     }
     return -1;
   }
@@ -125,7 +125,8 @@ export function createNav(grid) {
         for (let dx = -r; dx <= r; dx += edge ? 1 : 2 * r || 1) {
           const x2 = cx + dx; if (x2 < 0 || x2 >= N) continue; const c = z2 * N + x2;
           for (let i = cellFirst[c], e = i + cellCnt[c]; i < e && i >= 0; i++) {
-            if (groundOnly && nH[i] > 0.35) continue;
+            if (groundOnly && !isG(i)) continue;
+            if (off && off[i]) continue;
             const ex = nodeX(i) - x, ez = nodeZ(i) - z, ey = (nH[i] - y) * 2.5, d = ex * ex + ez * ez + ey * ey;
             if (d < bd) { bd = d; best = i; }
           }
@@ -151,14 +152,51 @@ export function createNav(grid) {
   function pop() { const top = heap[1]; heap[1] = heap[hn--]; let k = 1; for (;;) { let c = k << 1; if (c > hn) break; if (c < hn && fS[heap[c + 1]] < fS[heap[c]]) c++; if (fS[heap[k]] <= fS[heap[c]]) break; const t = heap[k]; heap[k] = heap[c]; heap[c] = t; k = c; } return top; }
   const heur = (i, gx, gz, gh) => { const ax = Math.abs(nodeX(i) - gx), az = Math.abs(nodeZ(i) - gz); return wH * (((ax > az ? ax + az * 0.4142 : az + ax * 0.4142) / CS) + Math.abs(nH[i] - gh) * 2); };
   const tmpPath = [];
+  // Temporary obstacles (a mode's crates): the nodes under them are cut out of the graph, and restored by clearBlocks().
+  let off = null; const cutEdges = [], win = [];
+  const eachCell = (x0, x1, z0, z1, fn) => {
+    const a = Math.max(0, Math.floor((x0 + half) / CS)), b = Math.min(N - 1, Math.floor((x1 + half) / CS)), c = Math.max(0, Math.floor((z0 + half) / CS)), d = Math.min(N - 1, Math.floor((z1 + half) / CS));
+    for (let z = c; z <= d; z++) for (let x = a; x <= b; x++) { const q = z * N + x; for (let i = cellFirst[q], e = i + cellCnt[q]; i < e && i >= 0; i++) fn(i); }
+  };
+  const inRect = (i, x0, x1, z0, z1) => { const x = nodeX(i), z = nodeZ(i); return x >= x0 && x <= x1 && z >= z0 && z <= z1; };
 
   const nav = {
     ready: false, nodes: 0, cell: CS, build, buildSteps, nodeAt, searches: 0,
+    /** Cuts every node of the rectangle whose height is within [y0-0.4, y1+0.1] out of the graph. */
+    block(x0, x1, z0, z1, y0, y1) {
+      if (!off || off.length !== n) off = new Uint8Array(n);
+      eachCell(x0, x1, z0, z1, i => {
+        if (off[i] || nH[i] < y0 - 0.4 || nH[i] > y1 + 0.1 || !inRect(i, x0, x1, z0, z1)) return;
+        off[i] = 1;
+        for (let d = 0; d < 8; d++) {
+          const j = nei[i * 8 + d]; if (j < 0) continue;
+          cutEdges.push(i * 8 + d, j); nei[i * 8 + d] = -1;
+          for (let k = 0; k < 8; k++) if (nei[j * 8 + k] === i) { cutEdges.push(j * 8 + k, i); nei[j * 8 + k] = -1; }
+        }
+      });
+    },
+    clearBlocks() { for (let k = cutEdges.length - 2; k >= 0; k -= 2) nei[cutEdges[k]] = cutEdges[k + 1]; cutEdges.length = 0; off = null; },
+    /** Would blocking this rectangle separate walkable ground around it (a corridor, a doorway)? Compares the local connected pieces with and without it. */
+    splits(x0, x1, z0, z1, y, R = 2.4) {
+      const wx0 = x0 - R, wx1 = x1 + R, wz0 = z0 - R, wz1 = z1 + R; win.length = 0;
+      eachCell(wx0, wx1, wz0, wz1, i => { if (Math.abs(nH[i] - y) <= 0.7 && !(off && off[i]) && inRect(i, wx0, wx1, wz0, wz1)) win.push(i); });
+      const count = cut => {
+        const id = (++sid) * 2; let parts = 0; const stack = [];
+        for (let w = 0; w < win.length; w++) st[win[w]] = id;
+        for (let w = 0; w < win.length; w++) {
+          const s = win[w]; if (st[s] !== id || inRect(s, x0, x1, z0, z1)) continue;
+          parts++; st[s] = id + 1; stack.push(s);
+          while (stack.length) { const i = stack.pop(); for (let d = 0; d < 8; d++) { const j = nei[i * 8 + d]; if (j < 0 || st[j] !== id || (cut && inRect(j, x0, x1, z0, z1))) continue; st[j] = id + 1; stack.push(j); } }
+        }
+        return parts;
+      };
+      return count(true) > count(false);
+    },
     nodePos(i, out) { out.x = nodeX(i); out.y = nH[i]; out.z = nodeZ(i); return out; },
     /** Walkable ground-level point nearest to (x,z). */
-    nearest(x, z) { const i = nodeAt(x, 0, z, true, 400); return i < 0 ? [x, z] : [nodeX(i), nodeZ(i)]; },
+    nearest(x, z) { const i = nodeAt(x, levelFn ? levelFn(x, z) : 0, z, true, 400); return i < 0 ? [x, z] : levelFn ? [nodeX(i), nodeZ(i), nH[i]] : [nodeX(i), nodeZ(i)]; }, setLevel(f) { levelFn = f || null; }, near3(x, y, z) { const i = nodeAt(x, y, z, false, 8); return i < 0 ? [x, z, y] : [nodeX(i), nodeZ(i), nH[i]]; }, levelY(x, z) { return levelFn ? levelFn(x, z) : 0; },
     reachable(ax, az, bx, bz) {
-      const a = nodeAt(ax, 0, az, true, 4), b = nodeAt(bx, 0, bz, true, 4); if (a < 0 || b < 0) return false;
+      const a = nodeAt(ax, levelFn ? levelFn(ax, az) : 0, az, true, 4), b = nodeAt(bx, levelFn ? levelFn(bx, bz) : 0, bz, true, 4); if (a < 0 || b < 0) return false;
       return Math.hypot(nodeX(a) - ax, nodeZ(a) - az) < 1.6 && Math.hypot(nodeX(b) - bx, nodeZ(b) - bz) < 1.6;
     },
     /** A walkable ground point at least minDist from every given point ([x,z] or {x,z}); best effort otherwise. */
@@ -169,7 +207,7 @@ export function createNav(grid) {
         for (const p of points || []) { const px = Array.isArray(p) ? p[0] : p.x, pz = Array.isArray(p) ? p[1] : p.z; const q = Math.hypot(px - x, pz - z); if (q < d) d = q; }
         if (d > bs) { bs = d; best = i; if (d >= minDist * 1.5) break; }
       }
-      return [nodeX(best), nodeZ(best)];
+      return levelFn ? [nodeX(best), nodeZ(best), nH[best]] : [nodeX(best), nodeZ(best)];
     },
     /** Random walkable ground point within radius of (x,z), or null. */
     randomNear(x, z, radius) {

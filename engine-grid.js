@@ -21,7 +21,7 @@ export function createGrid(cell = 4) {
   }
 
   const g = {
-    hit: null, ground: false, rayBox,
+    hit: null, ground: false, rayBox, skipPane: false,       // skipPane: intact glass is transparent to this ray (sight lines, blast cover, mirrored projectiles)
     get cells() { return nx * nz; }, get size() { return S.length; },
     /** Rebuild over a solids array (kept by reference). Call on every map load. */
     build(solids) {
@@ -53,7 +53,7 @@ export function createGrid(cell = 4) {
       if (dy < 0) { const tg = -oy / dy; if (tg < best) { best = tg < 0 ? 0 : tg; g.ground = true; } }
       const lx = ox - gx0, lz = oz - gz0;
       if (lx < 0 || lz < 0 || lx >= nx * cell || lz >= nz * cell) {       // origin outside the grid: rare, brute force
-        for (let i = 0; i < S.length; i++) { const t = rayBox(ox, oy, oz, dx, dy, dz, S[i]); if (t < best) { best = t; g.hit = S[i]; g.ground = false; } }
+        for (let i = 0; i < S.length; i++) { if (g.skipPane && S[i].pane) continue; const t = rayBox(ox, oy, oz, dx, dy, dz, S[i]); if (t < best) { best = t; g.hit = S[i]; g.ground = false; } }
         return best;
       }
       let ix = Math.floor(lx * inv), iz = Math.floor(lz * inv);
@@ -66,6 +66,7 @@ export function createGrid(cell = 4) {
         const c = iz * nx + ix;
         for (let k = start[c], e = start[c + 1]; k < e; k++) {
           const si = items[k]; if (stamp[si] === id) continue; stamp[si] = id;
+          if (g.skipPane && S[si].pane) continue;
           const t = rayBox(ox, oy, oz, dx, dy, dz, S[si]); if (t < best) { best = t; g.hit = S[si]; g.ground = false; }
         }
         const te = tx < tz ? tx : tz;
@@ -78,7 +79,8 @@ export function createGrid(cell = 4) {
     los(ax, ay, az, bx, by, bz) {
       const dx = bx - ax, dy = by - ay, dz = bz - az, d = Math.sqrt(dx * dx + dy * dy + dz * dz);
       if (d < 1e-4) return true;
-      return g.ray(ax, ay, az, dx / d, dy / d, dz / d, d) >= d - 0.02;
+      const was = g.skipPane; g.skipPane = true; const r = g.ray(ax, ay, az, dx / d, dy / d, dz / d, d); g.skipPane = was;       // one can see through a window
+      return r >= d - 0.02;
     },
     /** Any solid overlapping the box? Returns it, or null. */
     overlap(x0, x1, y0, y1, z0, z1, buf) {

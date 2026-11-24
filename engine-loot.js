@@ -3,6 +3,8 @@
 // only shows them and asks. Meshes are pooled and share one material, built during the match load: a death allocates no GPU resource.
 import * as THREE from 'three';
 import { createSoldier } from './soldier.js';
+import { applyAttachments, measureGun, measuredGun, attachmentGeometry, attachmentMaterial, sanitize } from './attachments.js';
+import { dropFinishMaterials } from './weapon-skins.js';
 
 export const LOOT_TTL = 30, LOOT_CAP = 24;
 const POOL = LOOT_CAP + 2, FLY = 0.5, SETTLE = 0.22, NEAR = 1.7, LOOK = 3.4, LOOK_DOT = 0.955, AUTO = 1.4, RETRY = 0.5, BLINK = 4;
@@ -14,6 +16,7 @@ function gunGeometry(id) {
   // The gun bone and its bind position are read from the skeleton, so this keeps working if soldier.js changes its rig.
   const s = createSoldier(null, { weaponId: id }), src = s.mesh.geometry, bone = s.mesh.skeleton.bones.findIndex(b => b.name === 'gun');
   const o = new THREE.Vector3(); if (bone >= 0) o.setFromMatrixPosition(s.mesh.skeleton.boneInverses[bone].clone().invert());
+  try { measureGun(s, id); } catch { /* the drop then shows without its accessories */ }
   s.dispose();
   const idx = src.index, si = src.attributes.skinIndex, P = src.attributes.position, N = src.attributes.normal, C = src.attributes.color, flat = id !== 'frag';
   const pos = [], nor = [], col = [];
@@ -39,7 +42,7 @@ function gunGeometry(id) {
   g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
   g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(nor), 3));
   g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(col), 3));
-  g.computeBoundingSphere(); g.userData.half = Math.max(0.06, (z1 - z0) / 2);
+  g.computeBoundingSphere(); g.userData.half = Math.max(0.06, (z1 - z0) / 2); g.userData.ox = cx; g.userData.oy = y0; g.userData.oz = cz; g.userData.flat = flat;
   geos.set(id, g);
   return g;
 }
@@ -52,7 +55,8 @@ export function createLoot(ctx) {
   const free = [], live = [], fw = new THREE.Vector3();
   for (let i = 0; i < POOL; i++) {
     const m = new THREE.Mesh(new THREE.BufferGeometry(), mat); m.visible = false; m.castShadow = true; m.receiveShadow = false; m.matrixAutoUpdate = false; m.name = 'loot';
-    scene.add(m); free.push({ mesh: m, id: 0, k: 'w', w: '', def: null, a: 0, r: 0, x: 0, y: 0, z: 0, yaw: 0, sx: 0, sy: 0, sz: 0, ox: 0, oy: 0, oz: 0, t: 0, left: 0, landed: false, wait: 0, surf: null });
+    const am = new THREE.Mesh(new THREE.BufferGeometry(), attachmentMaterial(THREE)); am.visible = false; am.castShadow = true; am.frustumCulled = false; am.matrixAutoUpdate = false; m.add(am);       // the accessories of this drop: same program as the weapon
+    scene.add(m); free.push({ attMesh: am, att: null, mesh: m, id: 0, k: 'w', w: '', def: null, a: 0, r: 0, x: 0, y: 0, z: 0, yaw: 0, sx: 0, sy: 0, sz: 0, ox: 0, oy: 0, oz: 0, t: 0, left: 0, landed: false, wait: 0, surf: null });
   }
   let enabled = false, seq = 0, clock = 0, focus = null, focusT = 0, shownD = null, shownA = -9, shownR = -9, shownK = '', shownL = '', shown = false;
 
@@ -81,20 +85,30 @@ export function createLoot(ctx) {
   }
   function place(d, x, y, z, rx) { const m = d.mesh; m.position.set(x, y, z); m.rotation.set(rx, d.yaw, 0); m.updateMatrix(); m.matrixWorldNeedsUpdate = true; }
 
-  function add(id, k, wid, a, r, x, y, z, ttl) {
+  function fitAtt(d, ids) {
+    const am = d.attMesh, g = geos.get(d.w), info = ids.length ? measuredGun(d.w) : null;       // measured by gunGeometry() during the load
+    am.visible = false; if (!info || !g) return;
+    am.geometry = attachmentGeometry(THREE, d.w, ids, info);
+    if (g.userData.flat) { am.rotation.set(0, 0, Math.PI / 2); am.position.set(-g.userData.ox, -g.userData.oy, -g.userData.oz); } else { am.rotation.set(0, 0, 0); am.position.set(-g.userData.ox, -g.userData.oy, -g.userData.oz); }
+    am.updateMatrix(); am.visible = true;
+  }
+  const finMats = fin => { try { return fin ? dropFinishMaterials(mat, matHi, fin) : null; } catch (e) { console.warn('[loot] finish', e); return null; } };
+  function add(id, k, wid, a, r, x, y, z, ttl, att, fin) {
     if (find(id)) return null;
-    const def = defOf(wid); if (!def || !geos.has(wid)) return null;
+    const base = defOf(wid); if (!base || !geos.has(wid)) return null;
+    const ids = k === 'w' ? sanitize(wid, att) : [], def = ids.length ? applyAttachments(base, ids) : base;
     while (live.length >= LOOT_CAP) remove(live[0]);
     const d = free.pop(); if (!d) return null;
-    d.id = id; d.k = k; d.w = wid; d.def = def; d.a = a; d.r = r; d.ox = x; d.oy = y; d.oz = z; d.t = 0; d.left = ttl; d.landed = false; d.wait = 0;
-    d.mesh.geometry = geos.get(wid); d.mesh.material = mat; d.mesh.visible = true;
+    d.id = id; d.k = k; d.w = wid; d.def = def; d.att = ids.length ? ids : null; d.a = a; d.r = r; d.ox = x; d.oy = y; d.oz = z; d.t = 0; d.left = ttl; d.landed = false; d.wait = 0;
+    d.fm = k === 'w' ? finMats(fin) : null; d.mesh.geometry = geos.get(wid); d.mesh.material = d.fm ? d.fm.mat : mat; d.mesh.visible = true;
+    try { fitAtt(d, ids); } catch (e) { d.attMesh.visible = false; console.warn('[loot] attachments', e); }
     landing(d); d.sx = x; d.sy = y + 0.95; d.sz = z; place(d, d.sx, d.sy, d.sz, 2.6);
     live.push(d);
     return d;
   }
   function remove(d) {
     const i = live.indexOf(d); if (i < 0) return;
-    live.splice(i, 1); d.mesh.visible = false; d.mesh.material = mat; d.def = null; free.push(d);
+    live.splice(i, 1); d.mesh.visible = false; d.mesh.material = mat; d.fm = null; d.attMesh.visible = false; d.att = null; d.def = null; free.push(d);
     if (focus === d) focus = null;
     if (shownD === d) shownD = null;
   }
@@ -111,8 +125,8 @@ export function createLoot(ctx) {
   }
   function setFocus(d) {
     if (focus === d) return;
-    if (focus) focus.mesh.material = mat;
-    focus = d; if (d) d.mesh.material = matHi;
+    if (focus) focus.mesh.material = focus.fm ? focus.fm.mat : mat;
+    focus = d; if (d) d.mesh.material = d.fm ? d.fm.hi : matHi;
   }
   function pickFocus() {
     let best = null, bs = 1e9; const p = player.pos, cp = camera.position; camera.getWorldDirection(fw);
@@ -145,6 +159,7 @@ export function createLoot(ctx) {
   function gainRounds(w, n) { w.res += n; clink(); say(n, w.def.name); ctx.invChanged(); }
   function take(d, swap) {
     if (ctx.online()) { if (clock < d.wait) return; d.wait = clock + RETRY; ctx.sendInv(); ctx.sendTake(d.id, swap); return; }
+    if (d.k === 'x') { const n = ctx.gearItem ? ctx.gearItem.gain(d.w, d.a) : 0; if (n > 0) { d.a -= n; clink(); if (d.a <= 0) remove(d); } return; }       // equipment: the slot and the count live in engine-gear.js
     if (d.k === 'g') {
       const def = d.def, have = P.gear && P.gear.def === def ? P.gear.n : 0, n = Math.min(gearMax(def) - have, d.a); if (n <= 0) return;
       d.a -= n; if (d.a <= 0) remove(d); gainGear(def, n); return;
@@ -152,7 +167,7 @@ export function createLoot(ctx) {
     if (swap) {
       const def = d.def, a = d.a, r = d.r, px = player.pos.x, py = player.pos.y, pz = player.pos.z; remove(d);
       const out = equipLoot(def, a, r);
-      if (out && (!limited(out.def) || rounds(out.ammo, out.res) > 0)) add(++seq, 'w', out.def.id, out.ammo, out.res, px, py, pz, LOOT_TTL);
+      if (out && (!limited(out.def) || rounds(out.ammo, out.res) > 0)) add(++seq, 'w', out.def.id, out.ammo, out.res, px, py, pz, LOOT_TTL, out.def.att, ctx.finOf ? ctx.finOf(out.def.id) : null);
       return;
     }
     const w = owned(d.w); if (!w || !limited(d.def)) return;
@@ -162,6 +177,7 @@ export function createLoot(ctx) {
     gainRounds(w, n);
   }
   function wantsWalk(d) {
+    if (d.k === 'x') return !!ctx.gearItem && ctx.gearItem.wants(d.w);
     if (d.k === 'g') return gearMax(d.def) - (P.gear && P.gear.def === d.def ? P.gear.n : 0) > 0;
     const w = owned(d.w); return !!w && limited(d.def) && w.res < d.def.reserve;
   }
@@ -173,16 +189,21 @@ export function createLoot(ctx) {
       for (const D of defs) { if (!geos.has(D.id)) { gunGeometry(D.id); await brk(); } }
       for (let i = 0; i < free.length && defs.length; i++) free[i].mesh.geometry = geos.get(defs[i % defs.length].id);
     },
+    /** An equipment model for the ground (same attributes and material as the weapons). */
+    addModel(id, g) { if (geos.has(id)) return; if (!g.boundingSphere) g.computeBoundingSphere(); g.userData.half = Math.min(0.3, g.boundingSphere.radius); g.userData.ox = g.userData.oy = g.userData.oz = 0; geos.set(id, g); },
+    /** Load only: one idle pooled mesh carries a finished material, so the warm-up links its program (add() resets the material). */
+    warmFinish(fin) { const f = finMats(fin), d = free[free.length - 1]; if (f && d) d.mesh.material = f.mat; },
     begin(on) { clear(); enabled = !!on; seq = 0; clock = 0; },
     end() { clear(); enabled = false; },
     clear,
     /** Offline: a soldier just died. */
     onDeath(a) {
       if (!enabled || ctx.online() || a.kind !== 'soldier') return;
-      const x = a.pos.x, y = a.pos.y, z = a.pos.z, drop = (D, am, re) => { if (D && (!limited(D) || rounds(am, re) > 0)) add(++seq, 'w', D.id, am, re, x, y, z, LOOT_TTL); };
+      const x = a.pos.x, y = a.pos.y, z = a.pos.z, drop = (D, am, re) => { if (D && (!limited(D) || rounds(am, re) > 0)) add(++seq, 'w', D.id, am, re, x, y, z, LOOT_TTL, D.att, a.isPlayer && ctx.finOf ? ctx.finOf(D.id) : null); };
       if (a.isPlayer) {
         for (const w of P.ws) drop(w.def, w.ammo, w.res);
         if (P.gear && P.gear.n > 0) add(++seq, 'g', P.gear.def.id, P.gear.n, 0, x, y, z, LOOT_TTL);
+        if (ctx.gearItem) { const left = ctx.gearItem.drops(); if (left) for (const e of left) add(++seq, 'x', e.id, e.n, 0, x, y, z, LOOT_TTL); }
         return;
       }
       const ai = a.ai; if (!ai || ai.zombie) return;
@@ -227,15 +248,16 @@ export function createLoot(ctx) {
       if (!enabled) return;
       switch (m.op) {
         case 'sync': clear(); // falls through
-        case 'add': for (const q of m.items || []) add(q.id, q.k, q.w, q.a, q.r, q.x, q.y, q.z, (q.ttl || 0) / 1000); break;
+        case 'add': for (const q of m.items || []) add(q.id, q.k, q.w, q.a, q.r, q.x, q.y, q.z, (q.ttl || 0) / 1000, q.att, q.fin); break;
         case 'del': for (const id of m.ids || []) { const d = find(id); if (d) remove(d); } break;
         case 'upd': { const d = find(m.id); if (d) { d.a = m.a; d.r = m.r; } break; }
         case 'clear': clear(); break;
         case 'got': {
           const def = defOf(m.w); if (!def) break;
-          if (m.k === 'g') gainGear(def, m.n);
+          if (m.k === 'x') clink();       // the new count arrives on the 'gx' channel
+          else if (m.k === 'g') gainGear(def, m.n);
           else if (m.k === 'a') { const w = owned(m.w); if (w) gainRounds(w, m.n); }
-          else if (m.k === 'w') equipLoot(def, m.a, m.r);
+          else if (m.k === 'w') equipLoot(applyAttachments(def, m.att), m.a, m.r);
           break;
         }
         case 'fail': { const d = find(m.id); if (d) d.wait = clock + RETRY; break; }

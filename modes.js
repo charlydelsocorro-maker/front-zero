@@ -255,7 +255,7 @@ function pickPoint(E, g, wx, wz, avoid, minAvoid, others, minOther, from, ok) {
   const p = nav.nearest(wx, wz);
   return p ? [p[0], p[1]] : [wx, wz];
 }
-function pickZones(E) {
+function pickZones(E) { const fixedZ = E.world && E.world.objectives && E.world.objectives.zones; if (fixedZ) return fixedZ.map(p => p.slice());
   const g = geometry(E), px = -g.uz, pz = g.ux, off = clamp(g.size * 0.42, 6, 26);
   const from = [E.nav.nearest(g.s0[0][0], g.s0[0][1]) || g.s0[0], E.nav.nearest(g.s1[0][0], g.s1[0][1]) || g.s1[0]];
   const minSpawn = clamp(g.len * 0.2, 5, 12), minSep = clamp(g.len * 0.25, 7, 16), out = [];
@@ -263,7 +263,7 @@ function pickZones(E) {
   for (const [k, o] of want) out.push(pickPoint(E, g, g.c0[0] + g.ux * g.len * k + px * o, g.c0[1] + g.uz * g.len * k + pz * o, g.team, minSpawn, out, minSep, from, null));
   return out;
 }
-function pickSites(E) {
+function pickSites(E) { const fixedS = E.world && E.world.objectives && E.world.objectives.sites; if (fixedS) return { sites: fixedS.map(p => p.slice()), g: geometry(E) };
   const g = geometry(E), px = -g.uz, pz = g.ux, off = clamp(g.size * 0.4, 7, 24);
   const from = [E.nav.nearest(g.s0[0][0], g.s0[0][1]) || g.s0[0]];
   const nearDef = p => Math.hypot(p[0] - g.c1[0], p[1] - g.c1[1]) < Math.hypot(p[0] - g.c0[0], p[1] - g.c0[1]);
@@ -371,7 +371,7 @@ function domOffline(c) {
   const S = { limit: LIMIT, left: TIME, score: [0, 0], zones: [], caps: 0 };
   const sCap = [], sCon = [], cnt = [0, 0, 0];
   const T = { acc: 0, orderT: 0 };
-  function mark(z) { c.marker('dom_' + z.id, { x: z.x, y: 1.2, z: z.z, label: z.id, color: z.contested ? GOLD : z.owner === null ? NEUTRAL : z.owner === P.team ? BLUE : RED }); }
+  function mark(z) { c.marker('dom_' + z.id, { x: z.x, y: E.nav.levelY(z.x, z.z) + 1.2, z: z.z, label: z.id, color: z.contested ? GOLD : z.owner === null ? NEUTRAL : z.owner === P.team ? BLUE : RED }); }
   function held() { let n = 0; for (const z of S.zones) if (z.owner === P.team) n++; c.objective(t('l.held', { n })); }
   function orders() {
     const A = E.actors, Z = S.zones;
@@ -442,6 +442,7 @@ function domOffline(c) {
           if (!a.alive || !isSoldier(a) || (a.team !== 0 && a.team !== 1)) continue;
           const dx = a.pos.x - z.x, dz = a.pos.z - z.z;
           if (dx * dx + dz * dz > R2) continue;
+          if (a.sgUntil && E.spawnGuard && E.spawnGuard.holdsOff(a, z.owner === a.team, z.prog * (a.team === 0 ? 1 : -1))) continue;       // spawn protection: no capture, no contest; taking the point ends it
           if (a.team === 0) n0++; else n1++;
           if (a === P) me = true;
         }
@@ -573,7 +574,7 @@ function bombOffline(c) {
   function drop(v) {
     const b = S.bomb;
     b.state = 'dropped'; b.x = v.pos.x; b.z = v.pos.z; S.carrier = null; S.plantBy = null; S.plantT = 0;
-    c.marker('bomb', { x: b.x, y: 0.1, z: b.z, label: t('mode.bomb'), color: GOLD });
+    c.marker('bomb', { x: b.x, y: E.nav.levelY(b.x, b.z) + 0.1, z: b.z, label: t('mode.bomb'), color: GOLD });
     c.msg(t('l.dropped'), P.team === S.att ? 'bad' : 'info');
   }
   function planted(by, si) {
@@ -584,7 +585,7 @@ function bombOffline(c) {
     if (by.data) by.data.s += 150;
     if (by === P) { c.st.score += 150; c.reward(75, t('bomb.planted')); }
     const label = t('bomb.site', { site: S.sites[si].id });
-    mkHi = { x: b.x, y: 0.1, z: b.z, label, color: BOMB_HI }; mkLo = { x: b.x, y: 0.1, z: b.z, label, color: BOMB_LO };
+    mkHi = { x: b.x, y: E.nav.levelY(b.x, b.z) + 0.1, z: b.z, label, color: BOMB_HI }; mkLo = { x: b.x, y: E.nav.levelY(b.x, b.z) + 0.1, z: b.z, label, color: BOMB_LO };
     sHi = '● ' + t('bomb.planted') + ' · ' + label; sLo = '○ ' + t('bomb.planted') + ' · ' + label;
     S.pulseT = 0; lit = false;
     c.msg(t('bomb.planted') + ' · ' + label, P.team === S.att ? 'good' : 'bad');
@@ -639,7 +640,7 @@ function bombOffline(c) {
       for (let i = 0; i < 2; i++) {
         const s = { id: ZONE_IDS[i], x: picked.sites[i][0], z: picked.sites[i][1], r: SITE_R };
         S.sites.push(s);
-        c.marker('site_' + s.id, { x: s.x, y: 1.2, z: s.z, label: s.id, color: GOLD });
+        c.marker('site_' + s.id, { x: s.x, y: E.nav.levelY(s.x, s.z) + 1.2, z: s.z, label: s.id, color: GOLD });
       }
       c.on('damage', e => { if (S.phase === 'freeze' && e.victim && e.victim.alive && e.amount > 0) E.heal(e.victim, e.amount); });
       c.on('kill', e => {
@@ -1029,7 +1030,7 @@ function domOnline(c) {
   function propose() {
     if (sent || !B.isHost() || pts.length) return;
     sent = true;
-    B.send('dom_points', { points: pickZones(E).map(p => ({ x: p[0], y: 0, z: p[1], r: 6 })) });
+    B.send('dom_points', { points: pickZones(E).map(p => ({ x: p[0], y: p[2] || 0, z: p[1], r: 6 })) });
   }
   function held() { let n = 0; for (const p of pts) if (teamIdx(p.owner) === B.team()) n++; c.objective(t('l.held', { n })); }
   return {
@@ -1100,7 +1101,7 @@ function bombOnline(c) {
     if (sent || !B.isHost() || S.sites) return;
     sent = true;
     const p = pickSites(E).sites;
-    B.send('bomb_sites', { A: { x: p[0][0], y: 0, z: p[0][1], r: 5 }, B: { x: p[1][0], y: 0, z: p[1][1], r: 5 } });
+    B.send('bomb_sites', { A: { x: p[0][0], y: p[0][2] || 0, z: p[0][1], r: 5 }, B: { x: p[1][0], y: p[1][2] || 0, z: p[1][1], r: 5 } });
   }
   function setSites(sites) {
     if (!sites || S.sites) return;
@@ -1414,8 +1415,15 @@ function zombieOnline(c) {
   };
 }
 
-const OFFLINE = { ffa: ffaOffline, tdm: tdmOffline, dom: domOffline, bomb: bombOffline, zombie: zombieOffline };
-const ONLINE = { ffa: scoreOnline, tdm: scoreOnline, dom: domOnline, bomb: bombOnline, zombie: zombieOnline };
+// Zone (battle royale) lives in engine-zone.js. If that module fails to load, the mode falls back to a plain deathmatch instead of breaking the match.
+let ZoneMod = null;
+try { ZoneMod = await import('./engine-zone.js'); } catch (e) { console.error('[modes] zone module unavailable', e); }
+const ZONE_HELP = { WEAPONS, onlineBase, setRules, ensureData, setOrder, pickZones, pickSites, botName: i => BOT_NAMES[i % BOT_NAMES.length] };
+const zoneOffline = c => (ZoneMod ? ZoneMod.zoneOffline(c, ZONE_HELP) : ffaOffline(c));
+const zoneOnline = c => (ZoneMod ? ZoneMod.zoneOnline(c, ZONE_HELP) : scoreOnline(c));
+
+const OFFLINE = { ffa: ffaOffline, tdm: tdmOffline, dom: domOffline, bomb: bombOffline, zombie: zombieOffline, zone: zoneOffline };
+const ONLINE = { ffa: scoreOnline, tdm: scoreOnline, dom: domOnline, bomb: bombOnline, zombie: zombieOnline, zone: zoneOnline };
 
 export function createMode(id, E, cfg) {
   cfg = cfg || E.cfg || {};

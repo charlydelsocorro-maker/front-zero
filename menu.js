@@ -2,11 +2,14 @@
    createMenu(rootEl, deps) -> { show(screen?), hide(), showEnd(result), destroy() }
    Le module ne dessine que dans rootEl, injecte son propre CSS (préfixe .fzm) et ne touche ni au canvas ni au HUD. */
 import { WEAPONS, WEAPON_CATS, OUTFITS, CLASSES, MODES as DATA_MODES, byId } from './data.js';
+import { attText, rewardName, slotsOf } from './attachments.js';
+import { openCustomizer, rewardLines, rewardBlock, rewardToast } from './attachments-ui.js';
+import { gearPanel } from './gear-ui.js';
 
 const LANGS = ['fr', 'en', 'es', 'de', 'pt', 'it'];
 const PREFS_KEY = 'frontzero.menu';
 const XP_PER_LEVEL = 1000;
-const MODE_KEY = { ffa: 'mode.deathmatch', tdm: 'mode.teams', dom: 'mode.domination', bomb: 'mode.bomb', zombie: 'mode.zombies' };
+const MODE_KEY = { ffa: 'mode.deathmatch', tdm: 'mode.teams', dom: 'mode.domination', bomb: 'mode.bomb', zombie: 'mode.zombies', zone: 'mode.zone' };
 const RARITY_KEY = { 'Standard': 'standard', 'Spécial': 'special', 'Élite': 'elite', 'Légende': 'legend' };
 const DIFFICULTIES = ['easy', 'normal', 'hard'];
 const FALLBACK_MAPS = [
@@ -38,6 +41,7 @@ const LOCAL = {
   'm.modeDesc.dom': ['Capturez et tenez trois zones pour marquer des points.', 'Capture and hold three zones to score points.', 'Captura y mantén tres zonas para sumar puntos.', 'Erobert und haltet drei Zonen, um Punkte zu sammeln.', 'Captura e mantém três zonas para marcar pontos.', 'Conquista e mantieni tre zone per segnare punti.'],
   'm.modeDesc.bomb': ['Les attaquants posent la bombe, les défenseurs la désamorcent. Pas de réapparition pendant la manche.', 'Attackers plant the bomb, defenders defuse it. No respawns during a round.', 'Los atacantes colocan la bomba y los defensores la desactivan. Sin reapariciones durante la ronda.', 'Angreifer legen die Bombe, Verteidiger entschärfen sie. Kein Wiedereinstieg während der Runde.', 'Os atacantes plantam a bomba, os defensores desarmam-na. Sem reaparecimento durante a ronda.', 'Gli attaccanti piazzano la bomba, i difensori la disinnescano. Nessun rientro durante il round.'],
   'm.modeDesc.zombie': ['Survivez à des vagues de plus en plus dures.', 'Survive increasingly tough waves.', 'Sobrevive a oleadas cada vez más duras.', 'Überlebe immer härtere Wellen.', 'Sobrevive a vagas cada vez mais duras.', 'Sopravvivi a ondate sempre più dure.'],
+  'm.modeDesc.zone': ['Une arme de poing, des caisses à fouiller, une zone qui se referme. Le dernier en vie gagne.', 'One sidearm, crates to search, a closing zone. Last one standing wins.', 'Una pistola, cajas que registrar, una zona que se cierra. Gana el último en pie.', 'Eine Pistole, Kisten zum Durchsuchen, eine schrumpfende Zone. Der Letzte gewinnt.', 'Uma pistola, caixas para revistar, uma zona a fechar. Vence o último de pé.', 'Una pistola, casse da frugare, una zona che si chiude. Vince l’ultimo in vita.'],
   'm.mapDesc.depot': ['Base militaire du désert : hangar traversant, tranchées de sacs, tour de guet et longues lignes de tir.', 'Desert military base: a drive-through hangar, sandbag trenches, a watchtower and long firing lines.', 'Base militar del desierto: hangar pasante, trincheras de sacos, torre de vigilancia y largas líneas de tiro.', 'Militärbasis in der Wüste: durchgehender Hangar, Sandsackgräben, Wachturm und lange Schusslinien.', 'Base militar no deserto: hangar aberto dos dois lados, trincheiras de sacos, torre de vigia e longas linhas de tiro.', 'Base militare nel deserto: hangar passante, trincee di sacchi, torre di guardia e lunghe linee di tiro.'],
   'm.mapDesc.vieille-ville': ['Cité meurtrie : ruelles, arcades, cours, maisons à étages et passerelles entre les toits.', 'War-torn town: alleys, arcades, courtyards, multi-storey houses and walkways between rooftops.', 'Ciudad herida: callejones, soportales, patios, casas de varias plantas y pasarelas entre tejados.', 'Gezeichnete Stadt: Gassen, Arkaden, Höfe, mehrstöckige Häuser und Stege zwischen den Dächern.', 'Cidade ferida: ruelas, arcadas, pátios, casas de vários andares e passadiços entre telhados.', 'Città ferita: vicoli, portici, cortili, case a più piani e passerelle tra i tetti.'],
   'm.mapDesc.port': ['Docks au crépuscule : labyrinthe de conteneurs, entrepôt traversant, coursives et grues au-dessus de l’eau.', 'Docks at dusk: a container maze, a drive-through warehouse, gangways and cranes above the water.', 'Muelles al atardecer: laberinto de contenedores, almacén pasante, pasarelas y grúas sobre el agua.', 'Docks in der Dämmerung: Containerlabyrinth, durchgehende Lagerhalle, Laufstege und Kräne über dem Wasser.', 'Docas ao crepúsculo: labirinto de contentores, armazém aberto dos dois lados, passadiços e gruas sobre a água.', 'Banchine al tramonto: labirinto di container, magazzino passante, camminamenti e gru sopra l’acqua.'],
@@ -51,9 +55,9 @@ const LOCAL = {
   'm.env.snow': ['Neige', 'Snow', 'Nieve', 'Schnee', 'Neve', 'Neve'],
   'm.env.airbase': ['Base aérienne', 'Airbase', 'Base aérea', 'Luftwaffenbasis', 'Base aérea', 'Base aerea'],
   'm.env.refinery': ['Industriel', 'Industrial', 'Industrial', 'Industrie', 'Industrial', 'Industriale'],
-  'm.env.valley': ['Montagne', 'Mountain', 'Montaña', 'Gebirge', 'Montanha', 'Montagna'],
+  'm.env.hillside': ['Village perché', 'Hill village', 'Pueblo en colina', 'Bergdorf', 'Aldeia na encosta', 'Borgo collinare'], 'm.env.mineval': ['Vallée minière', 'Mining valley', 'Valle minero', 'Bergbautal', 'Vale mineiro', 'Valle mineraria'], 'm.mapDesc.valferrade': ['Bourg minier au fond d’une vallée de montagne : gare de chargement, rue haute et place, chevalement, voie sur chevalet et galeries de mine reliées.', 'Mining town at the head of a mountain valley: a loading station, a high street and square, a headframe, a trestle railway and connected mine galleries.', 'Pueblo minero al fondo de un valle de montaña: estación de carga, calle mayor y plaza, castillete, vía sobre caballete y galerías de mina conectadas.', 'Bergbaustädtchen am Ende eines Gebirgstals: Verladebahnhof, Hauptstraße und Platz, Förderturm, Holzviadukt und verbundene Stollen.', 'Vila mineira no fundo de um vale de montanha: estação de carga, rua principal e praça, castelete, via sobre cavalete e galerias de mina ligadas.', 'Borgo minerario in fondo a una valle di montagna: stazione di carico, via maestra e piazza, castello di estrazione, ferrovia su cavalletti e gallerie collegate.'],'m.env.valley': ['Montagne', 'Mountain', 'Montaña', 'Gebirge', 'Montanha', 'Montagna'],
   'm.mapDesc.noirval': ['Complexe pétrolier au crépuscule : parcs de cuves, racks de tuyaux, passerelles sur plusieurs niveaux, entrepôts et gare de triage.', 'Oil complex at dusk: tank farms, pipe racks, catwalks on several levels, warehouses and a rail yard.', 'Complejo petrolero al anochecer: parques de tanques, racks de tuberías, pasarelas en varios niveles, almacenes y playa de vías.', 'Ölanlage in der Dämmerung: Tanklager, Rohrbrücken, Laufstege auf mehreren Ebenen, Lagerhallen und ein Rangierbahnhof.', 'Complexo petrolífero ao anoitecer: parques de tanques, racks de tubagens, passadiços em vários níveis, armazéns e pátio ferroviário.', 'Complesso petrolifero al crepuscolo: parchi serbatoi, rack di tubi, passerelle su più livelli, magazzini e scalo ferroviario.'],
-  'm.mapDesc.val-cendre': ['Village de montagne à l’automne : maisons à visiter, pont sur la rivière à sec, terrasses étagées et crête fortifiée.', 'Mountain village in autumn: houses to enter, bridges over a dry river bed, stepped terraces and a fortified ridge.', 'Pueblo de montaña en otoño: casas accesibles, puentes sobre un río seco, terrazas escalonadas y una cresta fortificada.', 'Bergdorf im Herbst: begehbare Häuser, Brücken über ein trockenes Flussbett, Terrassen und ein befestigter Grat.', 'Aldeia de montanha no outono: casas para explorar, pontes sobre um rio seco, socalcos e uma crista fortificada.', 'Villaggio di montagna in autunno: case visitabili, ponti su un fiume in secca, terrazze a gradoni e una cresta fortificata.'],
+  'm.mapDesc.roqueseche': ['Village en terrasses au-dessus d’une rivière à sec : ruelles, marché couvert, toits et rempart, citernes et égouts qui relient tout.', 'Terraced village above a dry river: alleys, a covered market, rooftops and a rampart, with cisterns and drains linking it all.', 'Pueblo en terrazas sobre un río seco: callejones, mercado cubierto, tejados y muralla, con cisternas y alcantarillas que lo conectan todo.', 'Terrassendorf über einem trockenen Fluss: Gassen, überdachter Markt, Dächer und Wehrmauer, verbunden durch Zisternen und Kanäle.', 'Aldeia em socalcos sobre um rio seco: vielas, mercado coberto, telhados e muralha, com cisternas e esgotos que ligam tudo.', 'Borgo a terrazze su un fiume in secca: vicoli, mercato coperto, tetti e bastioni, con cisterne e fogne che collegano tutto.'], 'm.mapDesc.val-cendre': ['Village de montagne à l’automne : maisons à visiter, pont sur la rivière à sec, terrasses étagées et crête fortifiée.', 'Mountain village in autumn: houses to enter, bridges over a dry river bed, stepped terraces and a fortified ridge.', 'Pueblo de montaña en otoño: casas accesibles, puentes sobre un río seco, terrazas escalonadas y una cresta fortificada.', 'Bergdorf im Herbst: begehbare Häuser, Brücken über ein trockenes Flussbett, Terrassen und ein befestigter Grat.', 'Aldeia de montanha no outono: casas para explorar, pontes sobre um rio seco, socalcos e uma crista fortificada.', 'Villaggio di montagna in autunno: case visitabili, ponti su un fiume in secca, terrazze a gradoni e una cresta fortificata.'],
   'm.random': ['Aléatoire', 'Random', 'Aleatorio', 'Zufall', 'Aleatório', 'Casuale'],
   'm.randomTag': ['Surprise', 'Surprise', 'Sorpresa', 'Überraschung', 'Surpresa', 'Sorpresa'],
   'm.randomDesc': ['Une carte tirée au sort à chaque déploiement.', 'A map drawn at random on every deployment.', 'Un mapa elegido al azar en cada despliegue.', 'Bei jedem Einsatz wird eine Karte ausgelost.', 'Um mapa sorteado em cada mobilização.', 'Una mappa estratta a sorte a ogni schieramento.'],
@@ -200,7 +204,7 @@ const THUMBS = {
   ] },
   random: { bg: 'repeating-linear-gradient(135deg,rgba(232,166,40,.13) 0 12px,transparent 12px 24px),#171a13', layers: [], glyph: '?' },
   refinery: { bg: 'linear-gradient(180deg,#2a2630 0%,#a4624a 42%,#f6b062 58%,#3e3430 60%,#1f1b1c 100%)', layers: [['#4a403a', 'polygon(12% 60%,12% 30%,22% 30%,22% 60%)'], ['#5a4e46', 'polygon(40% 60%,40% 44%,74% 44%,74% 60%)']] },
-  valley: { bg: 'linear-gradient(180deg,#56738c 0%,#c4d2d4 50%,#6d6a4a 62%,#3f4034 100%)', layers: [['#5c6450', 'polygon(0 62%,24% 30%,48% 54%,70% 24%,100% 58%,100% 100%,0 100%)'], ['#8a6a3a', 'polygon(0 82%,40% 72%,100% 80%,100% 100%,0 100%)']] },
+  mineval: { bg: 'linear-gradient(180deg,#3d6a9a 0%,#b8cad6 44%,#e6eaea 52%,#7a7766 60%,#4a483c 100%)', layers: [['#8c8f88', 'polygon(0 60%,18% 30%,34% 52%,52% 22%,70% 48%,86% 28%,100% 50%,100% 100%,0 100%)'], ['#eef2f6', 'polygon(14% 36%,18% 30%,22% 36%)'], ['#eef2f6', 'polygon(47% 29%,52% 22%,57% 29%)'], ['#7a7f84', 'polygon(8% 63%,20% 55%,32% 63%)'], ['#7a7f84', 'polygon(44% 59%,55% 50%,66% 59%)'], ['#5a4a3a', 'polygon(10% 78%,10% 62%,30% 62%,30% 70%,46% 70%,46% 58%,64% 58%,64% 68%,84% 68%,84% 60%,94% 60%,94% 80%)'], ['#6a4a32', 'polygon(73% 60%,75% 34%,77% 34%,79% 60%)'], ['#6b6656', 'polygon(0 82%,100% 78%,100% 100%,0 100%)']] },  hillside: { bg: 'linear-gradient(180deg,#3f7aae 0%,#a9cbdc 42%,#efe3c8 56%,#b59a70 60%,#7a6647 100%)', layers: [['#c9b48a', 'polygon(0 58%,22% 40%,46% 52%,72% 36%,100% 54%,100% 100%,0 100%)'], ['#e4d3ae', 'polygon(8% 74%,8% 54%,26% 54%,26% 62%,44% 62%,44% 48%,62% 48%,62% 60%,82% 60%,82% 52%,94% 52%,94% 76%)'], ['#b5623d', 'polygon(6% 55%,17% 47%,28% 55%)'], ['#a8553a', 'polygon(42% 49%,53% 40%,64% 49%)'], ['#b5623d', 'polygon(80% 53%,88% 46%,96% 53%)'], ['radial-gradient(ellipse at 53% 70%,#2a221a 0 4%,transparent 4.5%)'], ['#8f7a58', 'polygon(0 78%,100% 74%,100% 100%,0 100%)']] },  valley: { bg: 'linear-gradient(180deg,#56738c 0%,#c4d2d4 50%,#6d6a4a 62%,#3f4034 100%)', layers: [['#5c6450', 'polygon(0 62%,24% 30%,48% 54%,70% 24%,100% 58%,100% 100%,0 100%)'], ['#8a6a3a', 'polygon(0 82%,40% 72%,100% 80%,100% 100%,0 100%)']] },
   airbase: { bg: 'linear-gradient(180deg,#2c64a0 0%,#8fbedb 52%,#dbe6e6 62%,#57534a 63%,#3f3d38 100%)', layers: [['#6d7068', 'polygon(8% 63%,8% 46%,38% 46%,38% 63%)'], ['#8a8c84', 'polygon(62% 63%,62% 30%,72% 30%,72% 63%)']] },
   unknown: { bg: 'linear-gradient(180deg,#3d4431,#1c2016)', layers: [['#2a2f21', 'polygon(0 70%,30% 58%,62% 66%,100% 54%,100% 100%,0 100%)']] },
 };
@@ -223,7 +227,13 @@ const GUNS_X = {
   knife: '<path d="M102 31h92l28 9-28 9h-92z"/><path d="M94 25h8v30h-8z"/><rect x="34" y="31" width="60" height="18" rx="7"/>',
   frag: '<ellipse cx="118" cy="48" rx="24" ry="27"/><path d="M107 12h22v11h-22z"/><path d="M129 13h18l7 36h-6l-5-28h-14z"/><path d="M94 46h48v4H94zM116 22h4v52h-4z" opacity=".35"/><circle cx="97" cy="17" r="7" fill="none" stroke="currentColor" stroke-width="3"/>',
 };
-const GUN_ALIAS = { hp: 'p9', rev: 'p9', mp: 'p9', car: 'ar', akr: 'ar', brst: 'ar', bat: 'ar', pdw: 'smg', hsmg: 'smg', asg: 'sg', dbs: 'sg', mini: 'lmg', dmr: 'sr', hsr: 'sr' };
+Object.assign(GUNS_X, {
+  mach: '<path d="M96 33l70-5 44 3 14 10-20 7-108 1z"/><rect x="34" y="32" width="62" height="17" rx="7"/><path d="M34 34l-12 8 10 6z"/>',
+  axe: '<rect x="20" y="36" width="186" height="9" rx="4"/><path d="M168 36c2-12 8-22 16-28 12 4 24 14 28 30-8 14-20 24-30 28-8-8-13-18-14-30z"/><path d="M160 36l-16-10 4 10z"/>',
+  crow: '<rect x="30" y="36" width="170" height="8" rx="4"/><path d="M196 36c10-1 18-8 22-20l6 3c-3 16-14 26-26 27z"/><path d="M34 36l-16-7-3 6 15 9z"/><rect x="44" y="33" width="52" height="14" rx="6"/>',
+});
+const GUN_ALIAS = { hp: 'p9', rev: 'p9', mp: 'p9', car: 'ar', akr: 'ar', brst: 'ar', bat: 'ar', pdw: 'smg', hsmg: 'smg', asg: 'sg', dbs: 'sg', mini: 'lmg', dmr: 'sr', hsr: 'sr',
+  bpc: 'ar', cqc: 'ar', hbr: 'ar', ssr: 'ar', dsmg: 'smg', ssmg: 'smg', fsmg: 'smg', lsg: 'sg', dsg: 'sg', sawn: 'sg', bplmg: 'lmg', dlmg: 'lmg', lsr: 'sr', asr: 'sr', scout: 'sr', bp: 'p9', p22: 'p9', lsp: 'p9' };
 
 const CSS = `
 .fzm{--bg:#0d0f0b;--panel:rgba(24,27,19,.88);--line:rgba(201,185,143,.18);--line-2:rgba(201,185,143,.38);--sand:#d8c9a3;--dim:#a5a18a;--white:#f4ecd8;--amber:#e8a628;--amber-2:#ffc041;--ink:#181407;--red:#e0492f;--green:#9cc264;--blue:#7fa9d6;--pad:clamp(16px,2.4vw,40px);
@@ -436,6 +446,12 @@ background:radial-gradient(1100px 620px at 84% -8%,rgba(232,166,40,.13),transpar
 .fzm-gun{display:flex;align-items:center;justify-content:center;height:78px;color:#c9bb93;background:linear-gradient(180deg,rgba(0,0,0,.3),rgba(0,0,0,.12));border:1px solid var(--line)}
 .fzm-gun svg{display:block;width:min(92%,250px);height:64px;fill:currentColor}
 .fzm-card.is-on .fzm-gun{color:var(--amber)}
+.fzm-gun{position:relative;overflow:hidden}
+.fzm-card .fzm-gun{height:116px}
+.fzm-gun img{position:absolute;inset:2px;width:calc(100% - 4px);height:calc(100% - 4px);object-fit:contain;opacity:0;transition:opacity .16s;pointer-events:none}
+.fzm-card .fzm-gun img{inset:auto;left:2px;top:-11%;height:122%}
+.fzm-gun.has-shot img{opacity:1}
+.fzm-gun.has-shot svg{visibility:hidden}
 .fzm-stats{display:grid;gap:7px}
 .fzm-stat{display:grid;grid-template-columns:92px minmax(0,1fr) 56px;align-items:center;gap:10px;font-size:16px;color:var(--dim)}
 .fzm-stat i{position:relative;display:block;height:7px;background:rgba(255,255,255,.1)}
@@ -535,6 +551,21 @@ background:radial-gradient(1100px 620px at 84% -8%,rgba(232,166,40,.13),transpar
 .fzm-lobby-grid{grid-template-columns:minmax(0,1fr) minmax(0,1.3fr)}
 .fzm-lobby-grid>.fzm-panel:last-child{grid-column:1/-1}
 .fzm-lobby-actions .fzm-hint{display:block}
+}
+@media (max-width:1560px){
+.fzm-top{gap:clamp(10px,1.2vw,22px)}
+.fzm-logo{font-size:26px}
+.fzm-tab{padding:0 clamp(6px,.62vw,12px);font-size:17px;letter-spacing:.07em}
+.fzm-tab::after{left:6px;right:6px}
+.fzm-id{gap:12px}
+.fzm-rank{flex-basis:150px}
+}
+@media (max-width:1120px){
+.fzm-top{flex-wrap:wrap;gap:6px 12px;min-height:0;padding-top:10px}
+.fzm-logo{font-size:25px}
+.fzm-id{flex:1}
+.fzm-nav{order:3;flex:1 0 100%;flex-wrap:wrap}
+.fzm-tab{flex:1 1 auto;padding:0 8px;font-size:17px;letter-spacing:.06em}
 }
 @media (max-width:900px){
 .fzm{font-size:18px}
@@ -749,6 +780,7 @@ export function createMenu(rootEl, deps = {}) {
   const root = h('div', { class: 'fzm', hidden: true }, top, main, toastEl);
   rootEl.append(root);
 
+  const attLang = () => (i18n && i18n.lang) || 'fr';
   const sfx = kind => { try { if (audio && typeof audio[kind] === 'function') audio[kind](); } catch { /* audio facultatif */ } };
   const unlockAudio = () => { try { if (audio && typeof audio.unlock === 'function') audio.unlock(); } catch { /* audio facultatif */ } };
 
@@ -789,9 +821,22 @@ export function createMenu(rootEl, deps = {}) {
     drawCamo(c, outfit);
     return c;
   }
+  /* Vraie image de l'arme (weapon-shots/<id>.webp, rendu studio de son modèle 3D, voir .handoff/weapon-shots/capture.cjs), posée sur le dessin qui reste en secours. */
+  const gunOk = new Set(), gunBad = new Set();
+  const gunShotUrl = id => new URL(`weapon-shots/${encodeURIComponent(id)}.webp`, import.meta.url).href;
+  const gunDrawing = id => `<svg viewBox="0 0 240 80" focusable="false">${GUNS[id] || GUNS_X[id] || GUNS[GUN_ALIAS[id]] || GUNS.ar}</svg>`;
   function gun(id) {
     const box = h('div', { class: 'fzm-gun', 'aria-hidden': 'true' });
-    box.innerHTML = `<svg viewBox="0 0 240 80" focusable="false">${GUNS[id] || GUNS_X[id] || GUNS[GUN_ALIAS[id]] || GUNS.ar}</svg>`;
+    box.innerHTML = gunDrawing(id);
+    if (id && !gunBad.has(id)) {
+      const img = document.createElement('img'), known = gunOk.has(id);
+      img.alt = ''; img.width = 720; img.height = 360; img.draggable = false; img.loading = known ? 'eager' : 'lazy'; img.decoding = known ? 'sync' : 'async';
+      if (known) box.classList.add('has-shot');
+      img.addEventListener('load', () => { gunOk.add(id); box.classList.add('has-shot'); });
+      img.addEventListener('error', () => { gunOk.delete(id); gunBad.add(id); box.classList.remove('has-shot'); img.remove(); });
+      img.src = gunShotUrl(id);
+      box.append(img);
+    }
     return box;
   }
   function stat(label, pct, value) {
@@ -927,14 +972,28 @@ export function createMenu(rootEl, deps = {}) {
   }
 
   /* ---------- en-tête ---------- */
-  const NAV = [['play', 'nav.play'], ['arsenal', 'nav.arsenal'], ['outfits', 'nav.outfits'], ['classes', 'nav.classes'], ['settings', 'nav.settings']];
+  const NAV = [['play', 'nav.play'], ['arsenal', 'nav.arsenal'], ['shop', 'nav.shop'], ['pass', 'nav.pass'], ['outfits', 'nav.outfits'], ['classes', 'nav.classes'], ['settings', 'nav.settings']];
+  /* Passe de saison : son propre écran (pass.js, pass-ui.js), chargé au clic. Une erreur ici ne touche jamais le menu. */
+  let passBusy = false;
+  async function openSeasonPass() {
+    if (passBusy) return; passBusy = true;
+    try { const m = await import('./pass.js'); const s = await m.openPass({ onChange: () => { if (st.room) syncLoadout(st.room); scheduleRender(); }, onClose: () => { passBusy = false; scheduleRender(); } }); if (!s) passBusy = false; }
+    catch (err) { passBusy = false; console.error('[menu] pass', err); }
+  }
+  /* Boutique : son propre écran (shop-ui.js), chargé au premier clic. Une erreur ici ne touche jamais le menu. */
+  let shopBusy = false;
+  async function openStore() {
+    if (shopBusy) return; shopBusy = true;
+    try { const m = await import('./shop-ui.js'); await m.openShop({ engine, profile, i18n, settings, sfx, weaponType, outfitName, onChange: () => { if (st.room) syncLoadout(st.room); scheduleRender(); }, onClose: () => { shopBusy = false; scheduleRender(); } }); }
+    catch (err) { shopBusy = false; console.error('[menu] shop', err); }
+  }
   function renderTop() {
     const P = profile.data, level = profile.level, into = P.xp % XP_PER_LEVEL;
     const nav = h('nav', { class: 'fzm-nav', 'aria-label': L('m.navLabel') });
     for (const [id, key] of NAV) {
       nav.append(h('button', {
         type: 'button', class: 'fzm-tab', 'data-fid': `nav:${id}`, 'aria-current': st.screen === id ? 'page' : null,
-        onclick: () => { if (st.screen !== id) { sfx('ui'); go(id); } },
+        onclick: () => { if (id === 'shop') { sfx('ui'); openStore(); return; } if (id === 'pass') { sfx('ui'); openSeasonPass(); return; } if (st.screen !== id) { sfx('ui'); go(id); } },
       }, h('span', tx(key)), id === 'play' && st.room ? h('i', { class: 'fzm-tab-dot', title: L('m.inRoom', { code: st.room.code }) }) : null));
     }
     nav.addEventListener('keydown', e => {
@@ -960,7 +1019,7 @@ export function createMenu(rootEl, deps = {}) {
   }
 
   /* ---------- accueil / jouer ---------- */
-  const modesFor = multi => { const list = MODES.filter(m => (multi ? m.online !== false : m.solo !== false)); return list.length ? list : MODES; };
+  const modesFor = multi => { const list = MODES.filter(m => (multi ? m.online !== false && !(m.id === 'zone' && net && net.connected && net.zoneOk === false) : m.solo !== false)); return list.length ? list : MODES; };       // an older server does not know the Zone mode
   const botRange = () => (st.mode === 'zombie' ? { min: 0, max: 3 } : { min: 1, max: 11 });
   const botCount = () => { const r = botRange(); return clamp(st.bots, r.min, r.max); };
   const randomMap = () => MAPS[Math.floor(Math.random() * MAPS.length)].id;
@@ -1020,7 +1079,7 @@ export function createMenu(rootEl, deps = {}) {
     slider.addEventListener('input', () => setBots(Number(slider.value)));
     return h('div', { class: 'fzm-panel' },
       heading(L('m.brief')), summary,
-      h('div', { class: 'fzm-field' },
+      st.mode === 'zone' ? null : h('div', { class: 'fzm-field' },       // Zone sizes the match from the map
         h('div', { class: 'fzm-label' }, h('span', { text: st.mode === 'zombie' ? L('m.allies') : L('m.bots') }), out),
         h('div', { class: 'fzm-step' },
           h('button', { type: 'button', 'data-fid': 'play:bots-', 'aria-label': L('m.less'), onclick: () => { sfx('ui'); setBots(st.bots - 1); } }, '−'),
@@ -1207,7 +1266,7 @@ export function createMenu(rootEl, deps = {}) {
     const players = Array.isArray(room.players) ? room.players : [];
     const mode = byId(MODES, room.mode), teamMode = !!(mode && mode.teams), playing = room.state === 'playing';
     const others = players.filter(p => p.id !== room.hostId);
-    const needPlayers = room.mode !== 'zombie' && players.length < 2, notReady = others.some(p => !p.ready);
+    const needPlayers = room.mode !== 'zombie' && room.mode !== 'zone' && players.length < 2, notReady = others.some(p => !p.ready);
     const env = (mapOf(room.map) || {}).env;
 
     const row = p => h('div', { class: `fzm-player${p.ready || p.id === room.hostId ? ' is-ready' : ''}${self && p.id === self.id ? ' is-you' : ''}` },
@@ -1319,6 +1378,7 @@ export function createMenu(rootEl, deps = {}) {
     const fid = `${type}:${item.id}`;
     if (on) return h('div', { class: 'fzm-card-foot' }, button('fzm-btn--block fzm-btn--on', fid, h('span', tx(labels.on)), null, { disabled: true }));
     if (owned) return h('div', { class: 'fzm-card-foot' }, button('fzm-btn--block', fid, h('span', tx(labels.use)), () => { if (profile.equip(type, item.id)) sfx('ui'); scheduleRender(); }));
+    if (type === 'weapon' && profile.levelOk && !profile.levelOk('weapon', item.id)) return h('div', { class: 'fzm-card-foot' }, button('fzm-btn--block', fid, h('span', { text: attText(attLang(), 'weaponLock', { n: profile.weaponLevel(item.id) }) }), null, { disabled: true }));
     const short = item.price - P.cr;
     if (short > 0) {
       return h('div', { class: 'fzm-card-foot' },
@@ -1370,15 +1430,22 @@ export function createMenu(rootEl, deps = {}) {
       h('h3', { text: w.name }),
       h('div', { class: 'fzm-wbody' }, gun(w.id), h('div', { class: 'fzm-stats' }, weaponStats(w))),
       h('div', { class: 'fzm-meta' }, weaponMeta(w)),
-      shopFoot('weapon', w, w.name, { on: 'shop.equipped', use: 'shop.equip' }));
+      shopFoot('weapon', w, w.name, { on: 'shop.equipped', use: 'shop.equip' }),
+      Object.keys(slotsOf(w.id)).length ? button('fzm-btn--block', `custom:${w.id}`, h('span', { text: attText(attLang(), 'custom') + (profile.attOf(w.id).length ? ` (${profile.attOf(w.id).length})` : '') }), () => { sfx('ui'); openCustomizer({ weaponId: w.id, profile, lang: attLang, sfx, engine, gunSvg: gunDrawing, gunShot: id => (gunBad.has(id) ? '' : gunShotUrl(id)), onClose: scheduleRender }); }) : null);
+  }
+  function nextUnlockNote() {
+    const n = profile.nextReward && profile.nextReward(); if (!n) return null;
+    return h('p', { class: 'fzm-note', 'data-fid': 'arsenal:next' }, h('b', { text: `${attText(attLang(), 'next')} · ` }), attText(attLang(), 'nextAt', { n: n.level, what: n.rewards.map(r => rewardName(attLang(), r)).join(', ') }));
   }
   function viewArsenal() {
-    const P = profile.data, slots = [0, 1, 2].filter(s => WEAPONS.some(w => w.slot === s));
-    const groups = WEAPON_CATS.map(c => ({ c, list: WEAPONS.filter(w => w.cat === c.id) })).filter(g => g.list.length);
+    const P = profile.data, slots = [0, 1].filter(s => WEAPONS.some(w => w.slot === s));       // equipment has its own panel (gear-ui.js)
+    const groups = WEAPON_CATS.filter(c => c.id !== 'gear').map(c => ({ c, list: WEAPONS.filter(w => w.cat === c.id) })).filter(g => g.list.length);
     const rest = WEAPONS.filter(w => !WEAPON_CATS.some(c => c.id === w.cat)); if (rest.length) groups.push({ c: { id: 'other', name: '' }, list: rest });
+    let gearEl = null; try { gearEl = gearPanel({ profile, lang: attLang, sfx }); } catch (e) { console.warn('[menu] equipment panel', e); }
     return h('div', { class: 'fzm-wrap' },
       h('h2', { class: 'fzm-title', ...tx('nav.arsenal') }),
       slots.length > 2 ? h('p', { class: 'fzm-note', text: L('m.arsenalNote') }) : h('p', { class: 'fzm-note', ...tx('shop.arsenalNote') }),
+      nextUnlockNote(), gearEl,
       h('div', { class: 'fzm-slots' }, slots.map(s => {
         const w = byId(WEAPONS, P[SLOT_FIELD[s]]);
         return h('div', { class: 'fzm-slot', 'data-slot': String(s) }, gun(w ? w.id : ''), h('div', null, h('small', { text: slotName(s) }), h('b', { text: w ? w.name : '—' }), h('span', { text: w ? weaponType(w) : '' })));
@@ -1446,10 +1513,12 @@ export function createMenu(rootEl, deps = {}) {
           h('div', { class: 'fzm-gain' }, h('b', { 'data-end': 'cr', text: `+${num(e.animated ? e.credits : 0)} ₡` }), h('span', tx('end.credits'))),
           h('div', { class: 'fzm-gain' }, h('b', { 'data-end': 'xp', text: `+${num(e.animated ? e.xp : 0)} XP` }), h('span', { text: L('m.xp') }))),
         h('div', { class: 'fzm-levelup', 'data-end': 'up', hidden: !(up && e.animated), text: `${L('m.levelUp')} · ${L('m.levelN', { n: lvlAfter })} · ${rankName(lvlAfter)}` }),
+        e.unlocks && e.unlocks.length ? rewardBlock(e.unlocks, attLang) : null,
         h('div', { class: 'fzm-lvl' },
           h('div', { class: 'fzm-lvl-line' }, h('span', { 'data-end': 'lvl', text: `${rankName(startLevel)} · ${L('m.levelN', { n: startLevel })}` }),
             h('span', { 'data-end': 'into', text: `${num(startXp % XP_PER_LEVEL)} / ${num(XP_PER_LEVEL)} XP` })),
           h('div', { class: 'fzm-lvl-bar' }, h('i', { 'data-end': 'bar', class: 'is-snap', style: `width:${((startXp % XP_PER_LEVEL) / XP_PER_LEVEL) * 100}%` })))),
+      (() => { try { return globalThis.FZPass && globalThis.FZPass.endBlock ? globalThis.FZPass.endBlock('menu') : null; } catch { return null; } })(),       // passe de saison (pass.js)
       h('div', { class: 'fzm-end-actions' },
         button('fzm-btn--primary', 'end:again', online ? L('m.backLobby') : h('span', tx('end.again')), guard(endAgain)),
         button('', 'end:back', h('span', tx('end.back')), guard(endBack))));
@@ -1549,6 +1618,7 @@ export function createMenu(rootEl, deps = {}) {
   if (engine && typeof engine.on === 'function') {
     safeOn(engine, 'matchStart', cfg => { if (cfg && typeof cfg === 'object') st.lastCfg = cfg; api.hide(); });
     safeOn(engine, 'matchEnd', result => api.showEnd(result));
+    try { const pending = rewardLines(profile, attLang); if (pending.length) rewardToast(pending, attLang); } catch { /* optional */ }       // levels reached in a session that closed before showing them
   }
   if (net && typeof net.on === 'function') {
     safeOn(net, 'room', room => {
@@ -1620,6 +1690,9 @@ export function createMenu(rootEl, deps = {}) {
       const active = document.activeElement;
       if (active && root.contains(active) && typeof active.blur === 'function') active.blur();
     },
+    /* match-flow.js : quitter le salon depuis l'écran de vote, relire ce que l'écran de fin a calculé. */
+    leaveRoom() { leaveRoom(); },
+    get lastEnd() { return st.end; },
     showEnd(result) {
       if (destroyed) return;
       const r = result && typeof result === 'object' ? result : {};
@@ -1636,6 +1709,7 @@ export function createMenu(rootEl, deps = {}) {
         credits, xp, xpAfter, xpBefore: Math.max(0, xpAfter - xp),
         cfg: st.lastCfg || (engine && engine.cfg) || null, animated: false,
       };
+      try { st.end.unlocks = rewardLines(profile, attLang); } catch { st.end.unlocks = []; }
       st.screen = 'end';
       st.deploying = false;
       clearTimeout(deployTimer);

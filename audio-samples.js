@@ -14,6 +14,8 @@
 // near = microphones next to the muzzle (the player's own shots), mid and far = the same weapon recorded from a distance
 // (everyone else; audio.js still applies its distance filter, delay, pan and reverb sends on top).
 
+import { extendSoundManifest } from './weapons-extra.js';
+
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const rand = (a, b) => a + Math.random() * (b - a);
 const DEFAULT_BASE = new URL('./sounds/', import.meta.url).href;
@@ -122,6 +124,7 @@ export function createSampleBank(opts = {}) {
     if (!m || typeof m !== 'object' || !m.events || !m.shots || !m.handling || !m.weapons) throw new Error('sample manifest: unexpected shape');
     m.mix = Object.assign({ near: 1, mid: 1, far: 1, handling: 1, dry: 1, sub: 1 }, m.mix);
     m.targets = Object.assign({ near: -23, mid: -22, far: -25, handling: -30 }, m.targets);
+    try { extendSoundManifest(m); } catch (e) { safe(e); }       // second-wave weapons reuse these recordings at their own pitch
     manifest = m;
     const first = [...primed, ...(Array.isArray(m.priority) ? m.priority : [])];
     for (const id of first) if (m.weapons[id]) for (const f of filesOf(id)) if (!fast.includes(f)) fast.push(f);

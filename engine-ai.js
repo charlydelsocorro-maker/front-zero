@@ -9,7 +9,7 @@ export const DIFFICULTY = {
   normal: { react: [0.32, 0.55], spread: 0.045, dmg: 0.55, burst: [3, 5], pause: [0.35, 0.9], turn: 7.5, sense: 0.17, fov: 0.05, range: 60 },
   hard: { react: [0.16, 0.3], spread: 0.026, dmg: 0.75, burst: [3, 7], pause: [0.2, 0.55], turn: 11, sense: 0.11, fov: -0.2, range: 75 },
 };
-const RANGE = { p9: 12, ar: 20, smg: 12, sg: 7, lmg: 24, sr: 42 };
+const RANGE = { p9: 12, ar: 20, smg: 12, sg: 7, lmg: 24, sr: 42, flame: 5, sawn: 4.5 };
 const CAT_RANGE = { assault: 20, smg: 12, shotgun: 7, lmg: 24, sniper: 42, launcher: 24, special: 28, pistol: 12, melee: 1.1 };
 const prefRange = def => RANGE[def.id] || CAT_RANGE[def.cat] || 18;
 export const ZOMBIES = {
@@ -112,6 +112,7 @@ export function createAI(ctx) {
 
   function visible(a, b) {
     const ex = a.pos.x, ey = a.pos.y + (a.crouch > 0.5 ? 1.05 : 1.5), ez = a.pos.z, hs = b.hScale || 1;
+    if (ctx.smoke && ctx.smoke(ex, ey, ez, b.pos.x, b.pos.y + 1.2 * hs, b.pos.z)) return false;       // a smoke cloud hides whoever is behind it
     return grid.los(ex, ey, ez, b.pos.x, b.pos.y + 1.15 * hs * (b.crouch > 0.5 ? 0.7 : 1), b.pos.z) || grid.los(ex, ey, ez, b.pos.x, b.pos.y + 1.6 * hs * (b.crouch > 0.5 ? 0.7 : 1), b.pos.z);
   }
   function sense(a) {
@@ -121,6 +122,7 @@ export function createAI(ctx) {
       const b = list[i]; if (b === a || !b.alive || !E.isEnemy(a, b)) continue;
       const dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z; let d = Math.sqrt(dx * dx + dz * dz); if (d > diff.range) continue;
       if (b !== ai.target) { if (d > 9 && ai.alert <= 0 && (dx * fx + dz * fz) / d < diff.fov) continue; } else d *= 0.75;
+      if (E.spawnGuard) d += E.spawnGuard.penalty(b);       // a spawn-protected enemy comes after an exposed one (engine-guard.js)
       if (d < d3[0]) { c3[2] = c3[1]; d3[2] = d3[1]; c3[1] = c3[0]; d3[1] = d3[0]; c3[0] = b; d3[0] = d; }
       else if (d < d3[1]) { c3[2] = c3[1]; d3[2] = d3[1]; c3[1] = b; d3[1] = d; }
       else if (d < d3[2]) { c3[2] = b; d3[2] = d; }
@@ -260,13 +262,26 @@ export function createAI(ctx) {
       }
     }
     if (ai.gearN > 0 && ai.fleeT <= 0) { ai.nadeCd -= dt; if (ai.nadeCd <= 0) { ai.nadeCd = 1; tryThrow(a); } }
+    if (ctx.botGear) ctx.botGear(a, dt);
+  }
+  // map lanes (world.lanes, [x, z, y]): once per order or life, a bot may detour through the underground or the heights; no effect on maps without lanes
+  function laneGo(a, o, dt) {
+    const ai = a.ai, L = E.world && E.world.lanes;
+    if (!L || !L.length || !(o.radius >= 1.5)) return false;
+    if (ai.laneO !== o) {
+      ai.laneO = o; ai.lane = null; ai.laneT = 0; const dD = Math.hypot(o.x - a.pos.x, o.z - a.pos.z);
+      if (dD > 20 && Math.random() < (L.chance || 0.55)) { let W = 0; for (let i = 0; i < L.length; i++) { const l = L[i], w = l[3] || 1, dA = Math.hypot(l[0] - a.pos.x, l[1] - a.pos.z), dB = Math.hypot(o.x - l[0], o.z - l[1]); if (l.length > 2 && dA > 6 && dB > 4 && dA + dB < dD * 1.5 + 12 && Math.random() * (W += w) < w) ai.lane = l; } }
+    }
+    const l = ai.lane; if (!l) return false;
+    ai.laneT += dt; if (ai.laneT > 45 || (Math.hypot(l[0] - a.pos.x, l[1] - a.pos.z) < 2.5 && Math.abs(l[2] - a.pos.y) < 2)) { ai.lane = null; return false; }
+    goTo(a, l[0], l[2], l[1], dt, 1.5); return true;
   }
   function botCore(a, dt) {
     const ai = a.ai, o = ai.order || (ai.order = { type: 'hunt' });
     if (ai.ammo < 0) ai.ammo = a.wdef.mag;
     if (!ai.prim) initLoadout(a);
     if (ai.refill) {       // new life or resupply: back to the primary with full reserves
-      ai.refill = false; const pd = defOf(ai.prim), sd = ai.sec ? defOf(ai.sec) : null, g = ctx.gear;
+      ai.refill = false; ai.laneO = null; const pd = defOf(ai.prim), sd = ai.sec ? defOf(ai.sec) : null, g = ctx.gear;
       if (pd) { ai.ammo1 = pd.mag; if (ai.sec) ai.res = pd.reserve === undefined ? -1 : pd.reserve; } if (sd) ai.ammo2 = sd.mag; if (ai.sec && g && g.proj) ai.gearN = g.mag + (g.reserve || 0);
       if (a.weaponId !== ai.prim && pd) { ctx.setWeapon(a, ai.prim); } ai.ammo = a.wdef.mag; ai.reloadT = 0; ai.swapT = 0; ai.spin = 0; ai.fleeT = 0;
     }
@@ -283,7 +298,7 @@ export function createAI(ctx) {
       if (o.type === 'goto' && !ai.arrived && Math.hypot(t.pos.x - a.pos.x, t.pos.z - a.pos.z) > 12) {
         // objective first: keep running the path, shoot on the move
         fight(a, dt, 0, 0, 0, true);
-        goTo(a, o.x, 0, o.z, dt, Math.min(1.2, o.radius || 2)); a.wishSpeed = a.speed * 0.85;
+        if (!laneGo(a, o, dt)) goTo(a, o.x, nav.levelY(o.x, o.z), o.z, dt, Math.min(1.2, o.radius || 2)); a.wishSpeed = a.speed * 0.85;
       } else if (o.type === 'hold' || (o.type === 'goto' && ai.arrived)) fight(a, dt, o.x, o.z, Math.max(2, o.radius || 4));
       else if (o.type === 'follow' && o.actor && o.actor.alive && Math.hypot(o.actor.pos.x - a.pos.x, o.actor.pos.z - a.pos.z) > 18) { fight(a, dt, 0, 0, 0, true); goTo(a, o.actor.pos.x, o.actor.pos.y, o.actor.pos.z, dt, 4); }
       else fight(a, dt, 0, 0, 0);
@@ -310,7 +325,7 @@ export function createAI(ctx) {
           if (ai.holdT <= 0) { ai.holdT = rnd(3.5, 8); const i = nav.randomNear(o.x, o.z, r * 0.8); if (i >= 0) { nav.nodePos(i, P); ai.wx = P.x; ai.wz = P.z; ai.wOn = true; } }
           if (ai.wOn) { a.wishSpeed = a.speed * 0.5; if (goTo(a, ai.wx, a.pos.y, ai.wz, dt, 0.6)) ai.wOn = false; faceMove(a); } else idle(a, dt);
         } else idle(a, dt);
-      } else { ai.arrived = false; goTo(a, o.x, 0, o.z, dt, Math.min(r, 1.2)); faceMove(a); }
+      } else { ai.arrived = false; if (!laneGo(a, o, dt)) goTo(a, o.x, nav.levelY(o.x, o.z), o.z, dt, Math.min(r, 1.2)); faceMove(a); }
     } else if (o.type === 'follow' && o.actor) {
       const f = o.actor, d = Math.hypot(f.pos.x - a.pos.x, f.pos.z - a.pos.z);
       if (d > 5 || Math.abs(f.pos.y - a.pos.y) > 2) { goTo(a, f.pos.x, f.pos.y, f.pos.z, dt, 3); faceMove(a); ai.arrived = false; } else { ai.arrived = true; ai.path = null; idle(a, dt); }
@@ -320,7 +335,7 @@ export function createAI(ctx) {
         ai.huntT = rnd(3, 6); let best = null, bd = Infinity; const list = E.actors;
         for (let i = 0; i < list.length; i++) { const b = list[i]; if (b === a || !b.alive || !E.isEnemy(a, b)) continue; const d = Math.hypot(b.pos.x - a.pos.x, b.pos.z - a.pos.z) * rnd(0.7, 1.3); if (d < bd) { bd = d; best = b; } }
         if (best) { ai.hx = best.pos.x + rnd(-5, 5); ai.hz = best.pos.z + rnd(-5, 5); ai.hy = best.pos.y; }
-        else { const sp = E.world.spawns; if (sp.length) { const s = sp[Math.floor(Math.random() * sp.length)]; ai.hx = s[0]; ai.hz = s[1]; ai.hy = 0; } }
+        else { const sp = E.world.spawns; if (sp.length) { const s = sp[Math.floor(Math.random() * sp.length)]; ai.hx = s[0]; ai.hz = s[1]; ai.hy = s.length > 2 ? s[2] : 0; } }
       }
       if (goTo(a, ai.hx, ai.hy, ai.hz, dt, 1.5)) ai.huntT = Math.min(ai.huntT, 0.4);
       faceMove(a);
@@ -333,7 +348,7 @@ export function createAI(ctx) {
     ai.senseT -= dt;
     if (ai.senseT <= 0) {
       ai.senseT = rnd(0.35, 0.6); let best = null, bd = Infinity; const list = E.actors;
-      for (let i = 0; i < list.length; i++) { const b = list[i]; if (!b.alive || b.kind === 'zombie' || b.data.downed) continue; let d = Math.hypot(b.pos.x - a.pos.x, b.pos.z - a.pos.z) + Math.abs(b.pos.y - a.pos.y) * 2; if (b === ai.target) d *= 0.8; if (d < bd) { bd = d; best = b; } }
+      for (let i = 0; i < list.length; i++) { const b = list[i]; if (!b.alive || b.kind === 'zombie' || b.data.downed) continue; let d = Math.hypot(b.pos.x - a.pos.x, b.pos.z - a.pos.z) + Math.abs(b.pos.y - a.pos.y) * 2; if (b === ai.target) d *= 0.8; if (E.spawnGuard) d += E.spawnGuard.penalty(b); if (d < bd) { bd = d; best = b; } }
       ai.target = best;
     }
     const t = ai.target; if (ai.cd > 0) ai.cd -= dt;

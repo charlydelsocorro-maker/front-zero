@@ -3,6 +3,7 @@
 // procedural locomotion with distance-driven gait + 2-bone IK, Verlet ragdoll deaths.
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { EXTRA_WEAP, buildGunExtra } from './soldier-extra.js';
 
 // ---------------------------------------------------------------- constants
 const PEL = 0, SPI = 1, CHE = 2, NEC = 3, HEA = 4, UAL = 5, FAL = 6, HAL = 7, UAR = 8, FAR = 9, HAR = 10,
@@ -45,6 +46,7 @@ const WEAP = {
   gl:   { butt: .24, buttY: -.01, fore: -.29, foreY: -.03, muzzle: -.4, my: .035, rec: 1.6, blade: -.4, mag: -.1 },
   xbow: { butt: .27, buttY: -.01, fore: -.22, foreY: -.02, muzzle: -.5, my: .06, rec: .6, blade: -.42, mag: -.2, magY: .06 },
   frag: { butt: 0, buttY: 0, fore: 0, foreY: 0, muzzle: -.05, my: 0, rec: 0, blade: -.2, mag: 0, hold: 'throw' },
+  ...EXTRA_WEAP,
 };
 const ZTYPE = {
   walker: { stride: .78, lean: .30, bob: 1.3, sway: 1.7, width: 0, limp: 1, frantic: 0, heavy: 0, skin: 0x9aa58a, scale: [1, 1, 1] },
@@ -406,7 +408,7 @@ function buildGunX(S, id, gx, gy, gz) {
       B([0, .035, -.06], [.03, .036, .2], MT, 0, .006); B([0, .006, -.05], [.028, .024, .17], K); B([0, -.05, .012], [.03, .1, .046], K, -.25, .008);
       B([0, -.13, .045], [.024, .13, .036], MT, -.25); B([0, .035, -.185], [.03, .04, .05], K); B([0, -.03, -.1], [.024, .05, .03], K); B([0, .058, .02], [.012, .01, .012], K);
       break;
-    default: return false;
+    default: return buildGunExtra(id, { B, Z, L, D: (y, z, r, w, p, x = 0) => cyl(GUN, [gx + x - w / 2, gy + y, gz + z], [gx + x + w / 2, gy + y, gz + z], r, r, p, 16), K, MT, WD: C(0x4a3020), ST, OL, TN: C(0x6f6548), BR: C(BRASSC), BL: C(BLADE), PD: PDk });
   }
   return true;
 }
@@ -500,7 +502,8 @@ function getAsset(kind, sub) {
   if (assetCache.has(key)) return assetCache.get(key);
   const bd = new Builder(), S = mkShapes(bd), zk = kind === 'zombie' ? ZTYPE[sub] : null;
   const sc = zk ? zk.scale : [1, 1, 1];
-  if (zk) buildZombieBody(S, sub); else { buildSoldierBody(S); buildGun(S, sub, BIND0[GUN][0], BIND0[GUN][1], BIND0[GUN][2]); }
+  let bodyIdx = 0;      // index count of the body alone: an outfit replaces it and keeps drawing the gun
+  if (zk) buildZombieBody(S, sub); else { buildSoldierBody(S); bodyIdx = bd.idx.length; buildGun(S, sub, BIND0[GUN][0], BIND0[GUN][1], BIND0[GUN][2]); }
   const n = bd.n, pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), si = new Uint16Array(n * 4), sw = new Float32Array(n * 4);
   for (let i = 0; i < n; i++) {
     pos[i * 3] = bd.pos[i * 3] * sc[0]; pos[i * 3 + 1] = bd.pos[i * 3 + 1] * sc[1]; pos[i * 3 + 2] = bd.pos[i * 3 + 2] * sc[2];
@@ -523,7 +526,7 @@ function getAsset(kind, sub) {
   const inv = B.map(b => new THREE.Matrix4().makeTranslation(-b.x, -b.y, -b.z));
   const ball = new THREE.Vector3(BALL0[0] * sc[0], BALL0[1] * sc[1], BALL0[2] * sc[2]);
   const W = zk ? null : WEAP[sub];
-  const A = { key, kind, sub, geo, B, OFF, inv, ball, sc, W, zk, tris: bd.idx.length / 3,
+  const A = { key, kind, sub, geo, B, OFF, inv, ball, sc, W, zk, bodyIdx, tris: bd.idx.length / 3,
     lT: B[THL].distanceTo(B[SHL]), lS: B[SHL].distanceTo(B[FOL]), lU: B[UAL].distanceTo(B[FAL]), lF: B[FAL].distanceTo(B[HAL]) };
   // sparse hull of every bone (extreme vertices along 64 directions) for cheap ground-contact checks
   const sup = [], picked = [];
@@ -685,6 +688,8 @@ export function createSoldier(scene, opts = {}) {
   const colIdx = new Int32Array(64); let colN = 0, colliders = null;
   let limK = 1, rAcc = 0, rT = 0, sleeping = false, stillT = 0, rootSig = 0;
   const rootQ = new THREE.Quaternion(), rootInvQ = new THREE.Quaternion(), rootInv = new THREE.Matrix4();
+  let fit = null;        // cosmetic outfit instance (outfit-kit.js)
+  function fitUpdate(dt) { if (!fit) return; try { fit.update(dt); } catch (e) { console.warn('[outfit] update failed', e); try { fit.dispose(); } catch { /* cosmetic */ } fit = null; } }
 
   // --------------------------------------------------------------- helpers
   function fk(i) { const p = PARENT[i]; P[i].copy(OFF[i]).applyQuaternion(Q[p]).add(P[p]); }
@@ -1320,10 +1325,18 @@ export function createSoldier(scene, opts = {}) {
       st = st || lst;
       const rawDt = fin(dt, 0) > 0 ? dt : 0, cdt = Math.min(rawDt, .05);
       lst.vx = fin(st.vx, 0); lst.vz = fin(st.vz, 0); lst.yaw = fin(st.yaw, yawS); lst.aimPitch = fin(st.aimPitch, 0); lst.grounded = st.grounded !== false; lst.crouch = fin(st.crouch, 0); lst.y = fin(st.y, root.position.y);
-      if (dead) { updateRagdoll(rawDt); return; }
+      if (dead) { updateRagdoll(rawDt); fitUpdate(rawDt); return; }
       if (!root.visible) { needSnap = true; return; }
       poseAlive(cdt, rawDt, lst);
+      fitUpdate(rawDt);
     },
+    /** Cosmetic outfit by id (null = the standard uniform). Never touches hitboxes or stats; a failure leaves the standard uniform on. */
+    setOutfit(id, o) {
+      try { if (fit) { fit.dispose(); fit = null; } if (id && outfitHook.attach) fit = outfitHook.attach(s, id, o || {}) || null; }
+      catch (e) { fit = null; console.warn('[outfit] attach failed', e); }
+      return !!fit;
+    },
+    get outfit() { return fit; },
     fire() {
       if (dead) return;
       if (isZ) { if (atkT < 0 || atkT > .6) atkT = 0; return; }
@@ -1383,6 +1396,7 @@ export function createSoldier(scene, opts = {}) {
       velX = velZ = 0; phase = 0; airB = 0; airF = 0; airTuck = 1; airTime = 0; hipYaw = 0; leanF = leanR = 0;
       yawS = lst.yaw; root.rotation.set(0, yawS, 0);
       poseAlive(1 / 60, 0, lst);
+      if (fit) fit.reset();
     },
     setVisible(v) { root.visible = !!v; if (!v) needSnap = true; },
     setColliders(arr) { colliders = Array.isArray(arr) ? arr : null; if (dead && !sleeping) gatherColliders(); },
@@ -1393,14 +1407,18 @@ export function createSoldier(scene, opts = {}) {
       root.updateWorldMatrix(true, false);
       return target.applyMatrix4(root.matrixWorld);
     },
-    dispose() { if (root.parent) root.parent.remove(root); skeleton.dispose(); },
+    dispose() { if (fit) { try { fit.dispose(); } catch { /* cosmetic */ } fit = null; } if (root.parent) root.parent.remove(root); skeleton.dispose(); },
     // debug/test hooks (read-only use)
     _dbg: { P, Q, feet, rp, RD, A, isSleeping: () => sleeping, ragTime: () => rT },
   };
   Object.defineProperty(s, 'dead', { get: () => dead, set: () => { }, enumerable: true });
   poseAlive(1 / 60, 0, lst);
+  if (opts.outfit && !isZ) s.setOutfit(opts.outfit, { team: opts.outfitTeam, lod: opts.outfitLod });
+  else if (isZ && outfitHook.zombie) { try { fit = outfitHook.zombie(s, sub, { lod: opts.outfitLod }) || null; } catch (e) { fit = null; console.warn('[outfit] zombie look failed', e); } }      // visual only (outfit-mutant.js)
   return s;
 }
+/** Filled by the outfit module once it is loaded (outfit-eclipse.js): the game runs the same without it. */
+export const outfitHook = { attach: null, zombie: null };
 
 export const SOLDIER_WEAPONS = Object.keys(WEAP);
 export const ZOMBIE_TYPES = Object.keys(ZTYPE);

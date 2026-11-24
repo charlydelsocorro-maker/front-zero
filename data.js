@@ -1,5 +1,6 @@
 // FRONT ZÉRO — static game data shared by every module. Display names are French defaults; prefer i18n keys when they exist.
 // Every weapon is an original fictional design (archetypes only, no real brand or model name).
+import { EXTRA_WEAPONS, EXTRA_LEVELS, EXTRA_LIVE } from './weapons-extra.js';
 //
 // Weapon fields
 //  slot   0 primary, 1 secondary, 2 gear (thrown, own key)
@@ -47,13 +48,18 @@ export const ALL_WEAPONS=[
  {id:'xbow',name:'Silence X-1',type:'Arbalète',cat:'special',kind:'projectile',slot:0,price:1700,dmg:95,rpm:38,mag:1,reload:1.6,spread:.002,pellets:1,range:140,auto:false,mob:1,len:.74,rec:.02,hs:2,col:0x2b2f26,fov:36,silent:true,proj:{speed:90,gravity:5,radius:0,fuse:8,bounce:0,self:0}},
  // ---- gear
  {id:'frag',name:'Grenade F-1',type:'Grenade',cat:'gear',kind:'thrown',slot:2,price:0,dmg:120,rpm:45,mag:1,reserve:1,reload:.9,spread:0,pellets:1,range:40,auto:false,mob:1,len:.1,rec:0,hs:1,col:0x3e4a30,fov:70,proj:{speed:19,gravity:16,radius:5,fuse:2.6,bounce:.4,self:1}},
+ // ---- second wave (weapons-extra.js)
+ ...EXTRA_WEAPONS,
 ];
+// Player level required to BUY each weapon (credits still pay for it). Attachments have their own level in attachments.js.
+// Together they give a reward at every level from 2 to 26. Enforced as soon as TEST_UNLOCK_ALL below is false.
+export const WEAPON_LEVELS={ar:1,p9:1,frag:1,knife:2,smg:3,rev:5,mp:6,dbs:7,hp:8,hsmg:9,car:10,pdw:11,akr:12,sg:13,brst:14,xbow:15,bat:16,asg:17,lmg:18,dmr:19,sr:21,gl:22,rl:24,mini:25,hsr:26,...EXTRA_LEVELS};
 // ARSENAL GATE (temporary): players are live while the new weapons are being built, so the browser only sees the six
 // finished weapons unless the page URL has ?arsenal=1. Node (server, tests) always sees the full list.
 // The orchestrator removes this gate once every weapon in ALL_WEAPONS works end to end.
 // 23/11: the 19 new weapons passed the validation run and were added here one by one.
 const LIVE_IDS=new Set(['p9','ar','smg','sg','lmg','sr',
- 'hp','rev','mp','knife','car','akr','brst','bat','pdw','hsmg','asg','dbs','mini','dmr','hsr','rl','gl','xbow','frag']);
+ 'hp','rev','mp','knife','car','akr','brst','bat','pdw','hsmg','asg','dbs','mini','dmr','hsr','rl','gl','xbow','frag',...EXTRA_LIVE]);
 export const ARSENAL_PREVIEW=typeof location==='undefined'||/[?&]arsenal=1(&|$)/.test(location.search);
 export const WEAPONS=ARSENAL_PREVIEW?ALL_WEAPONS:ALL_WEAPONS.filter(w=>LIVE_IDS.has(w.id));
 // TEST MODE (temporary, asked by the players while they test): every weapon and outfit counts as owned.
@@ -85,5 +91,6 @@ export const MODES=[
  {id:'dom',teams:true,solo:true,online:true,name:'Domination',desc:'Capturez et tenez trois zones pour marquer des points.'},
  {id:'bomb',teams:true,solo:true,online:true,name:'Bombe',desc:'Les attaquants posent la bombe, les défenseurs la désamorcent. Pas de réapparition pendant la manche.'},
  {id:'zombie',teams:false,coop:true,solo:true,online:true,name:'Zombies',desc:'Survivez à des vagues de plus en plus dures.'},
+ {id:'zone',teams:false,solo:true,online:true,name:'Zone',desc:'Une arme de poing, des caisses à fouiller, une zone qui se referme. Le dernier en vie gagne.'},
 ];
 export const byId=(list,id)=>list.find(x=>x.id===id);

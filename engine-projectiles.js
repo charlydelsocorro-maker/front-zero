@@ -345,7 +345,8 @@ void main(){float r=length(vUv);if(r>1.)discard;float n=fract(sin(dot(floor(vUv*
     for (let it = 0; it < 5 && rem > 1e-5; it++) {
       const sp = Math.sqrt(p.vx * p.vx + p.vy * p.vy + p.vz * p.vz); if (sp < 1e-3) break;
       const dx = p.vx / sp, dy = p.vy / sp, dz = p.vz / sp, len = sp * rem;
-      const tw = grid.ray(p.x, p.y, p.z, dx, dy, dz, len), solid = grid.hit, ground = grid.ground;
+      if (p.visual) grid.skipPane = true;       // a mirror never decides what breaks: the owner's client reports it
+      const tw = grid.ray(p.x, p.y, p.z, dx, dy, dz, len), solid = grid.hit, ground = grid.ground; grid.skipPane = false;
       const v = ctx.hitActors(p.owner, p.x, p.y, p.z, dx, dy, dz, tw), th = v ? hit.t : Infinity, head = hit.head;
       p.dx = dx; p.dy = dy; p.dz = dz;
       if (v && th <= tw) {       // a body is in the way
@@ -364,6 +365,7 @@ void main(){float r=length(vUv);if(r>1.)discard;float n=fract(sin(dot(floor(vUv*
         detonate(p, -dx, -dy, -dz, null); return;
       }
       if (tw < len) {            // the world is in the way
+        if (solid && solid.pane && ctx.breakPane && ctx.breakPane(solid, p.owner, dx, dz)) continue;       // glass gives way, the round flies on
         p.x += dx * tw; p.y += dy * tw; p.z += dz * tw; p.travel += tw; trail(p, tw);
         if (solid) faceNormal(solid, p.x, p.y, p.z); else { fnx = 0; fny = 1; fnz = 0; }
         const nx = fnx, ny = fny, nz = fnz;
@@ -482,6 +484,8 @@ void main(){float r=length(vUv);if(r>1.)discard;float n=fract(sin(dot(floor(vUv*
         dGeo.attributes.iA.needsUpdate = true; if (!any) { dLive = false; decals.visible = false; }
       }
     },
+    /** A burning flare borrows the one pooled flash light, unless an explosion is using it. */
+    glow(x, y, z, intensity) { if (lightT > 0.02 && lightI > intensity) return; light.position.set(x, y, z); light.distance = 15; lightI = intensity; lightT = 0.06; light.intensity = intensity; },
     /** Nearest live explosive that can hurt `a` (thrown or launched grenades, not rockets): bots run from it. Returns the pooled projectile or null. */
     threat(a) {
       if (stats.live <= 0) return null;

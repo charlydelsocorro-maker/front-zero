@@ -210,7 +210,11 @@ const ENVS = {
   },
 };
 
-function generateIR(ctx, cfg, seed) {
+/* The impulse response is built in slices (a generator that yields every IR_SLICE samples) so it never blocks the page for long:
+   the same arithmetic in the same order, so the buffer is identical to the one built in a single pass. */
+const IR_SLICE = 4096;
+function generateIR(ctx, cfg, seed) { const g = irSteps(ctx, cfg, seed); let r; while (!(r = g.next()).done); return r.value; }
+function* irSteps(ctx, cfg, seed) {
   const sr = ctx.sampleRate;
   const len = Math.ceil((cfg.rt + cfg.pre + .08) * sr / 128) * 128;
   const buf = ctx.createBuffer(2, len, sr);
@@ -221,16 +225,22 @@ function generateIR(ctx, cfg, seed) {
     const start = Math.floor(cfg.pre * sr);
     let lp = 0, hp = 0, a = .4;
     const hpA = 1 - Math.exp(-TAU * cfg.hp / sr);
-    for (let i = start; i < len; i++) {
-      const t = (i - start) / sr;
-      if ((i & 63) === 0) a = 1 - Math.exp(-TAU * (cfg.lp * Math.exp(-t * cfg.damp) + cfg.lpMin) / sr);
-      lp += a * ((rng() * 2 - 1) - lp);
-      hp += hpA * (lp - hp);
-      d[i] = (lp - hp) * Math.exp(-6.91 * t / cfg.rt) * Math.min(1, t / .004) * cfg.level;
+    for (let i0 = start; i0 < len; i0 += IR_SLICE) {
+      for (let i = i0, i1 = Math.min(len, i0 + IR_SLICE); i < i1; i++) {
+        const t = (i - start) / sr;
+        if ((i & 63) === 0) a = 1 - Math.exp(-TAU * (cfg.lp * Math.exp(-t * cfg.damp) + cfg.lpMin) / sr);
+        lp += a * ((rng() * 2 - 1) - lp);
+        hp += hpA * (lp - hp);
+        d[i] = (lp - hp) * Math.exp(-6.91 * t / cfg.rt) * Math.min(1, t / .004) * cfg.level;
+      }
+      yield;
     }
     for (const [f, amp, tau] of cfg.modes) {
       const bq = new Biquad('bp', f * (1 + (c ? .004 : -.004)), 1.2, sr), k = amp * .5 / (.577 * Math.sqrt(Math.PI * (f / 1.2) / sr));
-      for (let i = start; i < len; i++) d[i] += k * Math.exp(-(i - start) / sr / tau) * bq.tick(rng() * 2 - 1);
+      for (let i0 = start; i0 < len; i0 += IR_SLICE) {
+        for (let i = i0, i1 = Math.min(len, i0 + IR_SLICE); i < i1; i++) d[i] += k * Math.exp(-(i - start) / sr / tau) * bq.tick(rng() * 2 - 1);
+        yield;
+      }
     }
     for (const [time, gain, pan] of cfg.taps) {
       const side = c === 0 ? 1 - Math.max(0, pan) : 1 + Math.min(0, pan);
@@ -243,6 +253,7 @@ function generateIR(ctx, cfg, seed) {
     for (let i = 0; i < len; i++) peak = Math.max(peak, Math.abs(d[i]));
     const fade = Math.floor(.05 * sr);
     for (let i = 0; i < fade; i++) d[len - 1 - i] *= i / fade;
+    yield;
   }
   const scale = .9 / peak;
   for (let c = 0; c < 2; c++) { const d = buf.getChannelData(c); for (let i = 0; i < len; i++) d[i] *= scale; }
@@ -832,7 +843,7 @@ export function createAudio() {
   const listener = { x: 0, y: 0, z: 0, yaw: 0 };
   const buses = {};
   const voices = Object.fromEntries(Object.keys(CAPS).map((k) => [k, []]));
-  const banks = new Map(), gunBuffers = {}, irCache = {}, bedCache = {}, bedPending = {};
+  const banks = new Map(), gunBuffers = {}, irCache = {}, bedCache = {}, bedPending = {}, flameAt = {};
   const idle = [];
   let idleTimer = null, convolver = null, wetGain = null, bedVoice = null, ambTimer = null, ambOn = false, ambToken = 0;
   let lastOwnShot = -1, impactWindow = 0, impactCount = 0, lastGun = {};
@@ -1071,11 +1082,21 @@ export function createAudio() {
   const E = () => ENVS[envName];
 
   // Environment
-  function irFor(name) {
-    if (!irCache[name]) irCache[name] = generateIR(ctx, ENVS[name].ir, hashStr('ir:' + name));
-    return irCache[name];
+  // Impulse responses are built a slice at a time on the idle queue (a whole one blocked the page for 300 ms at CPU x4).
+  const irJobs = {}, irWait = new Set();
+  function irStep(name, ms) {       // advances the IR of `name` for up to `ms`; true once it is ready
+    if (irCache[name]) return true;
+    const g = irJobs[name] || (irJobs[name] = irSteps(ctx, ENVS[name].ir, hashStr('ir:' + name))), t0 = performance.now();
+    for (;;) { const r = g.next(); if (r.done) { irCache[name] = r.value; delete irJobs[name]; return true; } if (performance.now() - t0 >= ms) return false; }
   }
+  const irJob = (name, then) => { const job = () => { if (irStep(name, 4)) { if (then) then(); } else idle.unshift(job); }; return job; };
+  function irFor(name) { irStep(name, Infinity); return irCache[name]; }
   function applyEnvironment(fade = .5) {
+    if (!irCache[envName]) {       // the current room's IR goes first in the queue; the reverb switches when it is ready
+      const want = envName;
+      if (!irWait.has(want)) { irWait.add(want); idle.unshift(irJob(want, () => { irWait.delete(want); if (alive && envName === want) applyEnvironment(fade); })); startIdle(); }
+      return;
+    }
     const env = E(), now = ctx.currentTime;
     const next = ctx.createConvolver(), g = ctx.createGain();
     next.normalize = true;
@@ -1273,7 +1294,7 @@ export function createAudio() {
         renderWeapons().catch((e) => { report(e); resolveReady(); });
         warmBanks();
         if (wanted.length) a.preload(wanted.splice(0));
-        for (const n of Object.keys(ENVS)) if (n !== envName) idle.push(() => irFor(n));
+        for (const n of Object.keys(ENVS)) if (n !== envName) idle.push(irJob(n));
         startIdle();
         if (wantAmbience) beginAmbience();
       }
@@ -1334,16 +1355,18 @@ export function createAudio() {
       if (id === 'frag') { a.throw(o); return; }
       if (id === 'xbow') { if (!recShot('xbow', o, .62, 3, 1.3, .03, 0)) oneShot('launch', X.xbow(), o, .4, 3, 1.3, { send: .03 }); return; }
       const key = GUNS[id] ? id : 'ar', spec = GUNS[key], env = E(), buf = gunBuffer(key), now = ctx.currentTime;
+      const loud = clamp(finite(o.loud, 1), .05, 2), muffle = loud < .6;       // attachments: a suppressor is quieter and duller, a compensator a little louder
       if (isOwn(o)) {
-        const gapShot = now - lastOwnShot, duck = (gapShot < .16 ? .84 : 1) * (spec.rapid && gapShot < .07 ? spec.rapid : 1);
+        const gapShot = now - lastOwnShot, duck = (gapShot < .16 ? .84 : 1) * (spec.rapid && gapShot < .07 ? spec.rapid : 1) * loud;
         lastOwnShot = now;
-        if (smp && smp.fire(play, 'gunOwn', id, null, { gain: spec.level * duck, rate: rand(.985, 1.015), send: spec.wet * env.ownWet * duck, echo: spec.echo * duck }, now)) return;
-        play('gunOwn', buf, { gain: spec.level * duck, rate: rand(.985, 1.015), send: spec.wet * env.ownWet * duck, echo: spec.echo * duck });
+        if (smp && smp.fire(play, 'gunOwn', id, null, { gain: spec.level * duck, rate: rand(.985, 1.015), send: spec.wet * env.ownWet * duck, echo: spec.echo * duck, lp: muffle ? 3400 : 0 }, now)) return;
+        play('gunOwn', buf, { gain: spec.level * duck, rate: rand(.985, 1.015), send: spec.wet * env.ownWet * duck, echo: spec.echo * duck, lp: muffle ? 3400 : 0 });
         return;
       }
       const s = spatial(o, 7, 1, !!o.occluded);
       if (s.atten < .006) return;
-      const body = spec.level * s.atten * (1 - s.far * .35);
+      if (muffle) s.lp = Math.min(s.lp, 2600);
+      const body = spec.level * s.atten * (1 - s.far * .35) * loud;
       const wetBase = spec.level * Math.pow(s.atten, .62);
       if (smp && smp.fire(play, 'gun', id, s, {
         when: now + s.delay, gain: body, pan: s.pan, lp: s.lp, rate: rand(.975, 1.012),
@@ -1505,6 +1528,13 @@ export function createAudio() {
       rec('throw', o, .52, 'foley', .02, undefined, mine(o) && since('pin:own') < .06 ? { when: ctx.currentTime + .16 } : undefined);
     }),
     click: guard(() => { rec('click', undefined, .34, 'ui', 0); }),
+    // Flamethrower: no recording fits, so a quiet shaped-noise roar (the only new synthetic sound of the arsenal). Called on each tick of the jet, thinned here.
+    flame: guard((o) => {
+      if (!running()) return; const now = ctx.currentTime, own = mine(o), key = own ? 'own' : 'far'; if (now - (flameAt[key] || -1) < .17) return; flameAt[key] = now;
+      const buf = bank('flameRoar', 3, (sr, r) => { const n = Math.floor(sr * .34), d = new Float32Array(n); let a = 0, b = 0; for (let i = 0; i < n; i++) { const t = i / n, w = r() * 2 - 1; a += (w - a) * .16; b += (a - b) * .09; d[i] = (a * .55 + b * 1.5) * Math.min(1, t * 9) * Math.pow(1 - t, 1.3) * (.75 + .25 * Math.sin(t * 37 + r() * .4)); } return d; });
+      if (own) { play('foley', buf, { gain: .3, rate: rand(.9, 1.1), send: .03 }); return; }
+      const s = spatial(o, 4, 1.1, !!o.occluded); if (s.atten < .012) return; play('foley', buf, { when: now + s.delay, gain: .34 * s.atten, pan: s.pan, lp: s.lp, rate: rand(.9, 1.1), send: .05 });
+    }),
     // The recorded-sound bank once its module has loaded (stats(), setEnabled(bool), settled), else null. For diagnostics and tests.
     samples: () => smp,
   };

@@ -58,6 +58,7 @@ export function createHud(root, { settings, i18n, onResume, onQuit }) {
   const tx = (e, v) => { if (e._t !== v) { e._t = v; e.textContent = v; } };
   const sw = (e, k, v) => { if (e['_' + k] !== v) { e['_' + k] = v; e.style[k] = v; } };
   const vis = (e, on) => sw(e, 'display', on ? '' : 'none');
+  let lootText = '', doorOn = false;       // the pickup and door prompts share one line
   const crossI = el.cross.querySelectorAll('i'), crossDot = el.cross.querySelector('b'), crossRing = el.cross.querySelector('u');
   const dmgI = [...el.dmg.children], dmgT = new Float32Array(4), dmgA = new Float32Array(4); let dmgN = 0;
   const hpBar = el.hp.firstElementChild, armBar = el.arm.firstElementChild, progBar = el.prog.querySelector('u'), progLab = el.prog.querySelector('span');
@@ -139,7 +140,7 @@ export function createHud(root, { settings, i18n, onResume, onQuit }) {
     show(on) { vis(root, on); },
     reset() {
       el.feed.textContent = ''; feedItems.length = 0; for (const k of markers.values()) k.d.remove(); markers.clear(); board = null; boardOn = false; vis(el.board, false);
-      api.set({ left: null, right: null, center: '', timer: null, objective: null }); api.prompt(null); tx(el.loot, ''); vis(el.loot, false); api.progress('', null); vis(el.msg, false); msgT = 0; hitT = hurtT = 0; dmgT.fill(0); for (const d of dmgI) d.style.opacity = 0;
+      api.set({ left: null, right: null, center: '', timer: null, objective: null }); api.prompt(null); lootText = ''; doorOn = false; tx(el.loot, ''); vis(el.loot, false); api.progress('', null); vis(el.msg, false); msgT = 0; hitT = hurtT = 0; dmgT.fill(0); for (const d of dmgI) d.style.opacity = 0;
       vis(el.hint, false); vis(el.spec, false); vis(el.earn, false); for (const q of nums) { q.t = 0; q.d.style.opacity = 0; }
     },
     /** Kill-feed line with highlighted names. */
@@ -150,7 +151,9 @@ export function createHud(root, { settings, i18n, onResume, onQuit }) {
     earn(total, n, reason) { vis(el.earn, total > 0); tx(earnB, '+' + total + ' ₡'); if (n) { tx(earnS, '+' + n + (reason ? ' ' + reason : '')); earnT = 2.2; sw(earnS, 'opacity', 1); } else { earnT = 0; sw(earnS, 'opacity', 0); } },
     invalidate() { crossDirty = true; },
     /** Pickup prompt, separate from the mode's objective prompt (which has priority on the interact key: see promptOn). */
-    loot(text) { tx(el.loot, text || ''); vis(el.loot, !!text); },
+    loot(text) { lootText = text || ''; if (!doorOn) { tx(el.loot, lootText); vis(el.loot, !!lootText); } },
+    /** Door prompt: same place as the pickup prompt and takes priority over it; the pickup text comes back when the door prompt goes. */
+    door(text) { doorOn = !!text; const s = doorOn ? text : lootText; tx(el.loot, s); vis(el.loot, !!s); },
     get promptOn() { return !!el.prompt._t; },
     vitals(hp, maxHp, armor, maxArmor, cls, alive) {
       tx(el.hpN, String(Math.max(0, Math.ceil(hp)))); sw(hpBar, 'width', Math.round(Math.max(0, hp) / maxHp * 100) + '%'); lowHp = alive && hp > 0 && hp < maxHp * 0.3; deadV = !alive;
@@ -212,7 +215,7 @@ export function createHud(root, { settings, i18n, onResume, onQuit }) {
       const s = 170; mapS = size; mapK = s / (size * 2 + 2.4); mapBg = document.createElement('canvas'); mapBg.width = mapBg.height = s;
       const m = mapBg.getContext('2d'), X = v => (v + size + 1.2) * mapK;
       m.fillStyle = 'rgba(216,201,163,.28)';
-      for (const c of solids) { if (c.y0 > 0.6 || c.y1 - c.y0 < 0.7 || (c.x1 - c.x0 > size * 1.6 && c.z1 - c.z0 > size * 1.6)) continue; m.fillRect(X(c.x0), X(c.z0), Math.max(1, (c.x1 - c.x0) * mapK), Math.max(1, (c.z1 - c.z0) * mapK)); }
+      for (const c of solids) { if (c.prop || c.mm === 0 || (c.mm !== 1 && c.y0 > 0.6) || c.y1 - c.y0 < 0.7 || (c.x1 - c.x0 > size * 1.6 && c.z1 - c.z0 > size * 1.6)) continue; m.fillRect(X(c.x0), X(c.z0), Math.max(1, (c.x1 - c.x0) * mapK), Math.max(1, (c.z1 - c.z0) * mapK)); }
     },
     /** Minimap: actors (typed by the callback), markers and the player arrow. */
     drawMap(player, actors, classify) {
@@ -220,6 +223,7 @@ export function createHud(root, { settings, i18n, onResume, onQuit }) {
       const s = 170, X = v => (v + mapS + 1.2) * mapK; mc.clearRect(0, 0, s, s); mc.drawImage(mapBg, 0, 0);
       for (const k of markers.values()) { const m = k.m; if (m.small) continue; mc.strokeStyle = mc.fillStyle = m.color || '#e8a628'; mc.lineWidth = 2; mc.beginPath(); mc.arc(X(m.x), X(m.z), 6, 0, 7); mc.stroke(); if (m.label) { mc.font = '700 10px sans-serif'; mc.textAlign = 'center'; mc.textBaseline = 'middle'; mc.fillText(String(m.label).slice(0, 2), X(m.x), X(m.z) + 0.5); } }
       for (let i = 0; i < actors.length; i++) { const a = actors[i]; if (a === player || !a.alive) continue; const c = classify(a); if (!c) continue; mc.fillStyle = c; mc.beginPath(); mc.arc(X(a.pos.x), X(a.pos.z), 3, 0, 7); mc.fill(); }
+      if (api.mapOverlay) api.mapOverlay(mc, X, mapK);       // the mode's own layer (safe zone circles)
       mc.save(); mc.translate(X(player.pos.x), X(player.pos.z)); mc.rotate(-player.yaw); mc.fillStyle = '#e8a628'; mc.beginPath(); mc.moveTo(0, -7); mc.lineTo(5, 5); mc.lineTo(-5, 5); mc.fill(); mc.restore();
     },
   };

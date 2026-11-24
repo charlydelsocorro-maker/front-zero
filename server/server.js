@@ -101,15 +101,42 @@ for (const id of Object.keys(WEAPONS)) prepWeapon(WEAPONS[id]);
       if (d.kind === 'melee' || d.kind === 'projectile' || d.kind === 'thrown') w.kind = d.kind;
       if (d.proj && d.proj.speed > 0) w.proj = { radius: d.proj.radius > 0 ? d.proj.radius : 0, speed: d.proj.speed, fuse: d.proj.fuse > 0 ? d.proj.fuse : 3, self: d.proj.self >= 0 ? d.proj.self : 1 };
       if ((w.kind === 'projectile' || w.kind === 'thrown') && !w.proj) continue;
+      if (d.flame && d.flame.dps > 0 && d.flame.t > 0) w.flame = { dps: d.flame.dps, t: d.flame.t };
       WEAPONS[d.id] = prepWeapon(w); n++;
+      if (d.slot === 1) SIDEARMS.add(d.id);
     }
     console.log(`weapon table: ${n} weapons read from data.js`);
   }).catch(() => { console.log('weapon table: data.js not importable here, using the built-in values'); });
 })();
+// Attachments: what fits each weapon. Must stay in sync with WEAPON_SLOTS in attachments.js (a test compares them); this server is deployed without that file.
+// No attachment changes damage or rate of fire, so the shot limits stay as they are; only the magazine size depends on them.
+const ATT_FULL = 'dot holo x4 sup comp hider ext fast vg ag laser', ATT_SMG = 'dot holo sup comp hider ext fast vg ag laser', ATT_PISTOL = 'dot sup comp ext fast laser';
+const ATT_ALLOW = Object.fromEntries(Object.entries({
+  p9: ATT_PISTOL, hp: ATT_PISTOL, mp: ATT_PISTOL, rev: 'dot laser', ar: ATT_FULL, car: ATT_FULL, akr: ATT_FULL, brst: ATT_FULL, bat: ATT_FULL, dmr: ATT_FULL,
+  smg: ATT_SMG, pdw: ATT_SMG, hsmg: ATT_SMG, sg: 'dot holo comp hider ext laser', asg: 'dot holo comp hider ext fast vg ag laser', dbs: 'dot laser',
+  lmg: 'dot holo x4 comp hider ext laser', mini: 'dot holo laser', sr: 'sup comp ext fast laser', hsr: 'comp fast laser', rl: 'laser', gl: 'dot holo laser', xbow: 'dot x4 laser',
+  bpc: ATT_FULL, cqc: ATT_SMG, hbr: ATT_FULL, ssr: 'dot holo x4 ext fast vg ag laser', dsmg: 'dot holo sup comp hider vg ag laser', ssmg: 'dot holo ext fast vg ag laser', fsmg: 'dot sup comp hider ext fast laser',
+  lsg: 'dot laser', dsg: 'dot holo comp hider vg ag laser', sawn: 'laser', bplmg: 'dot holo x4 comp hider ext laser', dlmg: 'dot holo comp hider laser',
+  lsr: 'dot x4 laser', asr: 'comp fast laser', scout: 'sup comp ext fast laser', bp: ATT_PISTOL, p22: 'dot ext fast laser', lsp: 'dot comp ext fast laser',
+  flame: 'laser', bow: 'laser', flare: 'laser',
+}).map(([k, v]) => [k, new Set(v.split(' '))]));
+const ATT_SLOT = { dot: 'o', holo: 'o', x4: 'o', sup: 'm', comp: 'm', hider: 'm', ext: 'g', fast: 'g', vg: 'u', ag: 'u', laser: 'r' };
+/** A clean copy of a list of attachments, or null when it is not legal on this weapon. */
+function attClean(id, list) {
+  if (list === undefined || list === null) return [];
+  if (!Array.isArray(list) || list.length > 5) return null;
+  const allow = ATT_ALLOW[id], seen = new Set(), out = [];
+  for (const a of list) {
+    if (typeof a !== 'string' || !allow || !allow.has(a) || seen.has(ATT_SLOT[a])) return null;
+    seen.add(ATT_SLOT[a]); out.push(a);
+  }
+  return out;
+}
+const attMag = (w, att) => (att && att.includes('ext') ? Math.max(w.mag + 1, Math.round(w.mag * 1.35)) : w.mag);
 const RELAY_ACTIONS = new Set(['reload', 'emote', 'chat', 'jump', 'marker']);
 const LIMITS = {
   state: [30, 40], shot: [40, 40], hit: [120, 120], action: [40, 60], boom: [8, 12],
-  lobby: [8, 16], join: [2, 5], ping: [2, 5], all: [200, 300], err: [10, 20], loot: [20, 30],
+  lobby: [8, 16], join: [2, 5], ping: [2, 5], all: [200, 300], err: [10, 20], loot: [20, 30], prop: [40, 60], gx: [30, 45], flow: [6, 12],
 };
 
 /* ---------- static files ---------- */
@@ -200,15 +227,18 @@ function take(p, key) {
   b.n -= 1; return true;
 }
 
+let Relay = null;       // compact protocol and write coalescing (net-relay.js at the root); the server runs without it
 function raw(p, text, volatile) {
   const ws = p.ws;
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
   if (ws.bufferedAmount > HARD_BUFFER) { ws.terminate(); return; }
-  if (volatile && ws.bufferedAmount > SOFT_BUFFER) return;
+  if (volatile && ws.bufferedAmount > (Relay ? Relay.softLimit(p) : SOFT_BUFFER)) return;
+  if (Relay) Relay.cork(p);
   ws.send(text, err => { if (err) { /* socket closing: close handler cleans up */ } });
 }
 const send = (p, o) => raw(p, JSON.stringify(o));
 function all(room, o, except) {
+  if (Relay && o.t === 'shot') return Relay.shot(room, o, except);
   const s = JSON.stringify(o);
   for (const q of room.players.values()) if (q !== except) raw(q, s);
 }
@@ -226,7 +256,7 @@ function strike(p, code) {
 }
 
 /* ---------- room views ---------- */
-const publicPlayer = q => ({ id: q.id, name: q.name, ready: q.ready, team: q.team, status: q.status, cls: q.cls });
+const publicPlayer = q => ({ id: q.id, name: q.name, ready: q.ready, team: q.team, status: q.status, cls: q.cls, ...(q.att ? { att: q.att } : null), ...(q.fin ? { fin: q.fin } : null), ...(q.fit ? { fit: q.fit } : null) });
 function roomView(room) {
   return {
     code: room.code, hostId: room.hostId, mode: room.mode, map: room.map, state: room.state, maxPlayers: MAX_PLAYERS,
@@ -268,7 +298,7 @@ function teamCount(room, t) { let n = 0; for (const q of room.players.values()) 
 const smaller = room => (teamCount(room, 'A') <= teamCount(room, 'B') ? 'A' : 'B');
 function normalizeTeams(room) {
   for (const q of room.players.values()) {
-    if (room.mode === 'ffa') q.team = null;
+    if (room.mode === 'ffa' || room.mode === 'zone') q.team = null;
     else if (room.mode === 'zombie') q.team = 'A';
     else if (q.team !== 'A' && q.team !== 'B') q.team = null;
   }
@@ -294,16 +324,21 @@ function resetLife(p) {
   p.respawnAt = 0; p.bleedAt = 0; p.regenAt = 0; p.damageBy.clear(); p.credits.length = 0; p.revive = null;
   p.used = {};      // rounds fired this life with limited-reserve weapons (live projectiles and detonations outlive their owner on purpose)
   p.inv = null; p.life = (p.life | 0) + 1;      // what this life carries (reported by loot-aware clients, then kept by the server); null = older client
+  p.gx = null; p.maxArmor = c.armor;            // equipment of this life (gear-referee.js); the client announces its loadout after each spawn
+  p.sgUntil = 0;                                // spawn protection (spawn-guard.js): only a respawn starts it, never a match start or a revive
 }
 function respawn(room, p, extra) {
   resetLife(p);
   all(room, { t: 'respawn', id: p.id, hp: p.hp, armor: p.armor, team: p.team, life: p.life, ...extra });
+  guardStart(room, p);
 }
 function applyDamage(room, target, amount, attacker, weapon, head) {
+  if (guarded(target)) { if (attacker && attacker !== target) target.damageBy.delete(attacker.id); return false; }      // spawn protection: no damage of any kind, no assist credit
   const absorbed = Math.min(target.armor, amount * 0.6);
   target.armor = r2(target.armor - absorbed);
   target.hp = r2(Math.max(0, target.hp - (amount - absorbed)));
   target.regenAt = Date.now() + (CLASSES[target.cls].regen || 5) * 1000;
+  if (room.match && room.match.gx) room.match.gx.onDamage(target);
   const msg = { t: 'damage', target: target.id, from: attacker ? attacker.id : null, amount: r2(amount), hp: target.hp, armor: target.armor, head: !!head, weapon: weapon || null };
   send(target, msg);
   if (attacker && attacker !== target) send(attacker, msg);
@@ -323,7 +358,8 @@ function killPlayer(room, victim, killer, weapon, head) {
   const self = killer === victim;       // own explosive: a death, no kill, no point
   if (!self) { killer.kills++; killer.score += head ? 125 : 100; }
   all(room, { t: 'death', id: victim.id, by: self ? null : killer.id, weapon, head: !!head, assists });
-  dropLoot(room, victim);
+  dropLoot(room, victim); gearDeath(room, victim);
+  if (m.mode === 'zone') { victim.respawnAt = 0; sendScore(room); if (Zone) Zone.onKilled(room, victim); return; }      // no respawn: the referee keeps the placement
   if (m.mode === 'bomb') { clearActs(m, victim); sendScore(room); checkBombElimination(room); return; }
   victim.respawnAt = now + T(RESPAWN_MS);
   if (m.mode === 'tdm' && !self) m.teamScore[killer.team]++;
@@ -339,7 +375,7 @@ function killPlayer(room, victim, killer, weapon, head) {
 const LOOT = { ttl: 30000, cap: 24, takeR: 4.5, takeY: 3.2 };
 const SIDEARMS = new Set(['p9', 'hp', 'rev', 'mp', 'knife']);
 const slotOf = id => (WEAPONS[id].kind === 'thrown' ? 2 : SIDEARMS.has(id) ? 1 : 0);
-const lootView = (d, now) => ({ id: d.id, k: d.k, w: d.w, a: d.a, r: d.r, x: d.x, y: d.y, z: d.z, ttl: Math.max(0, d.exp - now) });
+const lootView = (d, now) => ({ id: d.id, k: d.k, w: d.w, a: d.a, r: d.r, x: d.x, y: d.y, z: d.z, ttl: Math.max(0, d.exp - now), ...(d.att && d.att.length ? { att: d.att } : null), ...(d.fin ? { fin: d.fin } : null) });
 const lootLeft = e => e.a + Math.max(e.r, 0);
 function carried(p, id) {
   if (!p.inv) return null;
@@ -351,7 +387,7 @@ function addDrops(room, list, x, y, z) {
   if (!m || !m.drops || !list.length) return;
   const now = Date.now(), items = [], gone = [];
   for (const o of list) {
-    const d = { id: ++m.lootId, k: o.k, w: o.w, a: o.a, r: o.r, x: r2(x), y: r2(y), z: r2(z), exp: now + T(LOOT.ttl) };
+    const d = { id: ++m.lootId, k: o.k, w: o.w, a: o.a, r: o.r, x: r2(x), y: r2(y), z: r2(z), exp: now + T(LOOT.ttl), att: o.att || null, fin: finOk(o.fin) ? o.fin : null };
     m.drops.set(d.id, d); items.push(lootView(d, now));
   }
   while (m.drops.size > LOOT.cap) { const id = m.drops.keys().next().value; m.drops.delete(id); gone.push(id); }      // oldest first
@@ -363,7 +399,7 @@ function dropLoot(room, v) {
   v.inv = null;
   if (!inv || !v.hasPos || !room.match || room.mode === 'zombie') return;
   const list = [];
-  for (const e of inv.w) if (WEAPONS[e.id].life === Infinity || lootLeft(e) > 0) list.push({ k: 'w', w: e.id, a: e.a, r: e.r });
+  for (const e of inv.w) if (WEAPONS[e.id].life === Infinity || lootLeft(e) > 0) list.push({ k: 'w', w: e.id, a: e.a, r: e.r, att: e.att, fin: v.fin && v.fin[e.id] });
   if (inv.g && inv.g.a > 0) list.push({ k: 'g', w: inv.g.id, a: inv.g.a, r: 0 });
   addDrops(room, list, v.x, v.y, v.z);
 }
@@ -392,10 +428,13 @@ function onInv(p, m) {
   const list = [];
   for (const e of m.w) {
     const w = isObj(e) && typeof e.id === 'string' && Object.hasOwn(WEAPONS, e.id) ? WEAPONS[e.id] : null;
-    if (!w || w.kind === 'thrown' || !Number.isInteger(e.a) || !Number.isInteger(e.r) || e.a < 0 || e.a > w.mag) return strike(p, 'bad_inv');
+    if (!w || w.kind === 'thrown' || !Number.isInteger(e.a) || !Number.isInteger(e.r) || e.a < 0) return strike(p, 'bad_inv');
+    // Once this life is known, the attachments on a carried weapon are the server's (a looted weapon gets its list from the drop), not the report's.
+    const held = p.inv && p.inv.w.find(q => q.id === e.id), att = held ? held.att || [] : attClean(e.id, e.att);
+    if (!att || e.a > attMag(w, att)) return strike(p, 'bad_inv');
     if (w.reserve === undefined ? e.r !== -1 : e.r < 0 || e.r > w.reserve) return strike(p, 'bad_inv');
     if (list.some(q => slotOf(q.id) === slotOf(e.id))) return strike(p, 'bad_inv');
-    list.push({ id: e.id, a: e.a, r: e.r });
+    list.push({ id: e.id, a: e.a, r: e.r, att });
   }
   let g = null;
   if (m.g !== undefined && m.g !== null) {
@@ -425,6 +464,12 @@ function onTake(p, m) {
   if (Math.hypot(p.x - d.x, p.z - d.z) > LOOT.takeR || Math.abs(p.y - d.y) > LOOT.takeY) return fail();
   const w = WEAPONS[d.w], gone = () => { g.drops.delete(d.id); all(room, { t: 'loot', op: 'del', ids: [d.id] }); };
   const left = () => { if (lootLeft(d) > 0) all(room, { t: 'loot', op: 'upd', id: d.id, a: d.a, r: d.r }); else gone(); };
+  if (d.k === 'x') {       // equipment item (gear-referee.js keeps the counts)
+    const n = g.gx ? g.gx.take(p, d.w, d.a) : 0;
+    if (!(n > 0)) return fail();
+    d.a -= n; left();
+    return send(p, { t: 'loot', op: 'got', id: d.id, k: 'x', w: d.w, n });
+  }
   if (d.k === 'g') {
     const cur = p.inv.g && p.inv.g.id === d.w ? p.inv.g : null, have = cur ? cur.a : 0, n = Math.min(w.life - have, d.a);
     if (!(n > 0)) return fail();
@@ -442,11 +487,200 @@ function onTake(p, m) {
     return send(p, { t: 'loot', op: 'got', id: d.id, k: 'a', w: d.w, n });
   }
   if (mine) return fail();
-  const slot = slotOf(d.w), i = p.inv.w.findIndex(e => slotOf(e.id) === slot), out = i >= 0 ? p.inv.w[i] : null, item = { id: d.w, a: d.a, r: d.r };
+  const slot = slotOf(d.w), i = p.inv.w.findIndex(e => slotOf(e.id) === slot), out = i >= 0 ? p.inv.w[i] : null, item = { id: d.w, a: d.a, r: d.r, att: d.att || [] };
   if (i >= 0) p.inv.w[i] = item; else p.inv.w.push(item);
   gone();
-  if (out && (WEAPONS[out.id].life === Infinity || lootLeft(out) > 0)) addDrops(room, [{ k: 'w', w: out.id, a: out.a, r: out.r }], p.x, p.y, p.z);
-  send(p, { t: 'loot', op: 'got', id: d.id, k: 'w', w: d.w, a: d.a, r: d.r });
+  if (out && (WEAPONS[out.id].life === Infinity || lootLeft(out) > 0)) addDrops(room, [{ k: 'w', w: out.id, a: out.a, r: out.r, att: out.att, fin: p.fin && p.fin[out.id] }], p.x, p.y, p.z);
+  send(p, { t: 'loot', op: 'got', id: d.id, k: 'w', w: d.w, a: d.a, r: d.r, ...(d.att && d.att.length ? { att: d.att } : null) });
+  publishAtt(p, room);
+}
+/* Weapon finishes: purely visual. Unknown ids are ignored (never a strike), so a newer client's catalogue cannot get anyone kicked. Ownership lives in the player's save.
+   Only clients that sent 'fin' once receive it; the public rc4 client never does. Must stay in sync with FINISHES in cosmetics.js (a test compares them). */
+const FIN_IDS = new Set(('ecl_jaune ecl_rouge ecl_blanc ecl_arctique ecl_desert ecl_foret ecl_cyan ecl_or pix_foret pix_sable pix_neige sylve givre fauve eclats carbone acier obsidienne cuivre dorure'
+  + ' map_depot map_vieille_ville map_port map_bunker map_col_blanc map_sept_vents map_noirval map_val_cendre map_roqueseche').split(' '));
+// Season-pass finishes ('s1_signal'...) are accepted by their pattern, so a new season needs no server change. Still purely visual; unknown to a client = factory look.
+const FIN_PASS = /^s\d+_[a-z0-9_]{1,24}$/;
+const finOk = id => typeof id === 'string' && (FIN_IDS.has(id) || FIN_PASS.test(id));
+function onFin(p, m) {
+  const room = p.room; if (!room || !isObj(m.w)) return;
+  const out = {}; let n = 0;
+  for (const id of Object.keys(m.w)) { if (++n > 80) break; if (Object.hasOwn(WEAPONS, id) && finOk(m.w[id])) out[id] = m.w[id]; }
+  const first = !p.finAware; p.finAware = true; p.fin = Object.keys(out).length ? out : null;
+  const s = JSON.stringify({ t: 'fin', id: p.id, w: out });
+  for (const q of room.players.values()) {
+    if (q === p) continue;
+    if (q.finAware) raw(q, s);
+    if (first && q.fin) send(p, { t: 'fin', id: q.id, w: q.fin });        // what the others already wear
+  }
+}
+/* Premium outfits: purely visual, same rules as the finishes. Unknown ids count as "none" (never a strike). Must stay in sync with OUTFIT_SETS of the outfit-*.js modules (outfits.js lists them). */
+const FIT_EXTRA = /^s1-[a-z0-9-]{1,40}$/;       // season-pass colourways: their own namespace, accepted by pattern (a client without that colourway shows the standard uniform)
+const FIT_IDS = new Set(('eclipse-noir-jaune eclipse-noir-rouge eclipse-noir-blanc eclipse-arctique eclipse-desert eclipse-foret eclipse-acier-cyan eclipse-or-noir' +
+  ' colosse-acier colosse-sable colosse-nuit colosse-glacier fantome-sous-bois fantome-steppe fantome-neige fantome-cendre as-sauge as-nuit as-sable as-ciel' +
+  ' demineur-kaki demineur-olive demineur-ardoise demineur-signal' +
+  ' abysse-fosse abysse-lagon abysse-ecume abysse-algue blizzard-banquise blizzard-toundra blizzard-aurore blizzard-balise ronin-encre ronin-laque ronin-bronze ronin-brume' +
+  ' sentinelle-garde sentinelle-rempart sentinelle-vigie sentinelle-minuit' +
+  ' lamaneur-couchant lamaneur-conteneur lamaneur-maree lamaneur-brume' +
+  ' caravanier-depot caravanier-tole caravanier-tranchee caravanier-sirocco' +
+  ' faubourg-vieille-ville faubourg-brique faubourg-pave faubourg-chaux' +
+  ' sourcier-roqueseche sourcier-citerne sourcier-garrigue sourcier-terre-cuite' +
+  ' cordee-col-blanc cordee-balise cordee-ardoise cordee-myrtille' +
+  ' ecluse-sigma ecluse-olive ecluse-alerte ecluse-rouille' +
+  ' baliseur-sept-vents baliseur-piste baliseur-carburant baliseur-hangar' +
+  ' torchere-noirval torchere-torchere torchere-bitume torchere-kaki' +
+  ' brulis-val-cendre brulis-meleze brulis-tison brulis-lichen' +
+  ' serre-frein-valferrade serre-frein-wagonnet serre-frein-minerai serre-frein-houille').split(' '));       // map outfits (outfit-map-<map>.js)
+function onFit(p, m) {
+  const room = p.room; if (!room) return;
+  const first = !p.fitAware; p.fitAware = true; p.fit = typeof m.o === 'string' && (FIT_IDS.has(m.o) || FIT_EXTRA.test(m.o)) ? m.o : null;
+  const s = JSON.stringify({ t: 'fit', id: p.id, o: p.fit });
+  for (const q of room.players.values()) {
+    if (q === p) continue;
+    if (q.fitAware) raw(q, s);
+    if (first && q.fit) send(p, { t: 'fit', id: q.id, o: q.fit });        // what the others already wear
+  }
+}
+/* What a player has mounted, for the other screens. The report is validated; unlock levels live in the player's own save and are not checked here. */
+function onAtt(p, m) {
+  const room = p.room;
+  if (!room || !isObj(m.w)) return strike(p, 'bad_att');
+  const keys = Object.keys(m.w);
+  if (keys.length > 2) return strike(p, 'bad_att');
+  const out = {};
+  for (const id of keys) {
+    if (!Object.hasOwn(WEAPONS, id)) return strike(p, 'bad_att');
+    const held = p.inv && p.inv.w.find(q => q.id === id), l = held ? held.att || [] : attClean(id, m.w[id]);
+    if (!l) return strike(p, 'bad_att');
+    out[id] = l;
+  }
+  p.att = out;
+  all(room, { t: 'att', id: p.id, w: out }, p);
+}
+function publishAtt(p, room) {
+  if (!p.inv) return;
+  const out = {}; for (const e of p.inv.w) out[e.id] = e.att || [];
+  p.att = out; all(room, { t: 'att', id: p.id, w: out }, p);
+}
+
+/* ---------- world props: doors, glass, explosive drums ----------
+   The server has no map geometry: the first client to finish loading sends the list of positions (identical on every client, derived from the
+   map), later ones must announce the same map. From then on the server owns every state. Older clients never send 'prop' and ignore what they receive. */
+const PROP = { useR: 3.8, useMs: 240, maxDoors: 80, maxPanes: 640, maxDrums: 40, slack: 1.5, boomTtl: 2500, chainMs: 240, chainDepth: 5, perTick: 1,
+  kinds: [{ hp: 60, burn: 2400, radius: 4.8, damage: 130 }, { hp: 35, burn: 1600, radius: 3.8, damage: 105 }] };
+function propView(ps) { return { op: 'sync', d: ps.doors.map(d => (d.o ? d.s || 2 : 0)), g: [...ps.broken], b: ps.drums.filter(b => b.st > 0).map(b => [b.id, b.st]) }; }
+function propManifest(p, room, m) {
+  const g = room.match;
+  if (typeof m.h !== 'string' || m.h !== room.map) return send(p, { t: 'prop', op: 'off' });
+  if (g.props) {       // same map, but another build of it (a client from an older page): its ids would not mean the same props
+    if (!Array.isArray(m.d) || !Array.isArray(m.b) || m.d.length !== g.props.doors.length * 3 || m.b.length !== g.props.drums.length * 3 || m.g !== g.props.panes) send(p, { t: 'prop', op: 'off' });
+    return;
+  }
+  const ints = (a, max, per) => Array.isArray(a) && a.length <= max * per && a.length % per === 0 && a.every(v => Number.isInteger(v) && Math.abs(v) < 60000);
+  if (!ints(m.d, PROP.maxDoors, 3) || !ints(m.b, PROP.maxDrums, 3) || !Number.isInteger(m.g) || m.g < 0 || m.g > PROP.maxPanes) return strike(p, 'bad_prop');
+  const doors = [], drums = [];
+  for (let i = 0; i < m.d.length; i += 3) doors.push({ x: m.d[i] / 10, z: m.d[i + 1] / 10, o0: !!m.d[i + 2], o: !!m.d[i + 2], at: 0 });
+  for (let i = 0; i < m.b.length; i += 3) { const k = PROP.kinds[m.b[i + 2] ? 1 : 0]; drums.push({ id: drums.length, x: m.b[i] / 10, z: m.b[i + 1] / 10, k, hp: k.hp, st: 0, fuseAt: 0, by: null, gen: 0 }); }
+  g.props = { doors, drums, panes: m.g, broken: new Set(), booms: [] };
+}
+function resetProps(room) {
+  const ps = room.match && room.match.props;
+  if (!ps) return;
+  for (const d of ps.doors) { d.o = d.o0; d.s = 0; d.at = 0; }
+  for (const b of ps.drums) { b.hp = b.k.hp; b.st = 0; b.fuseAt = 0; b.by = null; b.gen = 0; }
+  ps.broken.clear(); ps.booms.length = 0;
+  all(room, { t: 'prop', op: 'reset' });
+}
+function hurtDrum(room, ps, b, amount, byId, now) {
+  if (b.st === 2 || !(amount > 0)) return;
+  b.hp -= amount; if (byId) b.by = byId;
+  if (b.hp <= 0) { b.fuseAt = b.st === 1 ? Math.min(b.fuseAt, now + 80) : now + 80; if (b.st === 0) { b.st = 1; all(room, { t: 'prop', op: 'brl', id: b.id }); } }
+  else if (b.st === 0 && b.hp <= b.k.hp * 0.5) { b.st = 1; b.fuseAt = now + T(b.k.burn); all(room, { t: 'prop', op: 'brl', id: b.id }); }
+}
+function tickProps(room, now) {
+  const ps = room.match.props;
+  if (!ps) return;
+  let blown = 0;
+  for (const b of ps.drums) {
+    if (b.st !== 1 || now < b.fuseAt || blown >= PROP.perTick) continue;
+    blown++; b.st = 2;
+    ps.booms.push({ x: b.x, z: b.z, k: b.k, by: b.by, at: now, seen: new Set() });
+    if (ps.booms.length > 12) ps.booms.shift();
+    all(room, { t: 'prop', op: 'boom', id: b.id, by: b.by });
+    if (b.gen >= PROP.chainDepth) continue;
+    for (const o of ps.drums) {           // the blast reaches its neighbours a moment later: a chain is visible and bounded
+      if (o === b || o.st === 2 || Math.hypot(o.x - b.x, o.z - b.z) > b.k.radius * 0.85) continue;
+      o.gen = Math.max(o.gen, b.gen + 1); if (b.by) o.by = b.by;
+      const at = now + PROP.chainMs + o.id * 12;
+      o.fuseAt = o.st === 1 ? Math.min(o.fuseAt, at) : at;
+      if (o.st === 0) { o.st = 1; all(room, { t: 'prop', op: 'brl', id: o.id }); }
+    }
+  }
+}
+function onProp(p, m) {
+  const room = p.room, g = room && room.match;
+  if (!g) return;
+  if (m.a === 'man') return propManifest(p, room, m);
+  const ps = g.props;
+  if (m.a === 'req') { if (ps) send(p, { t: 'prop', ...propView(ps) }); return; }
+  if (!ps) return;
+  const now = Date.now();
+  if (m.a === 'use') {
+    if (!Number.isInteger(m.id) || !(m.id >= 0 && m.id < ps.doors.length)) return strike(p, 'bad_prop');
+    const d = ps.doors[m.id], botDoor = m.z === 1 && ((room.mode === 'zombie' && room.hostId === p.id) || (room.mode === 'zone' && !!room.match.zone && room.match.zone.sim === p.id));       // the host moves the zombies, the zone's simulating client its bots
+    if (!botDoor && (p.status !== 'alive' || !p.hasPos || Math.hypot(p.x - d.x, p.z - d.z) > PROP.useR)) return;
+    if (now - d.at < PROP.useMs) return;
+    d.at = now; d.o = !d.o; if (d.o) d.s = m.s > 0 ? 1 : -1;
+    return all(room, { t: 'prop', op: 'door', id: m.id, o: d.o ? 1 : 0, s: m.s > 0 ? 1 : -1 });
+  }
+  if (m.a === 'gl') {
+    if (!Array.isArray(m.ids) || m.ids.length > 16) return strike(p, 'bad_prop');
+    const fresh = [];
+    for (const id of m.ids) { if (!Number.isInteger(id) || id < 0 || id >= ps.panes) return strike(p, 'bad_prop'); if (!ps.broken.has(id)) { ps.broken.add(id); fresh.push(id); } }
+    if (fresh.length) all(room, { t: 'prop', op: 'gl', ids: fresh }, p);
+    return;
+  }
+  if (m.a === 'hit') {
+    const w = typeof m.w === 'string' && Object.hasOwn(WEAPONS, m.w) ? WEAPONS[m.w] : null;
+    if (!w || !Number.isInteger(m.id) || !(m.id >= 0 && m.id < ps.drums.length) || !num(m.d, 0, 1000)) return strike(p, 'bad_prop');
+    if (!canFight(room)) return;
+    const b = ps.drums[m.id], reach = Math.max(w.range * 1.6, (w.proj ? w.proj.radius + 40 : 0), 30);
+    if (p.hasPos && Math.hypot(p.x - b.x, p.z - b.z) > reach) return;
+    return hurtDrum(room, ps, b, Math.min(m.d, w.dmg * Math.max(1, w.pellets) * 1.25), p.id, now);
+  }
+  return strike(p, 'bad_prop');
+}
+// Blast of a drum: reported per victim by the player it is credited to, checked like a grenade's splash.
+function onPropSplash(p, m, room) {
+  if (!canFight(room)) return reject(p, 'not_live');
+  if (typeof m.target !== 'string' || m.target.length > 16 || !num(m.damage, 0.01, 1e6) || m.splash !== true) return strike(p, 'bad_hit');
+  const ps = room.match.props, now = Date.now();
+  if (!ps) return reject(p, 'no_boom');
+  const zombie = isNpc(room, m.target), target = zombie ? null : room.players.get(m.target);
+  if (!zombie && !target) return reject(p, 'bad_target');
+  if (target) {
+    if (target.status !== 'alive') return reject(p, 'target_dead');
+    if (target !== p && (room.mode === 'zombie' || (TEAM_MODES.has(room.mode) && target.team === p.team))) return reject(p, 'friendly_fire');
+  }
+  while (ps.booms.length && now - ps.booms[0].at > PROP.boomTtl) ps.booms.shift();
+  let q = null, dist = 0;
+  for (let i = ps.booms.length - 1; i >= 0 && !q; i--) {
+    const c = ps.booms[i];
+    if (c.by !== p.id || c.seen.has(m.target)) continue;
+    if (target && target.hasPos) { const d = Math.hypot(target.x - c.x, target.z - c.z); if (d > c.k.radius + PROP.slack) continue; dist = d; }
+    q = c;
+  }
+  if (!q) return reject(p, 'no_boom');
+  q.seen.add(m.target);
+  const fall = 1 - 0.9 * Math.max(0, dist - PROP.slack) / q.k.radius, amount = Math.min(m.damage, q.k.damage * fall);
+  if (!(amount > 0)) return;
+  if (zombie) {
+    if (room.mode === 'zone') { Zone.botHit(room, m.target, p, amount, false, 'frag'); return; }
+    const host = room.players.get(room.hostId);
+    if (host) send(host, { t: 'action', type: 'z_hit', from: p.id, data: { zombie: m.target, damage: r2(amount), head: false, weapon: 'frag' } });
+    return;
+  }
+  if (target !== p) target.damageBy.set(p.id, now);
+  if (applyDamage(room, target, amount, p, 'barrel', false)) killPlayer(room, target, p, 'barrel', false);
 }
 
 /* ---------- match flow ---------- */
@@ -455,11 +689,13 @@ function startMatch(room) {
   for (const q of room.players.values()) { q.kills = q.deaths = q.assists = q.score = 0; resetLife(q); }
   const now = Date.now();
   const m = room.match = { mode: room.mode, startedAt: now, phase: 'live', phaseEnds: 0, endsAt: 0, teamScore: { A: 0, B: 0 }, lastScoreTick: now, drops: new Map(), lootId: 0 };
+  m.gx = makeGear(room);
   room.state = 'playing';
   if (MODE_RULES[m.mode]) m.endsAt = now + T(MODE_RULES[m.mode].time);
   if (m.mode === 'dom') m.points = room.domPoints ? buildPoints(room.domPoints) : null;
   if (m.mode === 'bomb') { m.round = 0; m.attackers = 'A'; m.bomb = null; m.plantAct = null; m.defuseAct = null; }
   if (m.mode === 'zombie') { m.wave = 0; m.remaining = 0; m.seen = new Set(); m.phase = 'intermission'; m.phaseEnds = now + T(ZOMBIE.first); }
+  if (m.mode === 'zone' && Zone) Zone.start(room);
   const view = roomView(room);
   for (const q of room.players.values()) send(q, { t: 'start', ...view, you: q.id, hp: q.hp, armor: q.armor, life: q.life });
   if (m.mode === 'bomb') beginBombRound(room);
@@ -468,10 +704,11 @@ function startMatch(room) {
 }
 function endMatch(room, winner, reason) {
   if (!room.match) return;
-  const final = scoreView(room);
-  all(room, { t: 'end', mode: room.mode, winner, reason, ...final });
+  const final = scoreView(room), flow = !!Flow && Flow.check(room, reason);      // end-of-match vote (room-vote.js), only if every client in the room supports it
+  all(room, { t: 'end', mode: room.mode, winner, reason, ...final, ...(flow ? { flow: 1 } : null) });
   room.match = null; room.state = 'lobby';
   for (const q of room.players.values()) { q.ready = false; q.status = 'lobby'; q.respawnAt = 0; q.bleedAt = 0; q.revive = null; }
+  if (flow) Flow.begin(room, final, winner, reason);
   sendRoom(room);
 }
 function timeUpWinner(room) {
@@ -494,7 +731,7 @@ function tickDom(room, dt) {
     const c = m.points[i];
     let a = 0, b = 0;
     for (const q of room.players.values()) {
-      if (q.status === 'alive' && q.hasPos && dist2d(q, c) <= c.r) { if (q.team === 'A') a++; else if (q.team === 'B') b++; }
+      if (q.status === 'alive' && q.hasPos && dist2d(q, c) <= c.r) { if (q.sgUntil && guardPoint(room, q, c)) continue; if (q.team === 'A') a++; else if (q.team === 'B') b++; }
     }
     if (a && b) continue;
     const before = c.owner;
@@ -531,7 +768,7 @@ function beginBombRound(room) {
   const m = room.match;
   m.round++;
   if (m.round === BOMB.half + 1) { m.attackers = other(m.attackers); notify(room, 'side_swap', { attackers: m.attackers }); }
-  m.phase = 'freeze'; m.phaseEnds = Date.now() + T(BOMB.freeze); m.bomb = null; clearActs(m); clearLoot(room);
+  m.phase = 'freeze'; m.phaseEnds = Date.now() + T(BOMB.freeze); m.bomb = null; clearActs(m); clearLoot(room); resetProps(room); if (m.gx) m.gx.clear();
   for (const q of room.players.values()) if (q.team) respawn(room, q, { round: m.round });
   sendRound(room);
 }
@@ -633,6 +870,18 @@ function tickZombie(room) {
   else if (m.phase === 'live' && now >= m.phaseEnds) endMatch(room, null, 'time');
 }
 
+/* zone (battle royale): its own module at the game root. If it is missing the server still runs, without this mode. */
+let Zone = null;
+try {
+  Zone = require('../zone-referee.js')({ all, send, WEAPONS, CLASSES, T, applyDamage, killPlayer, addDrops, endMatch, strike, r2, num, isObj, canFight, sendScore, scale: SCALE });
+  MODES.add('zone');
+} catch (e) { console.warn('zone mode unavailable:', e.message); }
+const isNpc = (room, id) => (room.mode === 'zombie' && /^z\d{1,9}$/.test(id)) || (room.mode === 'zone' && !!Zone && Zone.isBotId(id));
+/* end-of-match flow (results, map vote, next match): its own module at the game root. If it is missing, rooms keep the old end of match. */
+let Flow = null;
+try { Flow = require('../room-vote.js')({ all, send, strike, reject, sendRoom, startMatch, scale: SCALE }); }
+catch (e) { Flow = null; console.warn('match flow unavailable:', e.message); }
+
 /* main tick */
 let lastTick = Date.now();
 function tickRoom(room, now, dt) {
@@ -640,7 +889,7 @@ function tickRoom(room, now, dt) {
   if (MODE_RULES[m.mode] && now >= m.endsAt) return endMatch(room, timeUpWinner(room), 'time');
   for (const q of room.players.values()) {
     if (q.status === 'dead' && q.respawnAt && now >= q.respawnAt) respawn(room, q);
-    if (q.status === 'alive' && q.regenAt && now >= q.regenAt && q.hp < q.maxHp) {
+    if (q.status === 'alive' && q.regenAt && now >= q.regenAt && q.hp < q.maxHp && m.mode !== 'zone') {
       const c = CLASSES[q.cls];
       q.hp = Math.min(q.maxHp, q.hp + dt / 1000 * (c.regen ? 34 : 17));
       if (now - q.hpSent >= 250 || q.hp >= q.maxHp) { q.hpSent = now; send(q, { t: 'action', type: 'hp', data: { hp: r2(q.hp), armor: q.armor }, from: null }); }
@@ -649,15 +898,23 @@ function tickRoom(room, now, dt) {
   if (m.mode === 'dom') tickDom(room, dt);
   else if (m.mode === 'bomb') tickBomb(room);
   else if (m.mode === 'zombie') tickZombie(room);
+  else if (m.mode === 'zone' && Zone) Zone.tick(room, now);
   if (!room.match) return;
   tickLoot(room, now);
+  tickProps(room, now);
+  tickBurn(room, now);
+  if (!room.match) return;
+  if (m.gx) m.gx.tick(now, dt);
+  if (!room.match) return;
   const batch = [];
   for (const q of room.players.values()) {
     if (!q.dirty) continue;
     q.dirty = false;
     batch.push({ id: q.id, x: r2(q.x), y: r2(q.y), z: r2(q.z), yaw: r2(q.yaw), pitch: r2(q.pitch), vx: r2(q.vx), vz: r2(q.vz), weapon: q.weapon, crouch: q.crouch, status: q.status });
   }
-  if (batch.length) {
+  if (m.mode === 'zone' && Zone) Zone.stateBatch(room, batch);
+  if (Relay) Relay.states(room, batch, now);
+  else if (batch.length) {
     const s = JSON.stringify({ t: 'states', ts: now, s: batch });
     for (const q of room.players.values()) raw(q, s, true);
   }
@@ -666,10 +923,11 @@ setInterval(() => {
   const now = Date.now(), dt = Math.min(250, now - lastTick);
   lastTick = now;
   for (const room of rooms.values()) {
-    if (!room.match) continue;
+    if (!room.match) { if (room.flow && Flow) Flow.tick(room, now); continue; }
     try { tickRoom(room, now, dt); }
     catch (e) { console.error('tick error', room.code, e); endMatch(room, null, 'server_error'); }
   }
+  if (Relay) Relay.endTick();
 }, TICK_MS);
 
 /* ---------- message handlers ---------- */
@@ -688,7 +946,7 @@ function addToRoom(p, room, name) {
   if (room.match) {
     if (TEAM_MODES.has(room.mode)) p.team = smaller(room);
     resetLife(p);
-    if (room.mode === 'bomb' || (room.mode === 'zombie' && room.match.phase === 'live')) { p.status = 'dead'; p.hp = 0; }
+    if (room.mode === 'bomb' || room.mode === 'zone' || (room.mode === 'zombie' && room.match.phase === 'live')) { p.status = 'dead'; p.hp = 0; }
     sendRoom(room);
     send(p, { t: 'start', ...roomView(room), you: p.id, hp: p.hp, armor: p.armor, late: true, life: p.life });
     if (room.match.drops && room.match.drops.size) { const now = Date.now(); send(p, { t: 'loot', op: 'sync', items: [...room.match.drops.values()].map(d => lootView(d, now)) }); }
@@ -704,6 +962,8 @@ function onCreate(p, m) {
   if (!validMap(map)) return strike(p, 'bad_map');
   const code = makeCode();
   if (!code) return reject(p, 'server_full');
+  p.zv = m.zv === 1; p.mf = m.mf === 1;
+  if (mode === 'zone' && !p.zv) return reject(p, 'client_outdated');
   const room = { code, hostId: p.id, mode, map, state: 'lobby', players: new Map(), match: null, domPoints: null, sites: null };
   rooms.set(code, room);
   addToRoom(p, room, m.name);
@@ -714,7 +974,11 @@ function onJoin(p, m) {
   const room = rooms.get(m.code.toUpperCase());
   if (!room) return reject(p, 'room_not_found');
   if (room.players.size >= MAX_PLAYERS) return reject(p, 'room_full');
+  p.zv = m.zv === 1; p.mf = m.mf === 1;
+  if (room.mode === 'zone' && !p.zv) return reject(p, 'client_outdated');      // a client without this mode could not play it
+  if (Flow) Flow.beforeJoin(room, p);
   addToRoom(p, room, m.name);
+  if (Flow) Flow.afterJoin(room, p);
 }
 function onReady(p, m) {
   const room = needRoom(p);
@@ -749,7 +1013,8 @@ function onStart(p) {
   const room = needHost(p);
   if (!room) return;
   if (room.state !== 'lobby') return reject(p, 'already_started');
-  if (room.mode !== 'zombie' && room.players.size < 2) return reject(p, 'not_enough_players');
+  if (room.mode !== 'zombie' && room.mode !== 'zone' && room.players.size < 2) return reject(p, 'not_enough_players');
+  if (room.mode === 'zone') for (const q of room.players.values()) if (!q.zv) return reject(p, 'client_outdated');
   for (const q of room.players.values()) if (q.id !== room.hostId && !q.ready) return reject(p, 'players_not_ready');
   startMatch(room);
 }
@@ -760,6 +1025,7 @@ function onState(p, m) {
     || !num(m.vx, -60, 60) || !num(m.vz, -60, 60) || !WEAPONS[m.weapon] || typeof m.crouch !== 'boolean') return strike(p, 'bad_state');
   const now = Date.now();
   let x = m.x, y = m.y, z = m.z;
+  if (p.zoneTp && Zone) Zone.onState(p, m);
   if (p.hasPos && !p.snap) {
     // Clamp teleports to the fastest legal movement instead of trusting the client.
     const dt = Math.min(1, (now - p.stateAt) / 1000), max = MAX_SPEED * dt + 1;
@@ -780,7 +1046,7 @@ function onShot(p, m) {
   if (!canFight(room)) return reject(p, 'not_live');
   if (p.status !== 'alive') return reject(p, 'dead');
   const w = WEAPONS[m.weapon];
-  if (!w) return strike(p, 'bad_weapon');
+  if (!w || w.gx) return strike(p, 'bad_weapon');       // equipment charges never go through 'shot': the referee opens their blast itself
   for (const k of ['ox', 'oy', 'oz']) if (!num(m[k], -6000, 6000)) return strike(p, 'bad_shot');
   for (const k of ['dx', 'dy', 'dz']) if (!num(m[k], -1.5, 1.5)) return strike(p, 'bad_shot');
   const len = Math.hypot(m.dx, m.dy, m.dz);
@@ -800,7 +1066,7 @@ function onShot(p, m) {
   const now = Date.now();
   const b = p.fire[m.weapon] || (p.fire[m.weapon] = { n: w.cap, at: now });
   b.n = Math.min(w.cap, b.n + (now - b.at) / 1000 * w.rate); b.at = now;
-  if (b.n < 1) return reject(p, 'fire_rate');
+  if (b.n < 1) { if (Relay && Relay.deferShot(p, m)) return; return reject(p, 'fire_rate'); }       // a clump after a network stall waits for its legal turn
   if (w.life !== Infinity && room.mode !== 'zombie') {       // limited spare rounds per life (zombie waves resupply, so no cap there)
     const used = p.used[m.weapon] || 0;
     if (p.inv) { const e = carried(p, m.weapon); if (!e || lootLeft(e) <= 0) return reject(p, 'no_ammo'); }      // loot-aware client: the rounds it really carries
@@ -819,6 +1085,7 @@ function onShot(p, m) {
   const out = { t: 'shot', id: p.id, ox: r2(m.ox), oy: r2(m.oy), oz: r2(m.oz), dx: +(m.dx / len).toFixed(4), dy: +(m.dy / len).toFixed(4), dz: +(m.dz / len).toFixed(4), weapon: m.weapon };
   if (w.kind !== 'hitscan') { out.k = w.kind === 'melee' ? 'm' : w.kind === 'thrown' ? 't' : 'p'; if (pr) { out.pid = pid; if (vel) { out.vx = vel[0]; out.vy = vel[1]; out.vz = vel[2]; } } }
   all(room, out, p);
+  if (p.sgUntil) guardEnd(room, p, w.kind === 'thrown' ? 'throw' : 'fire');       // an accepted shot, swing or throw ends the spawn protection
 }
 // A client reports that one of its own explosive projectiles went off. Relayed for the visuals; remembered to validate the splash hits.
 function onBoom(p, m) {
@@ -844,7 +1111,7 @@ function onBoom(p, m) {
 // Splash damage: reported by the shooter per victim, right after the detonation it belongs to.
 function onSplash(p, m, room, w) {
   const now = Date.now(), pr = w.proj;
-  const zombie = room.mode === 'zombie' && /^z\d{1,9}$/.test(m.target);
+  const zombie = isNpc(room, m.target);
   const target = zombie ? null : room.players.get(m.target);
   if (!zombie && !target) return reject(p, 'bad_target');
   const self = target === p;
@@ -871,6 +1138,7 @@ function onSplash(p, m, room, w) {
   const amount = Math.min(m.damage, w.dmg * fall * (self ? pr.self : 1));
   if (!(amount > 0)) return;
   if (zombie) {
+    if (room.mode === 'zone') { Zone.botHit(room, m.target, p, amount, false, m.weapon); return; }
     const host = room.players.get(room.hostId);
     if (host) send(host, { t: 'action', type: 'z_hit', from: p.id, data: { zombie: m.target, damage: r2(amount), head: false, weapon: m.weapon } });
     return;
@@ -881,13 +1149,14 @@ function onSplash(p, m, room, w) {
 function onHit(p, m) {
   const room = needRoom(p);
   if (!room) return;
+  if (m.weapon === 'barrel') return onPropSplash(p, m, room);
   if (!canFight(room)) return reject(p, 'not_live');
   const w = WEAPONS[m.weapon];
   if (!w) return strike(p, 'bad_weapon');
   if (typeof m.target !== 'string' || m.target.length > 16 || !num(m.damage, 0.01, 1e6) || typeof m.head !== 'boolean') return strike(p, 'bad_hit');
   if (w.blast) { if (m.splash !== true) return reject(p, 'no_shot'); return onSplash(p, m, room, w); }       // a grenade can go off after its owner died
   if (p.status !== 'alive') return reject(p, 'dead');
-  const zombie = room.mode === 'zombie' && /^z\d{1,9}$/.test(m.target);
+  const zombie = isNpc(room, m.target);
   const target = zombie ? null : room.players.get(m.target);
   if (!zombie && (!target || target === p)) return reject(p, 'bad_target');
   if (target) {
@@ -903,6 +1172,7 @@ function onHit(p, m) {
     const d = Math.hypot(p.x - target.x, p.y - target.y, p.z - target.z);
     if (d > MAX_RAY) return reject(p, 'out_of_range');
     if (w.kind === 'melee') { if (d > w.range + MELEE_SLACK) return reject(p, 'out_of_range'); }
+    else if (w.flame) { if (d > w.range + MELEE_SLACK) return reject(p, 'out_of_range'); }       // a flame does not carry past its reach
     else if (d > w.range * 1.1) falloff = 0.55; // the client applies .55 beyond weapon range
   }
   const perPellet = w.kind === 'melee' ? w.dmg * w.maxMul : w.dmg * falloff * (m.head ? w.hs : 1);      // a knife doubles from behind
@@ -910,12 +1180,26 @@ function onHit(p, m) {
   credit.n -= pellets;
   const amount = Math.min(m.damage, perPellet * pellets);
   if (zombie) {
+    if (room.mode === 'zone') { Zone.botHit(room, m.target, p, amount, m.head, m.weapon); return; }
     const host = room.players.get(room.hostId);
     if (host) send(host, { t: 'action', type: 'z_hit', from: p.id, data: { zombie: m.target, damage: r2(amount), head: m.head, weapon: m.weapon } });
     return;
   }
   target.damageBy.set(p.id, now);
   if (applyDamage(room, target, amount, p, m.weapon, m.head)) killPlayer(room, target, p, m.weapon, m.head);
+  else if (w.flame && !guarded(target)) { const b = target.burn; target.burn = { by: p.id, weapon: m.weapon, until: now + w.flame.t * 1000, next: b ? b.next : now + 250 }; }       // the server owns the burn: same damage for every client
+}
+/* Damage over time after a flame hit. Ends on death, on respawn, or when its time is up. */
+function tickBurn(room, now) {
+  for (const t of room.players.values()) {
+    const b = t.burn; if (!b) continue;
+    if (t.status !== 'alive' || now >= b.until || !canFight(room)) { t.burn = null; continue; }
+    if (now < b.next) continue;
+    b.next += 250; const w = WEAPONS[b.weapon], by = room.players.get(b.by) || null;
+    if (!w || !w.flame) { t.burn = null; continue; }
+    if (by) t.damageBy.set(by.id, now);
+    if (applyDamage(room, t, w.flame.dps * .25, by, b.weapon, false)) { t.burn = null; killPlayer(room, t, by || t, b.weapon, false); }
+  }
 }
 
 function cleanFlat(data) {
@@ -947,6 +1231,7 @@ function onAction(p, msg) {
   if (typeof type !== 'string' || type.length > 24) return strike(p, 'bad_action');
   const m = room.match, isHost = room.hostId === p.id;
   const hostOnly = () => { if (isHost) return true; reject(p, 'not_host'); return false; };
+  if (Zone && /^(zone_|zb_)/.test(type)) { if (!m || m.mode !== 'zone') return; return Zone.onAction(p, room, type, d); }       // a report still on the wire when the match ended is not an error
   switch (type) {
     case 'loadout': {
       if (!isObj(d) || !Object.hasOwn(CLASSES, String(d.cls))) return strike(p, 'bad_class');
@@ -980,7 +1265,7 @@ function onAction(p, msg) {
       if (m.phase !== 'live' || p.status !== 'alive' || p.team !== m.attackers) return reject(p, 'cannot_plant');
       if (m.plantAct) return reject(p, 'plant_in_progress');
       if (!p.hasPos || dist2d(p, room.sites[d.site]) > room.sites[d.site].r) return reject(p, 'not_at_site');
-      m.plantAct = { by: p.id, site: d.site, ends: Date.now() + T(BOMB.plant) };
+      m.plantAct = { by: p.id, site: d.site, ends: Date.now() + T(BOMB.plant) }; if (p.sgUntil) guardEnd(room, p, 'plant');
       return notify(room, 'plant_start', { by: p.id, site: d.site, duration: T(BOMB.plant) });
     }
     case 'plant_cancel':
@@ -991,7 +1276,7 @@ function onAction(p, msg) {
       if (m.phase !== 'planted' || p.status !== 'alive' || p.team === m.attackers) return reject(p, 'cannot_defuse');
       if (m.defuseAct) return reject(p, 'defuse_in_progress');
       if (!p.hasPos || dist2d(p, m.bomb) > BOMB.defuseR) return reject(p, 'not_at_bomb');
-      m.defuseAct = { by: p.id, ends: Date.now() + T(BOMB.defuse) };
+      m.defuseAct = { by: p.id, ends: Date.now() + T(BOMB.defuse) }; if (p.sgUntil) guardEnd(room, p, 'defuse');
       return notify(room, 'defuse_start', { by: p.id, duration: T(BOMB.defuse) });
     }
     case 'defuse_cancel':
@@ -1006,6 +1291,7 @@ function onAction(p, msg) {
         if (!isObj(z) || !Number.isInteger(z.id) || z.id < 0 || z.id > 1e9 || !num(z.x, -5000, 5000) || !num(z.z, -5000, 5000)) return strike(p, 'bad_zombies');
         zs.push({ id: z.id, x: r2(z.x), y: num(z.y, -200, 1000) ? r2(z.y) : 0, z: r2(z.z), yaw: num(z.yaw, -1e4, 1e4) ? r2(z.yaw) : 0, hp: num(z.hp, 0, 1e5) ? r2(z.hp) : 0, state: cleanText(z.state, 12) });
       }
+      if (Relay) return Relay.zombies(room, p, zs);
       const s = JSON.stringify({ t: 'action', type: 'z_sync', from: p.id, data: { zombies: zs } });
       for (const q of room.players.values()) if (q !== p) raw(q, s, true);
       return;
@@ -1058,9 +1344,54 @@ function onAction(p, msg) {
   }
 }
 
+/* ---------- equipment (gear-referee.js at the root, like the Zone referee: the deploy copies only server.js from this folder) ---------- */
+let GearRef = null;
+try {
+  const data = require('../gear-data.js'); GearRef = require('../gear-referee.js');
+  const defs = data.blastDefs(); for (const id of Object.keys(defs)) if (!WEAPONS[id]) { WEAPONS[id] = prepWeapon(defs[id]); WEAPONS[id].gx = true; }
+} catch (e) { GearRef = null; console.log('equipment referee not available:', e.message); }
+function makeGear(room) {
+  if (!GearRef) return null;
+  return GearRef.createGearCore({
+    now: () => Date.now(), all: (o, except) => all(room, o, except), send, players: () => room.players.values(), canFight: () => canFight(room),
+    isEnemy: (a, b) => a !== b && room.mode !== 'zombie' && !(TEAM_MODES.has(room.mode) && a.team === b.team),
+    npcs: () => room.mode === 'zombie' || room.mode === 'zone', emptyStart: () => room.mode === 'zone',
+    blast(owner, id, x, y, z, oid) { owner.live.push({ weapon: id, pid: oid, at: Date.now(), x, y, z }); if (owner.live.length > 16) owner.live.shift(); },       // the owner's client then reports boom and splash hits as for a grenade
+    hurt(q, amount, owner, id) { if (!(amount > 0) || !room.match || q.status !== 'alive') return; const by = owner || q; if (owner && q !== owner) q.damageBy.set(owner.id, Date.now()); if (applyDamage(room, q, amount, by, id, false)) killPlayer(room, q, by, id, false); },
+    refill(p) { if (p.inv) for (const e of p.inv.w) { const w = WEAPONS[e.id]; if (w.reserve !== undefined) e.r = w.reserve; } },
+  });
+}
+function onGear(p, m) { const g = p.room && p.room.match && p.room.match.gx; if (g && typeof m.a === 'string') { if (p.sgUntil && Guard && Guard.isGearAct(m.a)) guardEnd(p.room, p, 'gear'); g.msg(p, m); } }
+function gearDeath(room, v) {
+  const g = room.match && room.match.gx; if (!g) return;
+  const left = g.onDeath(v);
+  if (left && left.length && v.hasPos && room.mode !== 'zombie') addDrops(room, left.map(e => ({ k: 'x', w: e.id, a: e.n, r: 0 })), v.x, v.y, v.z);
+}
+
+/* ---------- spawn protection (spawn-guard.js at the root, like the gear referee). Without the file the server runs as before. ----------
+   A respawn starts it (length per mode), the player's first shot, throw, gear use, plant, defuse or capture ends it, and applyDamage refuses
+   every hit meanwhile. Every client gets {t:'sg', id, ms} (ms 0 = over); clients that do not know 'sg' (rc5) ignore it and keep playing. */
+let Guard = null;
+try { Guard = require('../spawn-guard.js'); } catch (e) { Guard = null; console.log('spawn protection not available:', e.message); }
+function guarded(p) { return !!Guard && !!p.sgUntil && Guard.blocksDamage(p, Date.now()); }
+function guardStart(room, p) { if (!Guard || !room.match) return; const ms = Guard.start(p, room.mode, Date.now()); if (ms > 0) all(room, { t: 'sg', id: p.id, ms }); }
+function guardEnd(room, p, why) { if (Guard && room && Guard.end(p, why, Date.now())) all(room, { t: 'sg', id: p.id, ms: 0, why }); }
+/** Domination: a protected player stays out of the count; walking onto a point he would change ends the protection. */
+function guardPoint(room, q, c) { if (!Guard) return false; const was = q.sgUntil, held = Guard.onPoint(q, c.owner === q.team, c.progress * (q.team === 'A' ? 1 : -1), Date.now()); if (was && !q.sgUntil && !held) all(room, { t: 'sg', id: q.id, ms: 0, why: 'capture' }); return held; }
+/** A client that finished loading asks who is protected right now (late joiners included). */
+function onGuard(p, m) {
+  const room = p.room; if (!Guard || !room || !room.match || !isObj(m) || m.a !== 'req') return;
+  const now = Date.now(), l = []; for (const q of room.players.values()) { const ms = Guard.left(q, now); if (ms > 0) l.push([q.id, Math.round(ms)]); }
+  send(p, { t: 'sg', op: 'sync', l });
+}
+
+try { Relay = require('../net-relay.js')({ take, strike, reject, dispatch: (p, m) => HANDLERS[m.t][1](p, m), onState, onAction, WEAPONS, raw, OPEN: WebSocket.OPEN, HARD_BUFFER }); }
+catch (e) { Relay = null; console.warn('compact protocol unavailable:', e.message); }
 const HANDLERS = {
+  nc: ['lobby', (p, m) => { if (Relay) Relay.onCaps(p, m); }], ncw: ['loot', (p, m) => { if (Relay) Relay.onWeapon(p, m); }],
   create: ['join', onCreate], join: ['join', onJoin], ready: ['lobby', onReady], team: ['lobby', onTeam], config: ['lobby', onConfig],
-  start: ['lobby', onStart], state: ['state', onState], shot: ['shot', onShot], hit: ['hit', onHit], boom: ['boom', onBoom], action: ['action', onAction], inv: ['loot', onInv], take: ['loot', onTake],
+  flow: ['flow', (p, m) => { if (Flow) Flow.onMessage(p, m); }], sg: ['flow', onGuard],
+  start: ['lobby', onStart], state: ['state', onState], shot: ['shot', onShot], hit: ['hit', onHit], boom: ['boom', onBoom], action: ['action', onAction], inv: ['loot', onInv], take: ['loot', onTake], att: ['loot', onAtt], fin: ['loot', onFin], fit: ['loot', onFit], prop: ['prop', onProp], gx: ['gx', onGear],
   ping: ['ping', (p, m) => { if (num(m.c, 0, 1e15)) send(p, { t: 'pong', c: m.c, ts: Date.now() }); else strike(p, 'bad_ping'); }],
 };
 
@@ -1071,6 +1402,7 @@ function leaveRoom(p) {
   room.players.delete(p.id); p.room = null;
   if (room.players.size === 0) { room.match = null; rooms.delete(room.code); return; }
   const m = room.match;
+  if (m && m.gx) m.gx.onLeave(p);
   if (m && m.mode === 'bomb') {
     if (m.plantAct && m.plantAct.by === p.id) { m.plantAct = null; notify(room, 'plant_cancel', { by: p.id }); }
     if (m.defuseAct && m.defuseAct.by === p.id) { m.defuseAct = null; notify(room, 'defuse_cancel', { by: p.id }); }
@@ -1087,7 +1419,9 @@ function leaveRoom(p) {
     else if (TEAM_MODES.has(m.mode) && (teamCount(room, 'A') === 0 || teamCount(room, 'B') === 0)) endMatch(room, teamCount(room, 'A') ? 'A' : 'B', 'forfeit');
     else if (m.mode === 'bomb') checkBombElimination(room);
     else if (m.mode === 'zombie') checkWipe(room);
+    else if (m.mode === 'zone' && Zone) Zone.onLeave(room, p);
   }
+  if (!m && Flow) Flow.onLeave(room, p);
   if (rooms.has(room.code)) sendRoom(room);
 }
 
@@ -1130,15 +1464,16 @@ function onConnection(ws, ip) {
   ws.on('message', (data, isBinary) => {
     p.alive = true;
     if (!take(p, 'all')) return strike(p, 'rate_limited');
-    if (isBinary) return strike(p, 'bad_message');
+    if (isBinary) { if (!Relay) return strike(p, 'bad_message'); try { Relay.onBinary(p, data); } catch (e) { console.error('binary frame error', e); reject(p, 'server_error'); } return; }
     let m;
     try { m = JSON.parse(data.toString('utf8')); } catch { return strike(p, 'bad_json'); }
     if (!isObj(m) || typeof m.t !== 'string' || !Object.hasOwn(HANDLERS, m.t)) return strike(p, 'bad_message');
     const [bucket, fn] = HANDLERS[m.t];
-    if (!take(p, bucket)) return strike(p, 'rate_limited');
+    if (!take(p, bucket)) return m.t === 'state' ? undefined : strike(p, 'rate_limited');       // a burst of old positions after a Wi-Fi stall is not abuse
+    if (Relay && p.dq && Relay.hold(p, m)) return;
     try { fn(p, m); } catch (e) { console.error('handler error', m.t, e); reject(p, 'server_error'); }
   });
-  send(p, { t: 'welcome', id: p.id, ts: Date.now(), loot: 1 });
+  send(p, { t: 'welcome', nc: Relay ? Relay.version : 0, id: p.id, ts: Date.now(), loot: 1, att: 1, fin: 1, fit: 1, props: 1, zone: Zone ? 1 : 0, xw: Object.hasOwn(WEAPONS, 'bpc') ? 1 : 0, gx: GearRef ? 1 : 0, mf: Flow ? 1 : 0, sg: Guard ? 1 : 0 });
 }
 
 setInterval(() => {

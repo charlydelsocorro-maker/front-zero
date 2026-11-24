@@ -41,7 +41,7 @@ function fallbackMenu(root) {
   api.show(); return api;
 }
 
-let menu = null;
+try { const q = await import('./maps-relief.js'); q.install(await import('./maps.js')); } catch (e) { console.warn('[boot] maps-relief', e); } try { const q2 = await import('./maps-mine.js'); q2.install(await import('./maps.js')); } catch (e) { console.warn('[boot] maps-mine', e); } let menu = null;
 if (!forceFallback) {
   try {
     const m = await import('./menu.js');
@@ -54,6 +54,18 @@ engine.on('quit', () => { try { menu.show(); } catch (e) { console.error('[boot]
 engine.on('matchStart', () => { try { menu.hide(); } catch { /* the menu hides itself */ } });
 
 if (dev) window.__fz = { engine, menu, settings, profile, net, i18n, audio, MAPS, MODES };
+// motion layers (menus, HUD, world life): purely visual, loaded after the menu so they never delay it; a failure leaves the game as it was
+// ON by default since 24/11 (exclusive GPU: load +0.2 %, CPU x4 +1.4 %, no task over 250 ms from these layers; see the dev notes). ?motion=0 turns them off.
+if (params.get('motion') !== '0') for (const f of ['./ui-motion.js', './hud-motion.js', './engine-ambient.js']) import(f).then(m => m.install({ engine, settings, i18n, profile, menuRoot, hudRoot })).catch(e => console.warn('[motion]', f, e));
+import('./net-hud.js').then(m => m.install({ net, engine, settings, hudRoot })).catch(e => console.warn('[boot] network indicator unavailable', e));
+// modern in-match HUD (compass, round minimap, restyle): wraps the HUD's own methods; ?hud=classic or a failure keeps the classic HUD (the dev notes)
+if (params.get('hud') !== 'classic') import('./hud-theme.js').then(m => m.install({ engine, settings, i18n, hudRoot })).catch(e => console.warn('[boot] hud theme unavailable', e));
+// menus v2 (the HUD v2 panel language on the menus, lobby, end screens, settings, shop and pass chrome): style only; ?ui=v1 skips it (the dev notes)
+if (params.get('ui') !== 'v1') import('./ui-theme.js').then(m => m.install({ engine, settings, i18n, profile, menuRoot })).catch(e => console.warn('[boot] menu theme unavailable', e));
+// End-of-match flow (results, map vote, next match). If it fails to load, this client simply does not announce it and keeps the old end screen.
+import('./match-flow.js').then(f => { const flow = f.installMatchFlow({ net, engine, menu, i18n, profile, audio, MAPS }); if (dev && window.__fz) window.__fz.flow = flow; }).catch(e => console.warn('[boot] match-flow unavailable', e));
+// Season pass (pass.js): engine events only, nothing per frame. If it fails to load, the menu tab does nothing and matches are unchanged.
+import('./pass.js').then(p => { const pass = p.install({ engine, profile, i18n, net, audio, menu }); if (dev && window.__fz) window.__fz.pass = pass; }).catch(e => console.warn('[boot] season pass unavailable', e));
 
 /* ---------- failure surface: a broken match, a lost WebGL context or a dead screen always ends on a visible panel ---------- */
 const FT = {       // fr, en, es, de, pt, it

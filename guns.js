@@ -2,6 +2,8 @@
    Gun space: u = forward (world -Z), v = up (+Y), x = right (+X). Bore is near v = 0. */
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { registerExtraGuns, extraMaterials } from './guns-extra.js';
+import { createSkinner } from './weapon-skins.js';
 
 /* ---------- math ---------- */
 const sat = t => t < 0 ? 0 : t > 1 ? 1 : t;
@@ -115,6 +117,7 @@ function makeMaterials() {
     dot: new THREE.MeshBasicMaterial({ color: 0xff2412, toneMapped: false, fog: false }),
     glove: new THREE.MeshStandardMaterial({ color: 0x2a2620, roughness: .88, metalness: 0, roughnessMap: grain, envMap: env, envMapIntensity: .5, fog: false }),
     sleeve: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .95, metalness: 0, envMap: env, envMapIntensity: .35, fog: false }),
+    ...extraMaterials(std, dataTex),
   };
 }
 
@@ -174,6 +177,9 @@ class Kit {
     return this;
   }
   anchor(name, u, v, x = 0) { const o = new THREE.Object3D(); o.position.copy(V(u, v, x)); this.root.add(o); this.anchors[name] = o; return o; }
+  /* the built-in sight goes in its own part ('optic0'), so a mounted optic can replace it */
+  sightBegin(u, v) { if (this.noStock) return; this.sightFrom = this.cur; this.sightAt = [u, v]; this.part('optic0'); }
+  sightEnd() { if (!this.noStock) this.cur = this.sightFrom; }
   build() {
     for (const [key, list] of this.buf) {
       const [pn, mn] = key.split('|'), part = this.parts[pn], piv = part.userData.pivot, geos = [];
@@ -206,6 +212,7 @@ function triggerGroup(k, u, v, frame = 'poly') {
   k.ext('steel', [[u + .004, v + .002], [u + .009, v - .008], [u + .006, v - .020], [u + .001, v - .021], [u + .002, v - .01], [u - .003, v + .002]], .006, { r: .002, b: .0004 });
 }
 function reflex(k, u, v, base = 'dark') {
+  k.sightBegin(u, v);
   k.ext(base, [[u - .034, v], [u + .036, v], [u + .03, v + .012], [u + .018, v + .016], [u - .022, v + .016], [u - .03, v + .012]], .03, { r: .004 });
   k.box('dark', u, v + .003, .05, .006, .036);
   k.pin('steel', u + .018, v + .003, .0025, .04); k.pin('steel', u - .018, v + .003, .0025, .04);
@@ -216,6 +223,7 @@ function reflex(k, u, v, base = 'dark') {
   k.disc('glass', u + .012, v + .034, .0196);
   k.disc('dot', u + .011, v + .034, .00085);
   k.anchor('sight', u + .011, v + .034);
+  k.sightEnd();
 }
 function brake(k, u, r = .0125, len = .058) {
   k.cyl('dark', u, u + len, 0, r, r * .96, 0, 12);
@@ -687,14 +695,17 @@ function muz(k, u, v, r, len, kind = 'brake') {
 }
 /* rear sight (ghost ring or open notch) and a protected front post; the sight line sits at height v */
 function irons(k, ur, uf, v, rear = 'ring') {
+  k.sightBegin(ur, v - .018);
   if (rear === 'ring') { k.box('dark', ur, v - .013, .016, .01, .02); k.tube('dark', ur - .004, ur + .004, v, .0098, .0064, 0, 16); }
   else { k.box('dark', ur, v - .0075, .014, .005, .02); for (const x of [-.0062, .0062]) k.box('dark', ur, v - .001, .01, .009, .0052, x); }
   k.box('dark', uf, v - .015, .016, .014, .012); k.box('dark', uf, v - .0045, .004, .012, .0026);
   for (const x of [-.0088, .0088]) k.ext('dark', [[uf - .007, v - .009], [uf + .007, v - .009], [uf + .004, v + .009], [uf - .004, v + .009]], .0022, { x, r: .001, b: .0003 });
   k.anchor('sight', uf, v);
+  k.sightEnd();
 }
 /* boxy open sight with a ring reticle */
 function holo(k, u, v) {
+  k.sightBegin(u, v);
   k.box('dark', u, v + .006, .062, .012, .032); k.pin('steel', u - .018, v + .004, .0026, .04); k.pin('steel', u + .018, v + .004, .0026, .04);
   for (const x of [-.0165, .0165]) k.ext('dark', [[u + .004, v + .012], [u + .032, v + .012], [u + .032, v + .05], [u + .012, v + .05]], .003, { x, r: .003, b: .0006 });
   k.box('dark', u + .022, v + .0515, .022, .0032, .036);
@@ -702,9 +713,11 @@ function holo(k, u, v) {
   k.box('glass', u + .02, v + .031, .0008, .037, .03);
   k.tube('dot', u + .0188, u + .0192, v + .031, .0044, .0037, 0, 20); k.disc('dot', u + .0186, v + .031, .0007);
   k.anchor('sight', u + .0186, v + .031);
+  k.sightEnd();
 }
 /* compact hollow prism optic: the shooter looks straight through the tube */
 function prism(k, u, v, L = .05, ro = .029) {
+  k.sightBegin(u, v);
   const ri = ro - .0034, c = v + ro + .013;
   k.box('dark', u, v + .005, L * .8, .01, .03); k.pin('steel', u - L * .25, v + .004, .0028, .038); k.pin('steel', u + L * .25, v + .004, .0028, .038);
   k.box('dark', u, v + .0135, L * .5, .011, .016);
@@ -716,6 +729,7 @@ function prism(k, u, v, L = .05, ro = .029) {
   k.disc('dot', u - .0004, c, .00095);
   k.disc('glass', u + L / 2, c, ri);
   k.anchor('sight', u, c);
+  k.sightEnd();
 }
 /* long telescopic sight; the anchor is the ocular (the scope overlay replaces the model when aimed) */
 function scopeLong(k, u, v, s = 1) {
@@ -1470,19 +1484,21 @@ Object.assign(FEEL, {
   car: { hip: [.15, -.15, -.42], eye: .2, kz: .28, kp: .46, ky: .16, kr: .2, travel: .05, cycle: .065, flash: .28, casing: .85, smoke: .65, weight: .95 },
   akr: { hip: [.15, -.152, -.43], eye: .53, kz: .42, kp: .72, ky: .22, kr: .27, travel: .055, cycle: .09, flash: .36, casing: .95, smoke: .9, weight: 1.1 },
   brst: { hip: [.15, -.155, -.4], eye: .1, kz: .26, kp: .42, ky: .13, kr: .17, travel: .05, cycle: .055, flash: .26, casing: .85, smoke: .6, weight: 1 },
-  bat: { hip: [.15, -.152, -.42], eye: .1, kz: .55, kp: .95, ky: .22, kr: .3, travel: .06, cycle: .1, flash: .4, casing: 1.05, smoke: 1, weight: 1.2 },
+  bat: { hip: [.15, -.152, -.42], eye: .32, kz: .55, kp: .95, ky: .22, kr: .3, travel: .06, cycle: .1, flash: .4, casing: 1.05, smoke: 1, weight: 1.2 },
   pdw: { hip: [.15, -.14, -.4], eye: .2, kz: .18, kp: .3, ky: .16, kr: .16, travel: .04, cycle: .05, flash: .18, casing: .62, smoke: .4, weight: .85 },
   hsmg: { hip: [.15, -.148, -.41], eye: .43, kz: .32, kp: .55, ky: .2, kr: .22, travel: .046, cycle: .085, flash: .26, casing: .8, smoke: .6, weight: 1 },
   asg: { hip: [.15, -.152, -.41], eye: .5, kz: .8, kp: 1.5, ky: .32, kr: .5, travel: .07, cycle: .14, flash: .46, casing: 1.5, hull: true, smoke: 1.4, weight: 1.25 },
   dbs: { hip: [.15, -.15, -.42], eye: .5, kz: 1.1, kp: 2.3, ky: .36, kr: .7, travel: 0, cycle: .15, flash: .52, casing: 0, dropSize: 1.5, hull: true, smoke: 1.7, weight: 1.05 },
   mini: { hip: [.17, -.2, -.33], aim: [.1, -.17, -.3], eye: .3, kz: .1, kp: .12, ky: .14, kr: .1, travel: 0, cycle: .04, flash: .34, casing: .85, smoke: .5, weight: 1.9 },
-  dmr: { hip: [.15, -.15, -.41], eye: .1, kz: .6, kp: 1.05, ky: .2, kr: .3, travel: .06, cycle: .11, flash: .36, casing: 1.05, smoke: 1, weight: 1.25 },
+  dmr: { hip: [.15, -.15, -.41], eye: .32, kz: .6, kp: 1.05, ky: .2, kr: .3, travel: .06, cycle: .11, flash: .36, casing: 1.05, smoke: 1, weight: 1.25 },
   hsr: { hip: [.16, -.155, -.4], eye: .12, kz: 1.5, kp: 2.4, ky: .3, kr: .5, travel: .12, cycle: .1, flash: .62, casing: 1.9, smoke: 2, weight: 1.7, manual: { dur: 1.3, delay: .22 } },
   rl: { hip: [.23, -.215, -.3], eye: .34, kz: .9, kp: 1.2, ky: .3, kr: .5, travel: 0, cycle: .2, flash: .7, casing: 0, smoke: 2.4, weight: 1.6 },
   gl: { hip: [.15, -.16, -.4], eye: .22, kz: .8, kp: 1.3, ky: .25, kr: .4, travel: 0, cycle: .15, flash: .22, casing: 0, smoke: 1.3, weight: 1.3 },
-  xbow: { hip: [.15, -.15, -.38], eye: .1, kz: .25, kp: .3, ky: .1, kr: .12, travel: 0, cycle: .2, flash: 0, casing: 0, smoke: 0, weight: 1.1 },
+  xbow: { hip: [.15, -.15, -.38], eye: .32, kz: .25, kp: .3, ky: .1, kr: .12, travel: 0, cycle: .2, flash: 0, casing: 0, smoke: 0, weight: 1.1 },
   frag: { hip: [.19, -.14, -.34], rot: [0, .16, .16], eye: .4, kz: 0, kp: 0, ky: 0, kr: 0, travel: 0, cycle: .1, flash: 0, casing: 0, smoke: 0, weight: .8, noAim: true, act: { dur: .7 } },
 });
+/* second wave of the arsenal: models and clips in guns-extra.js */
+registerExtraGuns({ THREE, BUILDERS, FEEL, outline, seg, mix, rel, rot2, triggerGroup, irons, holo, reflex, prism, scopeLong, action, shiftPose, sidePose, awayPose, supportPose, magReload, pistolReload, lmgReload, sniperReload, boltCycle, breakReload, nest });
 
 /* ---------- weapon assembly ---------- */
 function buildWeapon(def, mats) {
@@ -1512,6 +1528,7 @@ function buildWeapon(def, mats) {
   if (cfg.poses) Object.assign(poses, cfg.poses(poses));
   poses.magLow = shiftPose(poses.mag, 0, -.05); poses.magTap = shiftPose(poses.mag, 0, -.016);
   const w = { def, k, root: k.root, parts: k.parts, anchors: a, cfg, poses, feel: FEEL[def.id], sight: sightP.clone(), scripts: {}, st: { loaded: true, drawn: true, n: 0, rot: 0, rotT: 0, cock: 0, snap: 0 } };
+  if (k.parts.optic0 && k.sightFrom && k.sightFrom !== 'body' && k.parts[k.sightFrom]) nest(w, 'optic0', k.sightFrom);       // a sight on a moving cover keeps moving with it
   if (cfg.post) cfg.post(w, mats);
   if (cfg.scripts) Object.assign(w.scripts, cfg.scripts(w));
   else if (def.id === 'p9') { w.scripts.tac = pistolReload(w, false); w.scripts.empty = pistolReload(w, true); }
@@ -1522,6 +1539,191 @@ function buildWeapon(def, mats) {
   for (const key in w.scripts) { const v = w.scripts[key]; for (const sc of Array.isArray(v) ? v : [v]) sc.ev.sort((p, q) => p[0] - q[0]); }
   if (w.parts.mag && (w.scripts.empty && w.scripts.empty.drop)) { w.dropMag = w.parts.mag.clone(true); w.dropMag.visible = false; w.root.add(w.dropMag); }      // prebuilt: same geometry and materials, nothing compiles at first use
   return w;
+}
+
+/* ---------- attachments: one model per accessory (origin = its mount point), shared by every weapon ---------- */
+const ATT_MODEL = {
+  dot: k => { reflex(k, 0, 0); return {}; },
+  holo: k => { holo(k, 0, 0); return {}; },
+  x4: k => { scopeLong(k, 0, .038, .6); return {}; },
+  sup: k => { k.cyl('steel', -.006, .014, 0, .0115, .0115, 0, 12); k.cyl('dark', .012, .136, 0, .0185, .0185, 0, 16); k.cyl('steel', .136, .142, 0, .0185, .011, 0, 16); for (const u of [.03, .118]) k.cyl('rubber', u, u + .004, 0, .0192, .0192, 0, 16); return { len: .142 }; },
+  comp: k => { muz(k, 0, 0, .0135, .056, 'comp'); return { len: .056 }; },
+  hider: k => { muz(k, 0, 0, .0125, .05, 'hider'); return { len: .05 }; },
+  ext: k => { k.box('steel', 0, -.5, 1, 1, 1); k.box('dark', 0, -.72, 1.02, .05, 1.02); k.box('dark', 0, -1.06, 1.16, .14, 1.16); return {}; },
+  fast: k => { k.box('steel', 0, -.5, 1.08, 1, 1.08); k.box('red', 0, -.5, 1.1, .3, 1.1); return {}; },
+  vg: k => { k.box('dark', 0, -.005, .056, .01, .024); k.ext('poly', [[-.017, -.009], [.017, -.009], [.015, -.086], [-.015, -.086]], .026, { r: .004 }); k.box('rubber', 0, -.089, .036, .007, .03); return {}; },
+  ag: k => { k.box('dark', -.008, -.004, .076, .008, .024); k.ext('poly', [[-.046, -.007], [.03, -.007], [.034, -.018], [-.018, -.052], [-.046, -.05]], .026, { r: .005 }); return {}; },
+  laser: k => { k.box('dark', 0, 0, .062, .022, .017); k.box('steel', -.012, 0, .014, .024, .019); k.cyl('steel', .031, .037, .003, .0052, .0052, 0, 10); k.disc('dot', .0375, .003, .003); return { emit: [.04, .003] }; },
+};
+/* where an optic sits on the weapons whose sight is not one of the shared assemblies */
+const OPTIC_U = { p9: .03, hp: .035, mp: .03, rev: .075, sg: .07, dbs: .05, mini: .05, rl: .2 };
+const SKIP_PARTS = new Set(['optic0', 'mag', 'held', 'belt', 'bolt', 'handle', 'pin']);
+/* exact cross-section of the weapon's fixed parts at distance u along the bore: long faces have no vertex in the middle, so triangle edges are cut instead */
+function sectionAt(w, u, fn) {
+  const z0 = -u;
+  for (const name of Object.keys(w.parts)) {
+    if (SKIP_PARTS.has(name)) continue;
+    const part = w.parts[name], py = part.position.y, pz = part.position.z, px = part.position.x;
+    for (const c of part.children) {
+      if (!c.isMesh) continue;
+      const P = c.geometry.attributes.position.array;
+      for (let t = 0; t + 8 < P.length; t += 9) for (let e = 0; e < 3; e++) {
+        const a = t + e * 3, b = t + (e + 1) % 3 * 3, za = P[a + 2] + pz - z0, zb = P[b + 2] + pz - z0;
+        if ((za > 0) === (zb > 0)) continue;
+        const k = za / (za - zb); fn(P[a] + (P[b] - P[a]) * k + px, P[a + 1] + (P[b + 1] - P[a + 1]) * k + py);
+      }
+    }
+  }
+}
+function measureMount(w) {
+  const sg = w.k.sightAt, x0 = w.def.id === 'rl' ? w.sight.x : 0, ou = sg ? sg[0] : (OPTIC_U[w.def.id] ?? -w.sight.z), su = (w.cfg.support || w.cfg.grip)[0];
+  let top = -1, bottom = 1, half = .008, rtop = -1, rbot = 1;
+  const ru = su + .035;
+  for (const d of [-.016, 0, .016]) sectionAt(w, ou + d, (x, y) => { if (Math.abs(x - x0) < .03 && y > top && y < .2) top = y; });       // a wide flat top has its only edges at its sides
+  sectionAt(w, su, (x, y) => { if (Math.abs(x) < .03 && y < bottom && y > -.09) bottom = y; });
+  sectionAt(w, ru, (x, y) => { if (y > -.05 && y < .08) { const ax = Math.abs(x); if (ax > half && ax < .05) half = ax; if (y > rtop) rtop = y; if (y < rbot) rbot = y; } });
+  if (top < 0) top = sg ? sg[1] : w.sight.y - .03;
+  const mp = w.parts.mag; let mag = null;
+  if (mp) {
+    let y0 = Infinity, x0m = Infinity, x1m = -Infinity, z0 = Infinity, z1 = -Infinity;
+    const each = fn => { for (const c of mp.children) { if (!c.isMesh) continue; const P = c.geometry.attributes.position; for (let i = 0; i < P.count; i++) fn(P.getX(i), P.getY(i), P.getZ(i)); } };
+    each((x, y) => { if (y < y0) y0 = y; });
+    each((x, y, z) => { if (y < y0 + .012) { if (x < x0m) x0m = x; if (x > x1m) x1m = x; if (z < z0) z0 = z; if (z > z1) z1 = z; } });
+    if (y0 < Infinity) mag = { x: (x0m + x1m) / 2, y: y0, z: (z0 + z1) / 2, sx: Math.max(.012, x1m - x0m), sz: Math.max(.02, z1 - z0) };
+  }
+  return {
+    sight: w.sight.clone(), muzzle: w.anchors.muzzle.position.clone(), rest: w.poses.rest ? { p: w.poses.rest.p.clone(), q: w.poses.rest.q.clone(), f: new Float32Array(w.poses.rest.f) } : null,
+    opticU: ou, opticV: top, opticX: x0, su, sv: (w.cfg.support || w.cfg.grip)[1], under: bottom, railU: ru, railX: half, railV: rtop > rbot ? (rtop + rbot) / 2 : .01, mag,
+  };
+}
+
+/* accessories: geometry is built once per accessory and shared; a weapon only holds light clones */
+function attachmentFitter(mats) {
+  const attLib = new Map(), NO_ATT = [];
+  const attModel = id => {
+    let e = attLib.get(id); if (e) return e;
+    const k = new Kit(mats); k.noStock = true; const o = ATT_MODEL[id](k); k.build();
+    e = { root: k.root, len: o.len || 0, emit: o.emit || null, sight: k.anchors.sight ? k.anchors.sight.position.clone() : null };
+    attLib.set(id, e); return e;
+  };
+  const place = (nw, id, parent, x, y, z) => { const o = attModel(id).root.clone(true); o.visible = true; o.position.set(x, y, z); parent.add(o); nw.attObjs.push(o); return o; };
+  const fitAttachments = (nw, def) => {
+    const list = def.att || NO_ATT, key = def.attKey || '';
+    if (!nw.mount) nw.mount = measureMount(nw);       // measured the first time the weapon is built, in the loader: mounting in a match only places clones
+    if ((nw.attKey || '') === key) return;
+    const M = nw.mount, P = nw.parts;
+    for (const o of nw.attObjs || NO_ATT) o.removeFromParent();
+    nw.attObjs = []; nw.attKey = key; nw.laserObj = null; nw.hasOptic = false; nw.sight.copy(M.sight); nw.anchors.muzzle.position.copy(M.muzzle);
+    if (P.optic0) P.optic0.visible = true;
+    if (M.rest) { nw.poses.rest.p.copy(M.rest.p); nw.poses.rest.q.copy(M.rest.q); nw.poses.rest.f.set(M.rest.f); }
+    const small = nw.def.slot === 1 ? .78 : 1;
+    for (const id of list) {
+      const A = attModel(id);
+      if (id === 'dot' || id === 'holo' || id === 'x4') {
+        const host = nw.def.slot === 1 && P.slide ? P.slide : P.optic0 && P.optic0.parent !== nw.root ? P.optic0.parent : nw.root, pv = host === nw.root ? _v.set(0, 0, 0) : _v.copy(host.position);
+        const s = nw.def.slot === 1 ? .82 : 1, o = place(nw, id, host, M.opticX - pv.x, M.opticV - pv.y, -M.opticU - pv.z); o.scale.setScalar(s);
+        nw.sight.set(M.opticX, M.opticV + A.sight.y * s, -(M.opticU + A.sight.z * -s)); nw.hasOptic = true;
+        if (P.optic0) P.optic0.visible = false;
+      } else if (id === 'sup' || id === 'comp' || id === 'hider') {
+        const o = place(nw, id, nw.root, M.muzzle.x, M.muzzle.y, M.muzzle.z); o.scale.setScalar(small);
+        nw.anchors.muzzle.position.z = M.muzzle.z - A.len * small;
+      } else if (id === 'ext' || id === 'fast') {
+        const tall = id === 'ext' ? clamp(nw.def.mag * .0016 + .03, .036, .07) : .012;
+        if (M.mag) {
+          const o = place(nw, id, P.mag, M.mag.x, M.mag.y + .002, M.mag.z); o.scale.set(M.mag.sx, tall, M.mag.sz);
+          if (nw.dropMag) { const c = o.clone(true); nw.dropMag.add(c); nw.attObjs.push(c); }
+        } else {     // tube magazine: a longer cap under the barrel
+          const o = place(nw, id, nw.root, 0, M.sv - .004, -(M.su + .15)); o.scale.set(.03, .03, .09); o.position.y += .015;
+        }
+      } else if (id === 'vg' || id === 'ag') {
+        place(nw, id, nw.root, 0, M.under + .002, -(M.su + (id === 'ag' ? .012 : .03)));
+        if (id === 'vg' && nw.poses.rest) { const g = foreGripPose(M.su + .03, M.under - .045); nw.poses.rest.p.copy(g.p); nw.poses.rest.q.copy(g.q); nw.poses.rest.f.set(g.f); }
+      } else if (id === 'laser') {
+        const o = place(nw, id, nw.root, M.railX + .0085, M.railV, -M.railU);
+        const e = new THREE.Object3D(); e.position.copy(V(A.emit[0], A.emit[1])); o.add(e); nw.laserObj = e;
+      }
+    }
+  };
+  return { attModel, fitAttachments, lib: attLib };
+}
+
+/* ---------- arsenal preview ----------
+   The real weapon model, drawn with the game's own WebGL context into an offscreen target and copied to a 2D canvas:
+   no second context exists. Everything it allocates (materials, textures, geometry, targets, programs) is released by dispose(). */
+export function createWeaponPreview(renderer, canvas, baseDef) {
+  const gl = renderer.getContext(); if (!gl || gl.isContextLost()) throw new Error('no WebGL context');
+  const ctx2d = canvas.getContext('2d', { alpha: false }), W = canvas.width, H = canvas.height;
+  const mats = makeMaterials(), fitter = attachmentFitter(mats), skin = createSkinner(mats), scene = new THREE.Scene(), pivot = new THREE.Group(); scene.add(pivot);
+  scene.add(new THREE.HemisphereLight(0xcfdcec, 0x5b4d3a, 1.25));
+  const key = new THREE.DirectionalLight(0xffe2bd, 2.9); key.position.set(1.4, 2.6, 3); scene.add(key);
+  const rim = new THREE.DirectionalLight(0xb9cfff, 1.1); rim.position.set(-2.4, 1.2, -2.2); scene.add(rim);
+  const cam = new THREE.PerspectiveCamera(22, W / H, .05, 12);
+  const w = buildWeapon(baseDef, mats); pivot.add(w.root); w.attObjs = [];
+  for (const n of ['held']) if (w.parts[n]) w.parts[n].visible = false;
+  if (w.cfg.animate) { const rest = {}; for (const key of [...IN_KEYS, 'lhZ', 'rhZ', 'beltAttach', 'heldShell', 'shellPush', 'held', 'lhY']) rest[key] = 0; w.cfg.animate(w, rest, 0, null, 0, 0); }       // string, drum and rounds in their ready pose
+  if (Number.isFinite(baseDef.col)) mats.paint.color.setHex(baseDef.col).lerp(new THREE.Color(0x55564c), .18);
+  const half = renderer.extensions.has('EXT_color_buffer_float') || renderer.extensions.has('EXT_color_buffer_half_float');
+  const hdr = new THREE.WebGLRenderTarget(W, H, { type: half ? THREE.HalfFloatType : THREE.UnsignedByteType, samples: 4 }), ldr = new THREE.WebGLRenderTarget(W, H, { depthBuffer: false });
+  const blitMat = new THREE.ShaderMaterial({
+    uniforms: { t: { value: hdr.texture } }, depthTest: false, depthWrite: false, toneMapped: false,
+    vertexShader: 'varying vec2 vUv;void main(){vUv=vec2(uv.x,1.-uv.y);gl_Position=vec4(position.xy,0.,1.);}',
+    fragmentShader: 'uniform sampler2D t;varying vec2 vUv;vec3 aces(vec3 x){return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.);}void main(){vec4 c=texture2D(t,vUv);vec2 p=vUv-.5;float r=dot(p,p);vec3 bg=mix(vec3(.105,.115,.095),vec3(.018,.02,.02),clamp(r*3.,0.,1.));vec3 col=aces(c.rgb*1.05)+bg*(1.-clamp(c.a,0.,1.));gl_FragColor=vec4(pow(col,vec3(1./2.2)),1.);}',
+  });
+  const blitScene = new THREE.Scene(), blitCam = new THREE.Camera(), blitGeo = new THREE.PlaneGeometry(2, 2), blit = new THREE.Mesh(blitGeo, blitMat); blit.frustumCulled = false; blitScene.add(blit);
+  const pixels = new Uint8ClampedArray(W * H * 4), image = new ImageData(pixels, W, H), _clear = new THREE.Color(), box = new THREE.Box3(), tmpB = new THREE.Box3(), size = new THREE.Vector3(), mid = new THREE.Vector3();
+  let alive = true, dirty = true, raf = 0, last = 0, yaw = -Math.PI / 2, pitch = .1, holdUntil = 0, sway = 0, slow = 0, frames = 0, spent = 0, autoOn = true, ready = false, dist = 1;
+  const frameIt = () => {
+    box.makeEmpty(); w.root.updateWorldMatrix(true, true);
+    w.root.traverse(o => { if (!o.isMesh) return; for (let p = o; p && p !== w.root; p = p.parent) if (!p.visible) return; if (!o.geometry.boundingBox) o.geometry.computeBoundingBox(); tmpB.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld); box.union(tmpB); });
+    if (box.isEmpty()) return;
+    pivot.worldToLocal(box.getCenter(mid)); box.getSize(size); w.root.position.sub(mid);
+    const long = Math.max(size.x, size.z), vf = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
+    dist = Math.max(long / (2 * vf * cam.aspect), size.y / (2 * vf)) * 1.14 + long * .08; cam.near = Math.max(.02, dist - long); cam.far = dist + long + .5; cam.updateProjectionMatrix();
+  };
+  const draw = () => {
+    const prev = renderer.getRenderTarget(), ac = renderer.autoClear, ca = renderer.getClearAlpha(); renderer.getClearColor(_clear);
+    try {
+      pivot.rotation.set(pitch, yaw + sway, 0, 'XYZ'); cam.position.set(0, 0, dist); cam.lookAt(0, 0, 0);
+      renderer.autoClear = true; renderer.setClearColor(0x000000, 0);
+      renderer.setRenderTarget(hdr); renderer.render(scene, cam);
+      renderer.setRenderTarget(ldr); renderer.render(blitScene, blitCam);
+      renderer.readRenderTargetPixels(ldr, 0, 0, W, H, pixels);
+    } finally { renderer.setRenderTarget(prev); renderer.autoClear = ac; renderer.setClearColor(_clear, ca); }
+    ctx2d.putImageData(image, 0, 0);
+  };
+  const tick = now => {
+    if (!alive) return; raf = requestAnimationFrame(tick);
+    if (!ready || document.hidden || now - last < 40) return;
+    const dt = Math.min(.1, (now - last) / 1000); last = now;
+    if (autoOn && now > holdUntil) { slow += dt; sway = Math.sin(slow * .55) * .5; dirty = true; }
+    if (!dirty || gl.isContextLost()) return; dirty = false;
+    const t0 = performance.now(); draw(); spent += performance.now() - t0;
+    if (++frames === 24) { if (spent / frames > 22) autoOn = false; frames = 0; spent = 0; }       // a slow machine keeps the preview, it only stops the idle motion
+  };
+  const api = {
+    get stats() { return { W, H, autoOn, ready }; },
+    /** Resolves true when the shaders are linked and the first image is on the canvas. */
+    async start(def) {
+      api.setDef(def);
+      const prev = renderer.getRenderTarget(); let wait;
+      try { renderer.setRenderTarget(hdr); wait = renderer.compileAsync ? renderer.compileAsync(scene, cam) : null; renderer.setRenderTarget(ldr); renderer.compile(blitScene, blitCam); } finally { renderer.setRenderTarget(prev); }
+      if (wait) await Promise.race([wait, new Promise(r => setTimeout(r, 6000))]);
+      if (!alive || gl.isContextLost()) return false;
+      draw(); ready = true; last = performance.now(); raf = requestAnimationFrame(tick); return true;
+    },
+    setDef(def) { if (!alive) return; fitter.fitAttachments(w, def); frameIt(); dirty = true; },
+    /** Weapon finish (weapon-skins.js), null = factory look. */
+    setFinish(id) { if (!alive) return; skin.apply(w, id); dirty = true; },
+    rotate(dx, dy) { yaw += dx; pitch = clamp(pitch + dy, -.7, .7); holdUntil = performance.now() + 2600; dirty = true; },
+    dispose() {
+      if (!alive) return; alive = false; cancelAnimationFrame(raf); skin.dispose();
+      const geos = new Set(), collect = root => root.traverse(o => { if (o.isMesh) geos.add(o.geometry); });
+      collect(w.root); for (const e of fitter.lib.values()) collect(e.root); geos.add(blitGeo); for (const g of geos) g.dispose();
+      const tex = new Set(); for (const m of Object.values(mats)) { for (const k of ['map', 'roughnessMap', 'envMap']) if (m[k]) tex.add(m[k]); m.dispose(); }
+      for (const t of tex) t.dispose(); blitMat.dispose(); hdr.dispose(); ldr.dispose(); key.dispose(); rim.dispose();
+    },
+  };
+  return api;
 }
 
 /* ---------- arms ---------- */
@@ -1613,21 +1815,24 @@ export function createViewModel(camera, scene) {
   ];
   for (let i = 1; i < GK.length - 1; i++) if (!GK[i].hold) GK[i].m.subVectors(GK[i + 1].p, GK[i - 1].p).divideScalar(GK[i + 1].t - GK[i - 1].t);
   const NADE_EV = [[.16, 'grenadeGrab'], [.32, 'pinPull'], [.5, 'throw'], [.515, 'spoon']], NADE_END = .95;
-  const gren = { active: false, t: 0, ev: 0, cb: null, thrown: false };
+  const gren = { active: false, t: 0, ev: 0, cb: null, thrown: false, keys: GK, evs: NADE_EV, end: NADE_END, x: null };       // x: an equipment gesture (engine-gear.js) played on the same hand path
   const tmpNade = { p: new THREE.Vector3(), q: new THREE.Quaternion(), f: new Float32Array(5) };
   const sampleNade = (T, out) => {
-    let i = 0; while (i < GK.length - 2 && T >= GK[i + 1].t) i++;
-    const a = GK[i], b = GK[i + 1], h = b.t - a.t, r = sat((T - a.t) / h), r2 = r * r, r3 = r2 * r;
+    const K = gren.keys; let i = 0; while (i < K.length - 2 && T >= K[i + 1].t) i++;
+    const a = K[i], b = K[i + 1], h = b.t - a.t, r = sat((T - a.t) / h), r2 = r * r, r3 = r2 * r;
     const h00 = 2 * r3 - 3 * r2 + 1, h10 = (r3 - 2 * r2 + r) * h, h01 = 3 * r2 - 2 * r3, h11 = (r3 - r2) * h;
     out.p.set(h00 * a.p.x + h10 * a.m.x + h01 * b.p.x + h11 * b.m.x, h00 * a.p.y + h10 * a.m.y + h01 * b.p.y + h11 * b.m.y, h00 * a.p.z + h10 * a.m.z + h01 * b.p.z + h11 * b.m.z);
     const k = r2 * (3 - 2 * r); out.q.slerpQuaternions(a.q, b.q, k);
     for (let j = 0; j < 5; j++) out.f[j] = mix(a.f[j], b.f[j], k);
   };
-  const stopNade = () => { gren.active = false; gren.cb = null; nade.visible = false; inMark = true; };
+  const stopNade = done => {
+    gren.active = false; gren.cb = null; nade.visible = false; inMark = true;
+    const x = gren.x; if (x) { gren.x = null; gren.keys = GK; gren.evs = NADE_EV; gren.end = NADE_END; if (x.prop) x.prop.visible = false; if (x.onEnd) { try { x.onEnd(done === true); } catch (e) { console.warn('[viewmodel] gesture', e); } } }
+  };
 
   /* muzzle flash + light */
   const flashTex = flashTexture();
-  const flashMat = new THREE.MeshBasicMaterial({ map: flashTex, color: 0xffd9a0, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false, toneMapped: false });
+  const flashMat = new THREE.MeshBasicMaterial({ map: flashTex, color: 0xffd9a0, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false, toneMapped: false, forceSinglePass: true });
   const flashGeo = (() => {
     const a = new THREE.PlaneGeometry(1, 1), b = new THREE.PlaneGeometry(1.7, .62), c = new THREE.PlaneGeometry(1.7, .62);
     b.rotateY(Math.PI / 2); b.translate(0, 0, -.72); c.rotateY(Math.PI / 2); c.rotateZ(Math.PI / 2); c.translate(0, 0, -.72);
@@ -1801,21 +2006,31 @@ export function createViewModel(camera, scene) {
     if (gren.active && name !== 'shell' && name !== 'grenadeGrab' && name !== 'pinPull' && name !== 'throw' && name !== 'spoon' && name !== 'draw' && name !== 'holster') return;      // the left hand is busy: no magazine sounds under the throw
     if (typeof vm.onSound === 'function') vm.onSound(name);
   };
+  const { attModel, fitAttachments } = attachmentFitter(mats);
+  const skin = createSkinner(mats); let finMap = null;        // weapon finishes: shared finished materials, chosen by material role
+  /* premium outfit: knuckle guards, back plate and wrist strap on both hands. Purely visual: a failure leaves the plain glove. */
+  const setHandKit = fp => { try { for (const h of [handR, handL]) { if (fp && !h.kit) { h.kit = new THREE.Mesh(fp.handKit(h.s), fp.kitMat); h.kit.frustumCulled = false; h.g.add(h.kit); } if (h.kit) { h.kit.visible = !!fp; if (fp) { h.kit.geometry = fp.handKit(h.s); h.kit.material = fp.kitMat; } } } } catch (e) { console.warn('[outfit] hand kit', e); } };
   const doEquip = (def, outfit) => {
     const known = BUILDERS[def.id] ? def : { ...def, id: def.slot === 1 ? 'p9' : 'ar' };
     let nw = weapons.get(known.id);
-    if (!nw) { nw = buildWeapon(known, mats); nw.root.visible = false; rig.add(nw.root); weapons.set(known.id, nw); }
-    if (w && w !== nw) w.root.visible = false;
+    if (!nw) { nw = buildWeapon(known, mats); nw.root.visible = false; nw.root.matrixWorldAutoUpdate = false; rig.add(nw.root); weapons.set(known.id, nw); }
+    if (w && w !== nw) { w.root.visible = false; w.root.matrixWorldAutoUpdate = false; }       // a hidden weapon is not walked by updateMatrixWorld every frame
+    nw.root.matrixWorldAutoUpdate = true; nw.root.updateMatrixWorld(true);
     if (dropOwner) { dropOwner.dropMag.visible = false; dropOwner = null; dropT = 0; }
     if (w && w.parts.mag && magGone) w.parts.mag.visible = true;
     magGone = false;
+    fitAttachments(nw, def);
+    try { skin.apply(nw, finMap ? finMap[def.id] : null); } catch (e) { console.warn('[guns] finish', e); }
     w = nw; w.def = def; w.root.visible = true;
     if (Number.isFinite(def.col)) mats.paint.color.setHex(def.col).lerp(_c.setHex(0x55564c), .18);
-    if (outfit && outfit.c) {
+    if (outfit && outfit.fp) {       // premium outfit: its own sleeves and gloves (outfit-kit.js)
+      mats.sleeve.map = outfit.fp.map; mats.sleeve.needsUpdate = true; mats.glove.color.setHex(outfit.fp.glove);
+    } else if (outfit && outfit.c) {
       mats.sleeve.map = camoTexture(outfit.c); mats.sleeve.needsUpdate = true;
       mats.glove.color.setHex(0x26231e).lerp(_c.setHex(outfit.c[1]), .14);
     } else if (!mats.sleeve.map) { mats.sleeve.map = camoTexture([0x59633e, 0x3a4429, 0x7b7650]); mats.sleeve.needsUpdate = true; }
-    w.anchors.muzzle.add(flash); flash.visible = false; flashSize = w.feel.flash; flashT = 0; flashMat.opacity = 0;
+    setHandKit(outfit && outfit.fp);
+    w.anchors.muzzle.add(flash); flash.visible = false; flashSize = w.feel.flash * (def.flashK ?? 1); flashT = 0; flashMat.opacity = 0;
     w.anchors.muzzle.getWorldPosition(_v); light.position.copy(w.anchors.muzzle.position);
     action.s = null; action.kind = ''; vm.reloading = false; vm.scoped = false; heldShell.visible = false; clearAnim();
     for (const key in sp) if (key !== 'dead') sp[key].reset();
@@ -1830,6 +2045,12 @@ export function createViewModel(camera, scene) {
   /* ---------- public API ---------- */
   const vm = {
     group, reloading: false, scoped: false, onSound: () => {},
+    /** Builds a weapon's viewmodel without equipping it (no animation, no visibility change): used to spread the build of every weapon over idle time. Returns true if it built one. */
+    prebuild(def) {
+      if (!def) return false; const known = BUILDERS[def.id] ? def : { ...def, id: def.slot === 1 ? 'p9' : 'ar' };
+      if (weapons.has(known.id)) return false;
+      const nw = buildWeapon(known, mats); nw.root.visible = false; nw.root.matrixWorldAutoUpdate = false; rig.add(nw.root); weapons.set(known.id, nw); return true;
+    },
     equip(def, outfit) {
       if (!def) return;
       pend.def = null; pend.reload = false;       // a throw in progress survives a weapon change (loot pickup): only cancelGrenade() or death stops it
@@ -1846,19 +2067,19 @@ export function createViewModel(camera, scene) {
     },
     fire() {
       if (!w) return;
-      const f = w.feel, sign = (lastSign = -lastSign);
-      sp.z.v += f.kz * 9 * (.9 + Math.random() * .2);
-      sp.y.v += f.kz * 1.3;
-      sp.pitch.v += f.kp * 8 * (.9 + Math.random() * .25);
-      sp.yaw.v += f.ky * 8 * (sign * .6 + (Math.random() - .5) * .9);
-      sp.roll.v += f.kr * 8 * (sign * .55 + (Math.random() - .5) * .9);
+      const f = w.feel, sign = (lastSign = -lastSign), rk = w.def.recK ?? 1;
+      sp.z.v += f.kz * 9 * (.9 + Math.random() * .2) * rk;
+      sp.y.v += f.kz * 1.3 * rk;
+      sp.pitch.v += f.kp * 8 * (.9 + Math.random() * .25) * rk;
+      sp.yaw.v += f.ky * 8 * (sign * .6 + (Math.random() - .5) * .9) * rk;
+      sp.roll.v += f.kr * 8 * (sign * .55 + (Math.random() - .5) * .9) * rk;
       cyc = 0; trigger = 1;
-      if (f.flash > 0) {
+      if (flashSize > 0) {
         flash.visible = true; flashT = 1; flash.rotation.z = Math.random() * 6.28;
         const sc = flashSize * 1.75 * (.82 + Math.random() * .4); flash.scale.set(sc, sc, sc * (1.05 + Math.random() * .4));
-        flashMat.opacity = 1; light.intensity = 3.2 + f.flash * 11;
+        flashMat.opacity = 1; light.intensity = 3.2 + flashSize * 11;
       }
-      if (f.smoke > 0) puff(f.smoke > 1 ? 4 : 2, f.smoke);
+      if (f.smoke > 0 && (w.def.flashK ?? 1) > 0) puff(f.smoke > 1 ? 4 : 2, f.smoke);
       if (w.cfg.onFire) w.cfg.onFire(w);
       if (w.cfg.spin) spinKick = 1;
       if (w.scripts.act) { if (!vm.reloading) startAction(w.scripts.act[w.st.n++ % w.scripts.act.length], f.act.dur, 0, 'cycle'); }
@@ -1880,6 +2101,17 @@ export function createViewModel(camera, scene) {
       return true;
     },
     cancelGrenade() { if (gren.active) stopNade(); },
+    /* equipment gesture on the grenade's hand path. s = {keys (from gestureTrack) or null for the throw path, ev [[t, name]], end, prop, onEvent(name), onFrame(T), onEnd(finished)} */
+    playGesture(s) {
+      if (gren.active || !w) return false;
+      gren.active = true; gren.t = 0; gren.ev = 0; gren.cb = null; gren.thrown = false; gren.x = s; gren.keys = s.keys || GK; gren.evs = s.ev || NADE_EV; gren.end = s.end || NADE_END;
+      nade.visible = false; inMark = true; return true;
+    },
+    /* a track from plain arrays: [t, px, py, pz, yx, yy, yz, zx, zy, zz, [5 fingers], hold] in camera space */
+    gestureTrack(list) { const K = list.map(a => gkey(...a)); for (let i = 1; i < K.length - 1; i++) if (!K[i].hold) K[i].m.subVectors(K[i + 1].p, K[i - 1].p).divideScalar(K[i + 1].t - K[i - 1].t); return K; },
+    /* parents an equipment model to the left hand, hidden, at the grenade's grip point */
+    mountProp(o) { o.visible = false; handL.g.add(o); return o; },
+    get gestureOn() { return !!gren.x; },
     get grenadeBusy() { return gren.active; },
     /* true from the key press until the grenade has left the hand */
     get throwPending() { return gren.active && !gren.thrown; },
@@ -1893,6 +2125,18 @@ export function createViewModel(camera, scene) {
     spin(amount) { spinT = sat(Number.isFinite(amount) ? amount : 0); },
     /* optional: rounds left in the current weapon, so single-shot visuals (rocket, bolt, grenade) match the ammo count */
     setAmmo(n) { if (w && !pend.def) { w.st.loaded = n > 0; if (n > 0) w.st.drawn = true; } },
+    /* bow: 0..1 how far the string is drawn */
+    setPull(k) { if (w) w.st.pull = sat(Number.isFinite(k) ? k : 0); },
+    /* world position of the mounted laser's emitter; false when this weapon has none */
+    laserPoint(target) {
+      if (!w || !w.laserObj || !group.visible) return false;
+      w.laserObj.updateWorldMatrix(true, false); target.setFromMatrixPosition(w.laserObj.matrixWorld); return true;
+    },
+    /* builds every accessory model now, so mounting one in a match creates no geometry */
+    /** { weaponId: finishId } of the local player; read on every equip. */
+    setFinishes(map) { finMap = map || null; },
+    attachmentIds() { return Object.keys(ATT_MODEL); },
+    prebuildAttachment(id) { attModel(id); },
     muzzle(target) {
       if (!w) return camera.getWorldPosition(target);
       w.anchors.muzzle.updateWorldMatrix(true, false);
@@ -1953,6 +2197,7 @@ export function createViewModel(camera, scene) {
       if (anim.lhZ) handL.p.z += anim.lhZ;
       if (anim.lhY) handL.p.y += anim.lhY;
       if (anim.rhZ) { handR.p.z += anim.rhZ * f.travel; if (anim.boltRot) handR.p.y += anim.boltRot * .012; }
+      if (w.cfg.pullLen && w.st.pull) handR.p.z += w.st.pull * w.cfg.pullLen;       // bow: the right hand holds the string
       chHand(handL, IN_HL, IN_FL, qOffL, qLastL); chHand(handR, IN_HR, IN_FR, qOffR, qLastR);
       if (P.mag) {
         const b = P.mag.userData.base, carried = !!(script && script.attach && !gren.active && t >= script.attach[0] && t <= script.attach[1]);
@@ -2026,7 +2271,8 @@ export function createViewModel(camera, scene) {
 
       /* hip -> ADS */
       const S = RIG_SCALE, sg = w.sight;
-      const ax = f.aim ? f.aim[0] : -S * sg.x, ay = f.aim ? f.aim[1] : -S * sg.y, az = f.aim ? f.aim[2] : -f.eye - S * sg.z;
+      const fixedAim = f.aim && !w.hasOptic, eye = w.hasOptic ? clamp(f.eye, .3, .44) : f.eye;       // the eye stays behind a mounted optic, at a distance where it fills a sensible part of the screen
+      const ax = fixedAim ? f.aim[0] : -S * sg.x, ay = fixedAim ? f.aim[1] : -S * sg.y, az = fixedAim ? f.aim[2] : -eye - S * sg.z;
       let x = mix(f.hip[0], ax, a), y = mix(f.hip[1], ay, a) - Math.sin(a * Math.PI) * .012, z = mix(f.hip[2], az, a);
       const bodyX = x, bodyY = y, bodyZ = z;
       x += (sp.swayX.x + bx) * (1 - a * .88) + sp.tilt.x * -.028 * free - sprint * .045;
@@ -2040,7 +2286,7 @@ export function createViewModel(camera, scene) {
       x += anim.rigX; y += anim.rigY; z += anim.rigZ; rx += anim.rigRX; ry += anim.rigRY; rz += anim.rigRZ;
       /* grenade: the weapon dips aside while the left hand works, and follows the throw */
       if (gren.active) {
-        const T = gren.t + dt, k = mj(T / .17) * (1 - mj((T - .6) / .33)), sw = Math.sin(Math.PI * sat((T - .4) / .26));
+        const T = gren.t + dt, k = mj(T / .17) * (1 - mj((T - (gren.end - .35)) / .33)), sw = gren.x && gren.keys !== GK ? 0 : Math.sin(Math.PI * sat((T - .4) / .26));
         x += k * .05 + sw * .012; y -= k * .075; z += k * .035 - sw * .02; rx -= k * .24; ry -= k * .34; rz -= k * .44 - sw * .09;
       }
       /* wall block, raise, death */
@@ -2049,6 +2295,7 @@ export function createViewModel(camera, scene) {
       y -= up * .3; rx -= up * 1.05; rz -= up * .3;
       const dd = sat(sp.dead.x);
       y -= dd * .55; rx -= dd * 1.1; rz += dd * .35;
+      if (vm.pose) { const q = vm.pose; x += q[0]; y += q[1]; z += q[2]; rx += q[3]; ry += q[4]; rz += q[5]; }       // hud-motion.js: inspect and idle breathing
       x = ch(IN_RIG, x); y = ch(IN_RIG + 1, y); z = ch(IN_RIG + 2, z); rx = ch(IN_RIG + 3, rx); ry = ch(IN_RIG + 4, ry); rz = ch(IN_RIG + 5, rz);
       rig.position.set(x, y, z);
       _e.set(rx, ry, rz, 'YXZ'); rig.quaternion.setFromEuler(_e);
@@ -2070,7 +2317,7 @@ export function createViewModel(camera, scene) {
       /* grenade gesture: the left hand follows a path in camera space, whatever the weapon is doing */
       if (gren.active) {
         gren.t += dt; const T = gren.t;
-        const k = mj(T / .1) * (1 - mj((T - .74) / .21));
+        const k = mj(T / .1) * (1 - mj((T - (gren.end - .21)) / .21));
         sampleNade(T, tmpNade);
         _el2.copy(tmpNade.p); _el2.x -= .3; _el2.y -= .42; _el2.z += .23;
         _qi.copy(rig.quaternion).invert();
@@ -2083,13 +2330,17 @@ export function createViewModel(camera, scene) {
         if (!handL.g.visible) handL.g.visible = handL.sl.visible = true;
         poseFingers(handL, 14, 0); fingers.instanceMatrix.needsUpdate = true;
         _el2.sub(rig.position).applyQuaternion(_qi).divideScalar(S); _el.copy(elbowL).lerp(_el2, k); poseSleeve(handL, _el);
-        if (!gren.thrown) {
+        if (gren.x) {
+          const x = gren.x; if (x.onFrame) { try { x.onFrame(T); } catch (e) { console.warn('[viewmodel] gesture', e); } }
+          while (gren.active && gren.x === x && gren.ev < gren.evs.length && T >= gren.evs[gren.ev][0]) { const name = gren.evs[gren.ev++][1]; if (name === 'throw') gren.thrown = true; if (x.onEvent) { try { x.onEvent(name); } catch (e) { console.warn('[viewmodel] gesture', e); } } }
+          if (gren.active && gren.x === x && T >= gren.end) stopNade(true);
+        } else if (!gren.thrown) {
           nade.visible = T >= NADE_EV[0][0];
           const pull = sat((T - .31) / .07);
           nadePin.position.copy(nadePinBase); nadePin.position.x -= mj(pull) * .05;
           if (T > .37) { const d = T - .37; nadePin.position.y -= d * d * 2.6; nadePin.position.x -= d * .05; nadePin.rotation.z = d * 9; nadePin.visible = T < .5; }
         }
-        while (gren.active && gren.ev < NADE_EV.length && T >= NADE_EV[gren.ev][0]) {
+        while (gren.active && !gren.x && gren.ev < NADE_EV.length && T >= NADE_EV[gren.ev][0]) {
           const name = NADE_EV[gren.ev++][1];
           if (name === 'throw') {
             nade.updateWorldMatrix(true, false); nadeWorld.setFromMatrixPosition(nade.matrixWorld);
@@ -2098,7 +2349,7 @@ export function createViewModel(camera, scene) {
           }
           emit(name);
         }
-        if (T >= NADE_END) stopNade();
+        if (gren.active && !gren.x && T >= NADE_END) stopNade();
       }
 
       /* flash */

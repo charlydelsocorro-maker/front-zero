@@ -1,5 +1,5 @@
 /* FRONT ZERO multiplayer client. n.remote(id, timeNow) expects performance.now() milliseconds. */
-const EVENTS = ['room', 'start', 'state', 'shot', 'damage', 'death', 'respawn', 'score', 'round', 'action', 'end', 'error', 'close', 'boom', 'loot'];
+const EVENTS = ['room', 'start', 'state', 'shot', 'damage', 'death', 'respawn', 'score', 'round', 'action', 'end', 'error', 'close', 'boom', 'loot', 'prop', 'zone', 'att', 'gx', 'flow', 'fin', 'sg'];
 const SEND_INTERVAL = 50, INTERP_DELAY = 100, MIN_DELAY = 90, MAX_DELAY = 240, MAX_EXTRAPOLATE = 100, COAST = 0.07, BUFFER = 24, SNAP_DIST = 8, PING_MS = 2000;
 const WAKE_MS = 75000, WAKE_RETRY_MS = 2500;   // a free host sleeps when idle and can take up to a minute to answer
 
@@ -19,6 +19,8 @@ function defaultUrl() {
   if (typeof location === 'undefined') return 'ws://localhost:8080/ws';
   return hostedServer() || `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
 }
+
+const syncModule = import('./net-sync.js').catch(() => null);       // compact protocol: without it the game stays in JSON
 
 export function createNet(url) {
   const target = url || defaultUrl();
@@ -53,7 +55,7 @@ export function createNet(url) {
     pings.push({ rtt, offset: m.ts + rtt / 2 - now });
     if (pings.length > 8) pings.shift();
     const best = pings.reduce((a, b) => (b.rtt < a.rtt ? b : a));
-    offset = best.offset; n.rtt = rtt;
+    offset = best.offset; n.rtt = rtt; lastPong = now;
   }
   function pushSnapshot(s, ts) {
     let b = buffers.get(s.id);
@@ -114,12 +116,31 @@ export function createNet(url) {
     else if (m.op === 'del') { for (const id of m.ids || []) lootItems.delete(id); }
     else if (m.op === 'upd') { const d = lootItems.get(m.id); if (d) { d.a = m.a; d.r = m.r; } }
   }
+  // What each player has mounted on the weapons they carry (room snapshots for late joiners, 'att' messages after that).
+  const attMap = new Map();
+  function attRead(players) { if (Array.isArray(players)) for (const q of players) { if (q && q.att && typeof q.att === 'object') attMap.set(q.id, q.att); if (q && q.fin && typeof q.fin === 'object') finMap.set(q.id, q.fin); if (q && typeof q.fit === 'string') fitMap.set(q.id, q.fit); } }
+  const finMap = new Map();       // weapon finishes of the other players, same path as the attachments
+  const fitMap = new Map();       // premium outfit of the other players (cosmetic, ids validated by the server)
+  let wire = null, lastPong = 0;
+  function startWire(sock) {
+    syncModule.then(mod => {
+      if (!mod || ws !== sock || !isOpen()) return;
+      wire = mod.createWire({ socket: () => (isOpen() ? ws : null), myId: () => n.id, hostId: () => (n.room ? n.room.hostId : null), sendJson: raw, pushSnapshot, noteArrival, emit, wantsState: () => handlers.get('state').size > 0 });
+      raw({ t: 'nc', v: mod.WIRE_VERSION });
+    }).catch(e => console.warn('[net] compact protocol off', e));
+  }
   function onMessage(ev) {
+    if (typeof ev.data !== 'string') { if (wire) { try { wire.onFrame(ev.data); } catch (e) { console.warn('[net] bad frame', e); } } return; }
     let m;
     try { m = JSON.parse(ev.data); } catch { return; }
     if (!m || typeof m.t !== 'string') return;
     switch (m.t) {
-      case 'welcome': n.lootOk = m.loot === 1; return;
+      case 'nc': if (wire) wire.onAck(m); return;
+      case 'nd': if (wire) wire.onDict(m); return;
+      case 'welcome': if (m.nc >= 1) startWire(ev.target); n.lootOk = m.loot === 1; n.propsOk = m.props === 1; n.zoneOk = m.zone === 1; n.attOk = m.att === 1; n.finOk = m.fin === 1; n.fitOk = m.fit === 1; n.xwOk = m.xw === 1; n.gxOk = m.gx === 1; n.flowOk = m.mf === 1; n.sgOk = m.sg === 1; return;
+      case 'att': if (typeof m.id === 'string' && m.w && typeof m.w === 'object') attMap.set(m.id, m.w); break;
+      case 'fin': if (typeof m.id === 'string' && m.w && typeof m.w === 'object') finMap.set(m.id, m.w); break;
+      case 'fit': if (typeof m.id === 'string') { if (typeof m.o === 'string') fitMap.set(m.id, m.o); else fitMap.delete(m.id); } return;
       case 'loot': lootMirror(m); break;
       case 'pong': return onPong(m);
       case 'states':
@@ -131,9 +152,10 @@ export function createNet(url) {
         }
         return;
       case 'room':
-        n.room = m; pruneBuffers(m.players);
+        n.room = m; pruneBuffers(m.players); attRead(m.players);
         break;
       case 'start':
+        attRead(m.players);
         n.room = m; buffers.clear(); outs.clear(); n.lastRound = null; n.lastScore = null; lootItems.clear(); n.life = m.life | 0;
         break;
       // The match's first 'round' and 'score' arrive while the client is still loading the map: keep the latest for a late replay.
@@ -172,6 +194,7 @@ export function createNet(url) {
         stopWake = () => fail('connect_failed');
         const attempt = () => {
           const sock = ws = new WebSocket(target);
+          sock.binaryType = 'arraybuffer';
           let down = false;
           const lost = () => {
             if (settled || down) return;
@@ -197,7 +220,7 @@ export function createNet(url) {
           sock.addEventListener('close', ev => {
             lost();
             if (!settled || ws !== sock) return;   // still waking up: the next attempt takes over
-            stopTimers();
+            stopTimers(); wire = null;
             ws = null; n.id = null; n.room = null; n.lastRound = null; n.lastScore = null; buffers.clear();
             emit('close', { code: ev.code, reason: ev.reason });
           });
@@ -212,8 +235,8 @@ export function createNet(url) {
       if (ws) ws.close(1000, 'leave');
     },
 
-    createRoom({ name, mode, map } = {}) { withConnection({ t: 'create', name, mode, map }); },
-    joinRoom(code, name) { withConnection({ t: 'join', code, name }); },
+    createRoom({ name, mode, map } = {}) { withConnection({ t: 'create', name, mode, map, zv: 1, ...(n.flowClient ? { mf: 1 } : null) }); },
+    joinRoom(code, name) { withConnection({ t: 'join', code, name, zv: 1, ...(n.flowClient ? { mf: 1 } : null) }); },
     setReady(v) { send({ t: 'ready', v: !!v }); },
     setTeam(t) { send({ t: 'team', team: t }); },
     setConfig({ mode, map } = {}) { send({ t: 'config', mode, map }); },
@@ -227,7 +250,8 @@ export function createNet(url) {
         stateTimer = 0;
         if (!pendingState) return;
         lastState = clock();
-        raw(pendingState);
+        if (wire && wire.active) wire.sendState(pendingState, lastState);
+        else if (isOpen() && ws.bufferedAmount < 16384) raw(pendingState);       // congested: this position is stale before it leaves
         pendingState = null;
       };
       if (wait <= 0) { clearTimeout(stateTimer); flush(); }
@@ -243,11 +267,38 @@ export function createNet(url) {
     sendHit({ target, damage, head, weapon, splash }) { const m = { t: 'hit', target, damage, head: !!head, weapon }; if (splash) m.splash = true; send(m); },
     /** Detonation of one of our own projectiles. The server relays it ('boom' event: {id, x, y, z, weapon, pid}) and validates the splash hits that follow against it. */
     sendBoom({ x, y, z, weapon, pid }) { send({ t: 'boom', x, y, z, weapon, pid: pid || 0 }); },
-    sendAction(type, data) { send({ t: 'action', type, data }); },
+    sendAction(type, data) { if (wire && wire.active && isOpen() && n.id && wire.sendAction(type, data)) return; send({ t: 'action', type, data }); },
+    /** Connection quality for the HUD indicator. */
+    quality() { const now = clock(); let lo = Infinity, hi = 0; for (const p of pings) { if (p.rtt < lo) lo = p.rtt; if (p.rtt > hi) hi = p.rtt; } return { connected: n.connected, rtt: n.rtt, jitter: pings.length > 1 ? hi - lo : 0, pongAge: lastPong ? now - lastPong : 0, delay: delayS, binary: !!(wire && wire.active) }; },
     // Loot (only when this server announced it in 'welcome'; an older server would count these as bad messages).
     lootOk: false, life: 0,
     sendInv(w, g) { if (n.lootOk && isOpen() && n.id) raw({ t: 'inv', l: n.life, w, g }); },
     sendTake(id, swap) { if (n.lootOk && isOpen() && n.id) raw({ t: 'take', id, swap: !!swap }); },
+    // Attachments (only when this server announced them in 'welcome').
+    attOk: false,
+    sendAtt(w) { if (n.attOk && isOpen() && n.id) raw({ t: 'att', w }); },
+    attOf(id, weapon) { const m = attMap.get(id); return m && Array.isArray(m[weapon]) ? m[weapon] : []; },
+    // Weapon finishes (only when this server announced them in 'welcome'). Sending once, even empty, also asks to receive the others'.
+    finOk: false,
+    sendFin(w) { if (n.finOk && isOpen() && n.id) raw({ t: 'fin', w }); },
+    // Premium outfit (only when this server announced it in 'welcome').
+    fitOk: false,
+    sendFit(o) { if (n.fitOk && isOpen() && n.id) raw({ t: 'fit', o: o || null }); },
+    fitOf(id) { return fitMap.get(id) || null; },
+    finOf(id, weapon) { const m = finMap.get(id); return m && typeof m[weapon] === 'string' ? m[weapon] : null; },
+    finIds() { const out = new Set(); for (const m of finMap.values()) for (const k of Object.keys(m)) if (typeof m[k] === 'string') out.add(m[k]); return [...out]; },
+    // World props (doors, glass, drums): only when this server announced them in 'welcome'.
+    propsOk: false,
+    sendProp(o) { if (n.propsOk && isOpen() && n.id) raw({ t: 'prop', ...o }); },
+    // Equipment (only when this server announced it in 'welcome').
+    gxOk: false,
+    sendGear(o) { if (n.gxOk && isOpen() && n.id) raw({ t: 'gx', ...o }); },
+    // End-of-match flow (match-flow.js sets flowClient once it is installed; the server announces it in 'welcome').
+    flowOk: false, flowClient: false,
+    sendFlow(o) { if (n.flowOk && isOpen() && n.id) raw({ t: 'flow', ...o }); },
+    // Spawn protection (only when this server announced it in 'welcome'; engine-guard.js asks who is protected once it has loaded).
+    sgOk: false,
+    sendGuard(o) { if (n.sgOk && isOpen() && n.id) raw({ t: 'sg', ...o }); },
     /** The drops currently on the map, with their remaining lifetime. */
     lootNow() { const now = clock(), out = []; for (const d of lootItems.values()) out.push({ ...d, ttl: Math.max(0, d.ttl - (now - d.at)) }); return out; },
 

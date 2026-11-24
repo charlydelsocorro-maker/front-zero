@@ -7,24 +7,29 @@ const STORAGE_KEY = 'frontzero.settings';
 /* Codes physiques (KeyboardEvent.code) : KeyW est la touche Z sur AZERTY. */
 const DEFAULT_KEYS = {
   forward: 'KeyW', back: 'KeyS', left: 'KeyA', right: 'KeyD',
-  jump: 'Space', slide: 'ShiftLeft', crouch: 'KeyC', sprint: 'KeyV',
-  fire: 'Mouse0', aim: 'Mouse2', reload: 'KeyR', grenade: 'KeyG', flashlight: 'KeyT',
+  jump: 'Space', slide: 'ShiftLeft', crouch: 'ControlLeft', sprint: 'KeyV',
+  /* Pas de T par défaut : accroupi, Ctrl+T ouvrirait un onglet et le navigateur interdit de l'empêcher. */
+  fire: 'Mouse0', aim: 'Mouse2', reload: 'KeyR', grenade: 'KeyG', tactical: 'KeyQ', medical: 'KeyX', flashlight: 'KeyL',
   weapon1: 'Digit1', weapon2: 'Digit2', nextWeapon: 'WheelDown',
-  interact: 'KeyE', scoreboard: 'Tab',
+  interact: 'KeyE', inspect: 'KeyH', scoreboard: 'Tab',
   pause: 'KeyP', toggleMute: 'F8', toggleFps: 'F9',
 };
 const ACTIONS = Object.keys(DEFAULT_KEYS);
+const KEYS_REV = 2;
 const PAUSE_SAFE = new Set(['pause', 'scoreboard', 'toggleMute', 'toggleFps']);
 /* La touche grenade n’apparaît que si un équipement (emplacement 2) existe dans l’arsenal disponible. */
 const HAS_GEAR = WEAPONS.some(w => w.slot === 2);
 /* Libellés absents de i18n.js (fr, en, es, de, pt, it) ; la clé i18n l’emporte dès qu’elle existe. */
 const LOCAL_T = {
-  'action.grenade': ['Lancer une grenade', 'Throw grenade', 'Lanzar granada', 'Granate werfen', 'Lançar granada', 'Lancia granata'],
+  'action.grenade': ['Équipement létal', 'Lethal equipment', 'Equipo letal', 'Tödliche Ausrüstung', 'Equipamento letal', 'Equipaggiamento letale'],
+  'action.tactical': ['Équipement tactique', 'Tactical equipment', 'Equipo táctico', 'Taktische Ausrüstung', 'Equipamento tático', 'Equipaggiamento tattico'],
+  'action.medical': ['Soin / médical', 'Medical item', 'Objeto médico', 'Sanitätsobjekt', 'Item médico', 'Oggetto medico'],
   'action.flashlight': ['Lampe torche', 'Flashlight', 'Linterna', 'Taschenlampe', 'Lanterna', 'Torcia'],
+  'action.inspect': ['Inspecter l’arme', 'Inspect weapon', 'Inspeccionar arma', 'Waffe prüfen', 'Inspecionar arma', 'Ispeziona arma'],
 };
 const KEY_GROUPS = [
   ['group.movement', ['forward', 'back', 'left', 'right', 'jump', 'slide', 'crouch', 'sprint']],
-  ['group.combat', ['fire', 'aim', 'reload', ...(HAS_GEAR ? ['grenade'] : []), 'interact', 'flashlight']],
+  ['group.combat', ['fire', 'aim', 'reload', ...(HAS_GEAR ? ['grenade'] : []), 'tactical', 'medical', 'interact', 'flashlight', 'inspect']],
   ['group.weapons', ['weapon1', 'weapon2', 'nextWeapon']],
   ['group.interface', ['scoreboard', 'pause', 'toggleMute', 'toggleFps']],
 ];
@@ -68,6 +73,7 @@ const SPEC = {
   'graphics.fov': num(90, 70, 110, 1),
   'graphics.fpsLimit': en(0, FPS_LIMITS),
   'graphics.showFps': bool(false),
+  'graphics.showNet': bool(true),
   'audio.master': num(0.8, 0, 1, 0.01),
   'audio.effects': num(1, 0, 1, 0.01),
   'audio.music': num(0.6, 0, 1, 0.01),
@@ -79,6 +85,8 @@ const SPEC = {
   'gameplay.hitMarkers': bool(true),
   'gameplay.damageNumbers': bool(false),
   'gameplay.minimap': bool(true),
+  'gameplay.minimapRotate': bool(true),
+  'gameplay.compass': bool(true),
   'gameplay.reducedMotion': bool(false),
   language: en('fr', LANGS),
 };
@@ -140,10 +148,19 @@ const getLeaf = (obj, path) => {
 };
 
 function buildDefaults() {
-  const out = { keys: { ...DEFAULT_KEYS } };
+  const out = { keys: { ...DEFAULT_KEYS }, keysRev: KEYS_REV };
   for (const [path, spec] of Object.entries(SPEC)) setLeaf(out, path, spec.d);
   out.language = detectLanguage();
   return out;
+}
+
+/* Une sauvegarde d'avant la révision 2 passe aux nouvelles touches, sauf si le joueur les avait changées ou si elles sont déjà prises. */
+function migrateKeys(raw, rev) {
+  if ((rev | 0) >= KEYS_REV || !raw || typeof raw !== 'object' || Array.isArray(raw)) return raw;
+  const keys = { ...raw }, taken = c => Object.values(keys).includes(c);
+  if (keys.crouch === 'KeyC' && !taken('ControlLeft')) keys.crouch = 'ControlLeft';
+  if (keys.flashlight === 'KeyT' && !taken('KeyL')) keys.flashlight = 'KeyL';
+  return keys;
 }
 
 function sanitizeKeys(raw) {
@@ -175,7 +192,8 @@ function sanitize(raw) {
     const v = normalize(spec, getLeaf(src, path));
     if (v !== undefined) setLeaf(out, path, v);
   }
-  out.keys = sanitizeKeys(src.keys);
+  out.keys = sanitizeKeys(migrateKeys(src.keys, src.keysRev));
+  out.keysRev = KEYS_REV;
   if (out.graphics.preset !== CUSTOM && !matchesPreset(out.graphics, out.graphics.preset)) {
     out.graphics.preset = detectPreset(out.graphics);
   }
@@ -789,7 +807,8 @@ function mountScreen(s, container, i18n, layoutListeners) {
       ...group('group.display',
         row('set.fov', slider('graphics.fov', v => `${v}°`)),
         row('set.fpsLimit', select('graphics.fpsLimit', FPS_LIMITS.map(v => [v, v === 0 ? t('opt.unlimited') : String(v)]))),
-        row('set.showFps', toggle('graphics.showFps'))),
+        row('set.showFps', toggle('graphics.showFps')),
+        row('set.showNet', toggle('graphics.showNet'))),
     ],
     audio: () => group('section.audio',
       row('set.master', slider('audio.master', pct)),
@@ -806,7 +825,9 @@ function mountScreen(s, container, i18n, layoutListeners) {
       ...group('group.feedback',
         row('set.hitMarkers', toggle('gameplay.hitMarkers')),
         row('set.damageNumbers', toggle('gameplay.damageNumbers')),
-        row('set.minimap', toggle('gameplay.minimap'))),
+        row('set.minimap', toggle('gameplay.minimap')),
+        row('set.minimapRotate', toggle('gameplay.minimapRotate')),
+        row('set.compass', toggle('gameplay.compass'))),
       ...group('group.accessibility',
         row('set.reducedMotion', toggle('gameplay.reducedMotion'), { hint: 'set.reducedMotionHint' })),
     ],
