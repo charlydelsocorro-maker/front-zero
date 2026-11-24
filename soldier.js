@@ -15,6 +15,7 @@ const BIND0 = [[0, .96, 0], [0, 1.09, 0], [0, 1.27, 0], [0, 1.49, 0], [0, 1.585,
 const BALL0 = [0, -.09, -.175];               // ball-of-foot pivot relative to ankle (foot bone)
 const TAU = Math.PI * 2;
 const STATIC_SLIP = .3 / 120;   // m per ragdoll substep (0.3 m/s)
+const KNEE_RATE = 24;           // rad/s: fastest a free leg (swing, air) may fold or open its knee
 
 // gun-local layout: origin = top of pistol grip, barrel toward -Z
 const WEAP = {
@@ -657,7 +658,7 @@ export function createSoldier(scene, opts = {}) {
   const P = B.map(b => b.clone()), Q = B.map(() => new THREE.Quaternion());
   const mk = side => ({ side, off: side > 0 ? 0 : .5, plant: new THREE.Vector3(), yaw: 0, pitch: 0, swing: false, t: 0, armed: true,
     from: new THREE.Vector3(), fromYaw: 0, fromPitch: 0, ideal: new THREE.Vector3(), idealYaw: 0, ball: new THREE.Vector3(), ankle: new THREE.Vector3(),
-    q: new THREE.Quaternion(), world: new THREE.Vector3() });
+    q: new THREE.Quaternion(), world: new THREE.Vector3(), toY: 0, toYT: 0, probe: 0, lockX: 0, lockZ: 0, lift: 0, knee: 0, kneeOk: false });
   const feet = [mk(-1), mk(1)];
   const lastPos = new THREE.Vector3(), tmpW = new THREE.Vector3(), gunPos = new THREE.Vector3(), gq = new THREE.Quaternion();
   const hipW = new THREE.Vector3(), knee = new THREE.Vector3(), ankleOut = new THREE.Vector3(), pole = new THREE.Vector3();
@@ -670,7 +671,13 @@ export function createSoldier(scene, opts = {}) {
   let actT = -1, actDur = 1;   // one-handed action (knife slash, grenade throw)
   let recP = 0, recV = 0, relT = -1, relDur = 1, atkT = -1, flP = 0, flPV = 0, flR = 0, flRV = 0, flY = 0, flYV = 0, flH = 0, flHV = 0;
   let landY = 0, landV = 0, shuffleCd = 0, pelYPrev = B[PEL].y, seed = Math.random() * 10;
-  let dead = false;
+  let dead = false, pelDrop = 0, contacts = 0, groundFn = null, bodyY = 0, airF = 0, airTuck = 1;
+  // height of the walkable surface under a point, kept within what a leg can reach from the body
+  function groundY(x, z) {
+    const ry = bodyY; if (!groundFn) return root.position.y;
+    const h = groundFn(x, ry + .12, z);        // anything higher is a wall or a crate next to the body, not a step
+    return h < ry - .5 || h > ry + .5 ? ry : h;
+  }
 
   // ragdoll state
   const rp = new Float32Array(NP * 3), rq = new Float32Array(NP * 3), rs = new Float32Array(NP * 3), rm = new Float32Array(NP * 3), rcon = new Uint8Array(NP), rn = new Float32Array(NP * 3);
@@ -699,10 +706,10 @@ export function createSoldier(scene, opts = {}) {
     toWorldXZ(lx, lz, f.ideal); f.idealYaw = yawS + fy;
   }
   function snapFeet() {
-    for (const f of feet) { computeIdeal(f); f.plant.copy(f.ideal); f.yaw = f.idealYaw; f.pitch = 0; f.swing = false; f.t = 0; f.armed = true; }
-    lastPos.copy(root.position); needSnap = false;
+    for (const f of feet) { computeIdeal(f); f.plant.copy(f.ideal); f.plant.y = groundY(f.plant.x, f.plant.z); f.yaw = f.idealYaw; f.pitch = 0; f.swing = false; f.t = 0; f.armed = true; f.kneeOk = false; }
+    lastPos.copy(root.position); needSnap = false; pelDrop = 0;
   }
-  function startSwing(f) { f.swing = true; f.t = 0; f.armed = false; f.from.copy(f.plant); f.fromYaw = f.yaw; f.fromPitch = f.pitch; }
+  function startSwing(f) { f.swing = true; f.t = 0; f.armed = false; f.from.copy(f.plant); f.fromYaw = f.yaw; f.fromPitch = f.pitch; f.world.copy(f.plant); f.toY = f.toYT = groundY(f.ideal.x, f.ideal.z); f.probe = 0; f.lift = 0; }
   function writeBones() {
     for (let i = 0; i < NB; i++) {
       const p = PARENT[i], b = bones[i];
@@ -715,6 +722,7 @@ export function createSoldier(scene, opts = {}) {
   function poseAlive(dt, rawDt, st) {
     const vxC = fin(st.vx, 0), vzC = fin(st.vz, 0), yawT = fin(st.yaw, yawS), aim = clamp(fin(st.aimPitch, 0), -1.2, 1.2);
     const grounded = st.grounded !== false, crouch = clamp(fin(st.crouch, 0), 0, 1);
+    bodyY = fin(st.y, root.position.y);       // the physical height (the root lags it on stairs, for smoothness)
     time += dt;
     // smoothed yaw
     if (needSnap) yawS = yawT;
@@ -723,7 +731,8 @@ export function createSoldier(scene, opts = {}) {
     turnV = damp(turnV, dt > 0 ? stp / dt : 0, 8, dt);
     // measured displacement (feet obey the real motion => no sliding)
     let dx = root.position.x - lastPos.x, dz = root.position.z - lastPos.z;
-    if (needSnap || dx * dx + dz * dz > 2.25 || !isFinite(dx + dz)) { snapFeet(); dx = dz = 0; }
+    const fallV = rawDt > 1e-5 ? (lastPos.y - root.position.y) / rawDt : 0; let dyR = root.position.y - lastPos.y;
+    if (needSnap || dx * dx + dz * dz > 2.25 || !isFinite(dx + dz)) { snapFeet(); dx = dz = dyR = 0; }
     lastPos.copy(root.position);
     if (rawDt > 1e-5) { velX = damp(velX, dx / rawDt, 14, dt); velZ = damp(velZ, dz / rawDt, 14, dt); }
     const sY = Math.sin(yawS), cY = Math.cos(yawS);
@@ -733,7 +742,14 @@ export function createSoldier(scene, opts = {}) {
     runS = damp(runS, ss(2.4, 4.4, speed), 6, dt);
     moveB = damp(moveB, ss(.1, .9, speed), 7, dt);
     crouchS = damp(crouchS, crouch, 9, dt);
-    airB = damp(airB, grounded ? 0 : 1, grounded ? 14 : 7, dt);
+    airB = grounded ? 0 : damp(airB, 1, 7, dt);
+    if (grounded) { airTuck = 1; airF = 0; }
+    else {   // falling: the legs reach for the ground ahead of the impact, so feet and hips are down on the landing frame
+      let want = 1;
+      if (fallV > .2 && groundFn) { const h = root.position.y - groundFn(root.position.x, root.position.y - .39, root.position.z); want = ss(0, Math.max(.35, fallV * .1), h); }
+      airTuck = want < airTuck ? want : damp(airTuck, want, 12, dt); airF = airB * airTuck;
+    }
+    const wasAir = airTime > 0;
     if (!grounded) airTime += dt; else { if (airTime > .12) landV -= Math.min(1.6, airTime * 2.2); airTime = 0; }
     landV += (-120 * landY - 16 * landV) * dt; landY += landV * dt;
     const ang = Math.atan2(vR, vF);
@@ -741,27 +757,42 @@ export function createSoldier(scene, opts = {}) {
     let ha = back ? ang - Math.PI * Math.sign(ang) : ang; ha = clamp(ha, -1.05, 1.05);
     hipYaw = damp(hipYaw, -ha * .62 * ss(.2, 1, speed) + clamp(-turnV * .06, -.3, .3), 7, dt);
     const lat = speed > .1 ? Math.abs(vR) / speed : 0, fwdness = speed > .1 ? Math.max(0, vF / speed) : 0;
-    const stride = Math.max(.35, (.9 + .38 * Math.min(speed, 4.4)) * sY * (1 - .25 * crouchS) * (1 - .15 * lat) * K.stride);
+    const stride = Math.max(.35, (.72 + .36 * Math.min(speed, 4.4) + .16 * clamp(speed - 4.4, 0, 3.6)) * sy * (1 - .25 * crouchS) * (1 - .15 * lat) * K.stride);   // short enough that a walk does not read as a lunge
     const duty = lerp(.62, .38, runS);
     const dPh = gaitOn ? dist / stride : 0; phase = fract(phase + dPh);
     const T = stride / Math.max(speed, .3), swingDur = (1 - duty) * T;
 
     // ---- feet
     shuffleCd -= dt;
+    const rX = Math.cos(yawS + hipYaw), rZ = -Math.sin(yawS + hipYaw), minW = .2 * sx;   // hips' right axis, smallest gap between the feet along it
     for (let k = 0; k < 2; k++) {
       const f = feet[k], o = feet[1 - k];
       computeIdeal(f);
-      if (!grounded) { f.swing = false; f.plant.copy(f.ideal); f.yaw = f.idealYaw; f.armed = true; f.pitch = damp(f.pitch, .25, 6, dt); continue; }
+      if (!grounded) {   // airborne: the foot leaves its plant and follows the body instead of jumping under it
+        if (f.swing) { toWorldXZ(f.ball.x, f.ball.z, tmpW); f.plant.set(tmpW.x - dx, root.position.y - dyR + f.ball.y, tmpW.z - dz); f.swing = false; }       // from where it is drawn, lifted foot included
+        const ca = 1 - Math.exp(-22 * dt);
+        f.plant.x += dx; f.plant.y += dyR; f.plant.z += dz;       // carried by the body, so it does not trail behind a fast jump or fall
+        f.plant.x += (f.ideal.x - f.plant.x) * ca; f.plant.z += (f.ideal.z - f.plant.z) * ca; f.plant.y += (root.position.y - f.plant.y) * ca;
+        f.yaw += wrapA(f.idealYaw - f.yaw) * ca; f.armed = true; f.pitch = damp(f.pitch, .25, 6, dt); continue;
+      }
+      if (wasAir) { toWorldXZ(f.ball.x, f.ball.z, tmpW); f.plant.x = tmpW.x - dx; f.plant.z = tmpW.z - dz; f.plant.y = groundY(f.plant.x, f.plant.z); }   // touches down where it is, without sliding
       if (f.swing) {
         const rate = gaitOn ? Math.max(dPh / (1 - duty), dt / .5) : dt / .3;
         f.t = Math.min(1, f.t + rate);
         // landing target: Raibert-style lead along velocity
-        let lead = gaitOn ? (1 - f.t) * swingDur + duty * T * .5 * lerp(1, .72, runS) : 0;
+        let lead = gaitOn ? (1 - f.t) * swingDur + duty * T * .5 * lerp(1, .62, runS) : 0;
         let lx = velX * lead, lz = velZ * lead; const ll = Math.hypot(lx, lz), lmax = .55 * sy * (isZ && K.limp && f.side > 0 ? .7 : 1);
         if (ll > lmax) { lx *= lmax / ll; lz *= lmax / ll; }
-        const e = f.t * f.t * f.t * (f.t * (f.t * 6 - 15) + 10);
-        f.world.set(lerp(f.from.x, f.ideal.x + lx, e), 0, lerp(f.from.z, f.ideal.z + lz, e));
-        if (f.t >= 1) { f.plant.copy(f.world); f.yaw = f.idealYaw; f.swing = false; f.pitch = 0; }
+        const e = f.t * f.t * (3 - 2 * f.t);
+        let tgx = f.ideal.x + lx, tgz = f.ideal.z + lz;
+        const oX = o.swing ? o.world.x : o.plant.x, oZ = o.swing ? o.world.z : o.plant.z;
+        { const rel = ((tgx - oX) * rX + (tgz - oZ) * rZ) * f.side; if (rel < minW) { const p = (minW - rel) * f.side; tgx += rX * p; tgz += rZ * p; } }   // lands on its own side of the other foot
+        if (f.probe === 3) { tgx = f.lockX; tgz = f.lockZ; }       // the landing point is final: the height below stays true
+        else if (f.probe === 0 || (f.probe === 1 && f.t > .45) || (f.probe === 2 && f.t > .8)) { const first = f.probe === 0; f.probe++; f.toYT = groundY(tgx, tgz); if (first) f.toY = f.toYT; f.lockX = tgx; f.lockZ = tgz; }
+        f.toY = damp(f.toY, f.toYT, 22, dt);
+        f.world.set(lerp(f.from.x, tgx, e), lerp(f.from.y, f.toY, e), lerp(f.from.z, tgz, e));
+        { const rel = ((f.world.x - oX) * rX + (f.world.z - oZ) * rZ) * f.side; if (rel < minW) { const p = (minW - rel) * f.side * ss(0, .35, f.t); f.world.x += rX * p; f.world.z += rZ * p; } }   // and passes beside it, never through
+        if (f.t >= 1) { f.world.y = f.toYT; f.plant.copy(f.world); f.yaw = f.idealYaw; f.swing = false; f.pitch = 0; if (gaitOn) contacts++; }
       } else {
         // lift-off decisions
         _v4.copy(f.plant).sub(f.ideal); _v4.y = 0; const err = _v4.length();
@@ -770,7 +801,8 @@ export function createSoldier(scene, opts = {}) {
           const pf = fract(phase + f.off);
           if (pf < duty) f.armed = true;
           else if (f.armed && (!o.swing || runS > .5)) startSwing(f);
-          if (!f.swing && err > .62 * sy && !o.swing) startSwing(f);
+          if (!f.swing && ((err > .62 * sy && !o.swing) || err > .8 * sy)) startSwing(f);   // past that the leg cannot reach its plant and the foot would drag
+          if (!f.swing && !o.swing && ((f.plant.x - o.plant.x) * rX + (f.plant.z - o.plant.z) * rZ) * f.side < minW * .5) startSwing(f);   // the hips turned over crossed feet: uncross with the next step
           const u = f.armed ? pf / duty : 0;
           f.pitch = damp(f.pitch, -lerp(.45, .85, runS) * ss(.55, 1, u) * fwdness * moveB, 18, dt);
         } else {
@@ -784,20 +816,24 @@ export function createSoldier(scene, opts = {}) {
     }
     // ---- foot transforms (model)
     for (let fi = 0; fi < 2; fi++) { const f = feet[fi];
-      let yW, bx, by, bz, pit = f.pitch;
+      let yW, bx, by, bz, fl = 0, pit = f.pitch;
       if (f.swing) {
         const e = f.t * f.t * (3 - 2 * f.t), arc = Math.sin(Math.PI * f.t);
         let clr = lerp(.085, .17, runS) * (1 - .3 * crouchS) * sy;
         if (isZ) { if (K.limp && f.side > 0) clr *= .25; if (K.heavy) clr *= 1.25; if (K.frantic) clr *= 1.25; }
-        toModel(f.world, _v5); bx = _v5.x; bz = _v5.z; by = clr * Math.pow(arc, .8);
+        toModel(f.world, _v5); bx = _v5.x; bz = _v5.z; fl = _v5.y;
+        if (Math.abs(f.toY - f.from.y) > .01) {   // on steps: lift over the edge the foot is crossing
+          const gh = groundY(f.world.x, f.world.z) - root.position.y, need = gh > fl ? gh - fl : 0; f.lift = damp(f.lift, need, need > f.lift ? 55 : 20, dt); fl += f.lift;
+        } else f.lift = 0;
+        by = fl + (clr + Math.abs(f.toY - f.from.y) * .45) * arc;
         yW = f.fromYaw + wrapA(f.idealYaw - f.fromYaw) * e;
         pit = lerp(f.fromPitch, 0, e) - .3 * arc * fwdness * (isZ && K.limp && f.side > 0 ? -1.2 : 1);
         f.pitch = pit;
-      } else { toModel(f.plant, _v5); bx = _v5.x; bz = _v5.z; by = 0; yW = f.yaw; }
-      if (airB > .001) {   // tucked in-air pose
+      } else { toModel(f.plant, _v5); bx = _v5.x; bz = _v5.z; fl = _v5.y; by = fl; yW = f.yaw; }
+      if (airF > .001) {   // tucked in-air pose
         toModel(f.ideal, _v6);
         const ax = _v6.x, az = _v6.z + (f.side < 0 ? -.12 : .1) * sy, ay = (f.side < 0 ? .28 : .36) * sy;
-        bx = lerp(bx, ax, airB); by = lerp(by, ay, airB); bz = lerp(bz, az, airB);
+        bx = lerp(bx, ax, airF); bz = lerp(bz, az, airF); by = lerp(by, ay, airF); fl = lerp(fl, -1, airF);
       }
       qEul(f.q, pit, wrapA(yW - yawS), 0);
       f.ball.set(bx, by, bz);
@@ -805,7 +841,7 @@ export function createSoldier(scene, opts = {}) {
       // keep heel and toe above the ground plane
       _v6.set(0, -.09 * sy, .085 * sx).applyQuaternion(f.q).add(f.ankle);
       _v7.set(0, -.075 * sy, -.195 * sx).applyQuaternion(f.q).add(f.ankle);
-      const lo = Math.min(_v6.y, _v7.y, f.ball.y - .0);
+      const lo = Math.min(_v6.y, _v7.y, f.ball.y) - fl;
       if (lo < 0) { f.ankle.y -= lo; f.ball.y -= lo; }
     }
 
@@ -821,20 +857,25 @@ export function createSoldier(scene, opts = {}) {
     leanF = damp(leanF, clamp(cF * .045 + vF * .02, -.18, .32) + crouchS * .22 + K.lean * (isZ ? (.6 + .4 * moveB + (K.frantic ? .5 * runS : 0)) : 0), 5, dt);
     leanR = damp(leanR, clamp(cR * .03, -.12, .12), 5, dt);
     const roll = -swX * 2.5 * (K.limp ? 2.5 : 1) + leanR * .5;
-    let py = B[PEL].y - .027 * sy - .035 * runS * sy - (isZ ? .02 : 0) - crouchS * .33 * sy + bob + breath + landY * .12 - airB * .06;
+    let py = B[PEL].y - .027 * sy - .035 * runS * sy - (isZ ? .02 : 0) - crouchS * .33 * sy + bob + breath + landY * .12 - airF * .06;
     if (K.heavy) py -= .04 * sy;
     P[PEL].set(swX + idleX + (isZ ? 0 : -.01), py, -.02 * moveB + leanF * .05);
-    qEul(Q[PEL], -leanF * .45 - crouchS * .12 + airB * .15, hipYaw + yawSw, roll);
+    qEul(Q[PEL], -leanF * .45 - crouchS * .12 + airF * .15, hipYaw + yawSw, roll);
     // reach clamp: pelvis drops so both planted ankles are reachable (never slide the feet)
-    const Lmax = (A.lT + A.lS) * .995;
-    let minDy = 0;
+    const Lmax = (A.lT + A.lS) * .955;       // the knee stays bent: near full extension a tiny move of the ankle swings its angle by tens of degrees
+    let minDy = 0; const dropMax = -.17 * sy;
     for (let fi = 0; fi < 2; fi++) { const f = feet[fi];
       hipW.copy(f.side < 0 ? OFF[THL] : OFF[THR]).applyQuaternion(Q[PEL]).add(P[PEL]);
       const hx = f.ankle.x - hipW.x, hz = f.ankle.z - hipW.z, h2 = hx * hx + hz * hz;
       const need = f.ankle.y + Math.sqrt(Math.max(Lmax * Lmax - h2, .01)) - hipW.y;
+      if (need < dropMax && !f.swing && grounded) startSwing(f);       // too far to reach: the foot steps instead of pulling the hips to the floor
       if (need < minDy) minDy = need;
     }
-    P[PEL].y += minDy;
+    if (minDy < dropMax) minDy = dropMax;
+    minDy *= 1 - airF;
+    // follows at once when a planted foot needs it (a foot never slides), recovers smoothly when it no longer does
+    pelDrop = minDy < pelDrop ? minDy : damp(pelDrop, minDy, 11, dt);
+    P[PEL].y += pelDrop;
     pelYPrev = P[PEL].y;
 
     // ---- torso
@@ -966,6 +1007,15 @@ export function createSoldier(scene, opts = {}) {
       fk(th);
       _v6.set(0, 0, -1).applyQuaternion(f.q); _v7.set(0, 0, -1).applyQuaternion(Q[PEL]);
       pole.copy(_v6).add(_v7).addScaledVector(_v7, crouchS); pole.x += f.side * .12; pole.y = 0;
+      { // a free leg eases toward full reach and folds at a bounded speed: no knee snap as it comes through
+        const l1 = A.lT, l2 = A.lS, L = l1 + l2, s0 = L * .9, s1 = L * .985, l12 = l1 * l1 + l2 * l2, l3 = 2 * l1 * l2; _v4.subVectors(f.ankle, P[th]); const d = _v4.length();
+        if ((f.swing || !grounded) && d > 1e-4) {
+          let ds = d > s0 ? s0 + (s1 - s0) * (1 - Math.exp(-(d - s0) / (s1 - s0))) : d, a = Math.acos(clamp((l12 - ds * ds) / l3, -1, 1));
+          if (f.kneeOk && dt > 0) { const m = KNEE_RATE * dt, e = a - f.knee; if (e > m || e < -m) { a = f.knee + (e > 0 ? m : -m); ds = Math.sqrt(Math.max(l12 - l3 * Math.cos(a), 1e-4)); } }
+          f.ankle.copy(P[th]).addScaledVector(_v4, ds / d); f.knee = a;
+        } else { const dc = Math.min(d, L * .9995); f.knee = Math.acos(clamp((l12 - dc * dc) / l3, -1, 1)); }
+        f.kneeOk = true;
+      }
       ik2(P[th], A.lT, A.lS, f.ankle, pole, knee, ankleOut);
       frameQ(Q[th], knee.x - P[th].x, knee.y - P[th].y, knee.z - P[th].z, pole.x, pole.y, pole.z, BT_LEG_IK);
       frameQ(Q[sh], ankleOut.x - knee.x, ankleOut.y - knee.y, ankleOut.z - knee.z, pole.x, pole.y, pole.z, BT_LEG_IK);
@@ -1262,10 +1312,14 @@ export function createSoldier(scene, opts = {}) {
   // --------------------------------------------------------------- public API
   const s = {
     root, mesh, skeleton, bones, kind, type: sub, dead: false,
+    /** Number of foot contacts so far (a swinging foot touching down while walking): the engine plays the footstep on each new one. */
+    get contacts() { return contacts; },
+    /** Ground lookup for foot placement on steps: fn(x, y, z) -> height of the highest surface at or just above y. */
+    setGround(fn) { groundFn = typeof fn === 'function' ? fn : null; },
     update(dt, st) {
       st = st || lst;
       const rawDt = fin(dt, 0) > 0 ? dt : 0, cdt = Math.min(rawDt, .05);
-      lst.vx = fin(st.vx, 0); lst.vz = fin(st.vz, 0); lst.yaw = fin(st.yaw, yawS); lst.aimPitch = fin(st.aimPitch, 0); lst.grounded = st.grounded !== false; lst.crouch = fin(st.crouch, 0);
+      lst.vx = fin(st.vx, 0); lst.vz = fin(st.vz, 0); lst.yaw = fin(st.yaw, yawS); lst.aimPitch = fin(st.aimPitch, 0); lst.grounded = st.grounded !== false; lst.crouch = fin(st.crouch, 0); lst.y = fin(st.y, root.position.y);
       if (dead) { updateRagdoll(rawDt); return; }
       if (!root.visible) { needSnap = true; return; }
       poseAlive(cdt, rawDt, lst);
@@ -1326,7 +1380,7 @@ export function createSoldier(scene, opts = {}) {
     respawn() {
       dead = false; s.dead = false; sleeping = false; needSnap = true;
       recP = recV = flP = flPV = flR = flRV = flY = flYV = flH = flHV = landY = landV = 0; relT = -1; atkT = -1; actT = -1;
-      velX = velZ = 0; phase = 0; airB = 0; airTime = 0; hipYaw = 0; leanF = leanR = 0;
+      velX = velZ = 0; phase = 0; airB = 0; airF = 0; airTuck = 1; airTime = 0; hipYaw = 0; leanF = leanR = 0;
       yawS = lst.yaw; root.rotation.set(0, yawS, 0);
       poseAlive(1 / 60, 0, lst);
     },

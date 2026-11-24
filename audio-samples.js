@@ -1,15 +1,16 @@
 // FRONT ZÉRO recorded weapon sounds: real shots and weapon handling from the CC0 "Free Firearm Sound Library"
 // (see sounds/LICENSE.txt), laid over the procedural engine in audio.js.
 //
-// audio.js loads this module lazily after unlock() and asks it first for every shot, reload stage and dry fire.
-// Each lookup answers false until the files it needs are fetched and decoded, and audio.js then plays its own synthesis,
-// so a missing module, manifest or file never silences a weapon. Nothing here needs a secure origin, and the sounds
-// folder is found next to this module, wherever the game is served from.
+// audio.js loads this module lazily after unlock() and asks it first for every shot, and only it for handling.
+// A shot not decoded yet falls back to the procedural gun in audio.js. Handling (reloads, dry fire, gear, knife, grenade) has
+// no synthesized fallback: until its file is decoded, or for a stage nobody knows, it is silent. Nothing here needs a
+// secure origin, and the sounds folder is found next to this module, wherever the game is served from.
 //
 // sounds/manifest.json maps game events to files:
 //   events['shot:<weapon>']            {near, mid, far}  -> 'set/layer' in manifest.shots
 //   events['reload:<stage>:<weapon>']  {from, rate}      -> 'family/stage' in manifest.handling
 //   events['dry:<weapon>']             {from, rate}
+//   common[<stage>]                    {from, rate, gain, core}  any weapon: gear (core) and a neutral take per stage
 // near = microphones next to the muzzle (the player's own shots), mid and far = the same weapon recorded from a distance
 // (everyone else; audio.js still applies its distance filter, delay, pan and reverb sends on top).
 
@@ -97,9 +98,11 @@ export function createSampleBank(opts = {}) {
   function filesOf(id) {
     const out = [], ev = manifest.events, shot = ev['shot:' + id];
     const add = (list) => { if (list) for (const e of list) if (!out.includes(e[0])) out.push(e[0]); };
-    if (shot) add(entries(shot.near, manifest.shots));
+    // handling first: it has no synthesized stand-in, so a file that is not ready is a silent reload
     const tail = ':' + id;
     for (const k of Object.keys(ev)) if (k.endsWith(tail) && k !== 'shot:' + id) add(entries(ev[k].from, manifest.handling));
+    for (const c of Object.values(manifest.common || {})) if (c.core) add(entries(c.from, manifest.handling));
+    if (shot) add(entries(shot.near, manifest.shots));
     if (shot) { add(entries(shot.mid, manifest.shots)); add(entries(shot.far, manifest.shots)); }
     return out;
   }
@@ -188,13 +191,16 @@ export function createSampleBank(opts = {}) {
   }
   function handling(id, stage) {
     if (!manifest || !enabled) return null;
+    if (typeof stage !== 'string') return null;
     const wid = typeof id === 'string' ? id : ownId;                     // a named weapon is never replaced by another one
-    if (!wid || !manifest.weapons[wid]) return null;
-    const ev = manifest.events[stage === 'dry' ? 'dry:' + wid : 'reload:' + stage + ':' + wid];
+    const known = wid && Object.hasOwn(manifest.weapons, wid);
+    const own = known ? manifest.events[stage === 'dry' ? 'dry:' + wid : 'reload:' + stage + ':' + wid] : null;
+    // the weapon's own recording, else the neutral one for that stage; a stage in neither table stays silent
+    const ev = own || (manifest.common && Object.hasOwn(manifest.common, stage) ? manifest.common[stage] : null);
     if (!ev) return null;
     const list = entries(ev.from, manifest.handling);
     const t = list && take(ev.from, list);
-    if (!t) { prime(wid); return null; }
+    if (!t) { if (known) prime(wid); return null; }
     return { buffer: buffers.get(t[0][0]), rate: ev.rate || 1, gain: manifest.mix[stage === 'dry' ? 'dry' : 'handling'] * (ev.gain || 1) * level(t[0][1], manifest.targets.handling) * rand(.9, 1) };
   }
 
@@ -245,10 +251,10 @@ export function createSampleBank(opts = {}) {
     return true;
   }
   // Reload stage or dry fire ('dry') of weapon id (the weapon the player fired last when id is not given).
-  function hand(play, id, stage, opt) {
+  function hand(play, id, stage, opt, cat = 'reload') {
     const sm = handling(id, stage);
     if (!sm) return false;
-    if (play('reload', sm.buffer, Object.assign({}, opt, { gain: opt.gain * sm.gain, rate: opt.rate * sm.rate }))) plays[stage === 'dry' ? 'dry' : 'handling']++;
+    if (play(cat, sm.buffer, Object.assign({}, opt, { gain: opt.gain * sm.gain, rate: opt.rate * sm.rate }))) plays[stage === 'dry' ? 'dry' : 'handling']++;
     return true;
   }
 

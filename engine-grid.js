@@ -103,6 +103,13 @@ export function createGrid(cell = 4) {
   return g;
 }
 
+/** Eases the visual step offset back to zero with a critically damped spring: position and speed stay continuous across stairs, at any frame rate. */
+export function settleStep(b, dt, w = 17) {
+  const x = b.stepOff, v = b.stepV || 0, e = Math.exp(-w * dt), j = (v + w * x) * dt;
+  b.stepOff = (x + j) * e; b.stepV = (v - w * j) * e;
+  if (Math.abs(b.stepOff) < 5e-4 && Math.abs(b.stepV) < 5e-3) { b.stepOff = 0; b.stepV = 0; }
+}
+
 /** Character mover on AABB solids. Body: {pos:{x,y,z}, r, h, vy, grounded, ground, stepOff, ceil}. */
 export function createMover(g) {
   const A = [], B = [];
@@ -116,7 +123,7 @@ export function createMover(g) {
     const p = b.pos, r = b.r, up = c.y1 - p.y;
     const a0 = p.x + r - c.x0, a1 = c.x1 - (p.x - r), b0 = p.z + r - c.z0, b1 = c.z1 - (p.z - r);
     const m = Math.min(a0, a1, b0, b1);
-    if (up <= m && up < 1 && !blocked(p.x, c.y1, p.z, r, b.h)) { p.y = c.y1; if (b.vy < 0) b.vy = 0; b.grounded = true; b.ground = c; return; }
+    if (up <= m && up < 1 && !blocked(p.x, c.y1, p.z, r, b.h)) { if (up > 0) b.stepOff += up; p.y = c.y1; if (b.vy < 0) b.vy = 0; b.grounded = true; b.ground = c; return; }
     if (m === a0) p.x = c.x0 - r - EPS; else if (m === a1) p.x = c.x1 + r + EPS; else if (m === b0) p.z = c.z0 - r - EPS; else p.z = c.z1 + r + EPS;
   }
   function axis(b, ax, d) {
@@ -146,7 +153,7 @@ export function createMover(g) {
     const n = g.boxQuery(p.x - r, p.x + r, p.z - r, p.z + r, A);
     for (let i = 0; i < n; i++) {
       const c = A[i]; if (!ov(p, r, h, c)) continue;
-      if (dy <= 0 && prev >= c.y1 - STEP_H - EPS) { p.y = c.y1; if (b.vy < 0) b.vy = 0; b.grounded = true; b.ground = c; }
+      if (dy <= 0 && prev >= c.y1 - STEP_H - EPS) { if (c.y1 > prev) b.stepOff += c.y1 - prev; p.y = c.y1; if (b.vy < 0) b.vy = 0; b.grounded = true; b.ground = c; }
       else if (dy > 0 && prev + h <= c.y0 + 0.06) { p.y = c.y0 - h - EPS; if (b.vy > 0) b.vy = 0; b.ceil = true; }
       else depen(b, c);
     }

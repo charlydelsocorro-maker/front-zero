@@ -9,12 +9,14 @@ const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const mix = (a, b, t) => a + (b - a) * t;
 const seg = (a, b, t) => { const k = sat((t - a) / (b - a)); return k * k * (3 - 2 * k); };
 const V = (u, v, x = 0) => new THREE.Vector3(x, v, -u);
+const mj = k => k <= 0 ? 0 : k >= 1 ? 1 : k * k * k * (k * (6 * k - 15) + 10);      // minimum-jerk reach: zero velocity and acceleration at both ends
 
 class Spring {
   constructor(k, damp) { this.k = k; this.c = 2 * damp * Math.sqrt(k); this.x = 0; this.v = 0; }
   step(dt, target = 0) {
-    this.v += (-this.k * (this.x - target) - this.c * this.v) * dt;
-    this.x += this.v * dt;
+    /* fixed small sub-steps: the same response at 30, 60 and 144 fps */
+    const n = dt > 0 ? Math.min(16, Math.ceil(dt * 240)) : 0, h = n ? dt / n : 0;
+    for (let i = 0; i < n; i++) { this.v += (-this.k * (this.x - target) - this.c * this.v) * h; this.x += this.v * h; }
     if (!Number.isFinite(this.x) || !Number.isFinite(this.v)) { this.x = target; this.v = 0; }
     return this.x;
   }
@@ -493,49 +495,56 @@ function pouchPose(ref) {
   return { p: new THREE.Vector3(-.31, -.44, .03), q, f: new Float32Array([.85, .9, .95, .95, .6]) };
 }
 
-/* ---------- reload / action scripts ---------- */
+/* ---------- reload / action scripts ----------
+   lh / rh tracks: keyed poses, travelled with a minimum-jerk reach on a curved path (see samplePose).
+   attach: [t0, t1] the magazine rides rigidly in the left hand. drop: [t0, t1] the old one is let go at t0 and falls,
+   the hand is empty until it reaches the pouch at t1. Stage times in ev sit on the visible contact. */
+const magSwap = (P, tReach, tOut, tP0, tP1, tIn, tTap) => [
+  [tReach, P.mag], [tOut, P.mag], [tOut + .042, P.magLow], [tP0, P.pouch], [tP1, P.pouch],
+  [tIn - .04, P.magLow], [tIn, P.mag], [tTap - .022, P.magTap], [tTap, P.mag],
+];
 function magReload(w, empty) {
-  const P = w.poses, h = w.cfg.handle || .07, side = !!w.cfg.sideCharge;
+  const P = w.poses, h = w.cfg.handle || .07;
   if (!empty) return {
-    ev: [[.2, 'magOut'], [.66, 'magIn']], attach: [.2, .66], tilt: [.07, .12, .34],
-    lh: [[0, P.rest], [.13, P.mag], [.2, P.mag], [.42, P.pouch], [.5, P.pouch], [.66, P.mag], [.73, P.mag], [.92, P.rest], [1, P.rest]],
+    ev: [[.2, 'magOut'], [.41, 'pouch'], [.66, 'magIn'], [.73, 'magTap']], attach: [.2, .66], tilt: [.07, .12, .34],
+    lh: [[0, P.rest], ...magSwap(P, .13, .2, .41, .44, .66, .73), [.92, P.rest], [1, P.rest]],
     run(a, t) { a.magSeat = seg(.62, .67, t) * (1 - seg(.67, .74, t)); },
   };
   return {
-    ev: [[.13, 'magOut'], [.49, 'magIn'], [.71, 'boltBack'], [.8, 'boltForward']], attach: [.13, .49], tilt: [.08, .14, .38],
-    lh: [[0, P.rest], [.08, P.mag], [.13, P.mag], [.3, P.pouch], [.36, P.pouch], [.49, P.mag], [.54, P.mag], [.63, P.charge], [.66, P.charge], [.74, P.charge], [.8, P.charge], [.94, P.rest], [1, P.rest]],
+    ev: [[.13, 'magOut'], [.285, 'pouch'], [.49, 'magIn'], [.55, 'magTap'], [.71, 'boltBack'], [.8, 'boltForward']], attach: [.13, .49], drop: [.18, .285], tilt: [.08, .14, .38],
+    lh: [[0, P.rest], ...magSwap(P, .08, .13, .285, .305, .49, .55), [.63, P.charge], [.8, P.charge], [.94, P.rest], [1, P.rest]],
     run(a, t) {
       a.magSeat = seg(.45, .495, t) * (1 - seg(.495, .55, t));
-      const pull = seg(.66, .72, t) * (1 - seg(.8, .83, t));
-      a.handle = pull; a.bolt = t < .8 ? 1 : 1 - seg(.8, .83, t); a.lhZ = pull * h * (side ? 1 : 1);
+      const pull = seg(.66, .72, t) * (1 - seg(.8, .825, t));
+      a.handle = pull; a.bolt = seg(0, .05, t) * (1 - seg(.8, .83, t)); a.lhZ = pull * h;
     },
   };
 }
 function pistolReload(w, empty) {
   const P = w.poses;
   if (!empty) return {
-    ev: [[.2, 'magOut'], [.68, 'magIn']], attach: [.2, .68], tilt: [.16, .14, -.3],
-    lh: [[0, P.rest], [.14, P.mag], [.2, P.mag], [.42, P.pouch], [.5, P.pouch], [.68, P.mag], [.74, P.mag], [.92, P.rest], [1, P.rest]],
+    ev: [[.2, 'magOut'], [.41, 'pouch'], [.68, 'magIn'], [.75, 'magTap']], attach: [.2, .68], tilt: [.16, .14, -.3],
+    lh: [[0, P.rest], ...magSwap(P, .14, .2, .41, .44, .68, .75), [.92, P.rest], [1, P.rest]],
     run(a, t) { a.magSeat = seg(.64, .69, t) * (1 - seg(.69, .76, t)); },
   };
   return {
-    ev: [[.14, 'magOut'], [.5, 'magIn'], [.72, 'slideBack'], [.81, 'slideForward']], attach: [.14, .5], tilt: [.17, .15, -.32],
-    lh: [[0, P.rest], [.09, P.mag], [.14, P.mag], [.3, P.pouch], [.36, P.pouch], [.5, P.mag], [.55, P.mag], [.65, P.charge], [.68, P.charge], [.74, P.charge], [.8, P.charge], [.94, P.rest], [1, P.rest]],
+    ev: [[.14, 'magOut'], [.29, 'pouch'], [.5, 'magIn'], [.56, 'magTap'], [.72, 'slideBack'], [.81, 'slideForward']], attach: [.14, .5], drop: [.19, .29], tilt: [.17, .15, -.32],
+    lh: [[0, P.rest], ...magSwap(P, .09, .14, .29, .31, .5, .56), [.65, P.charge], [.8, P.charge], [.94, P.rest], [1, P.rest]],
     run(a, t) {
       a.magSeat = seg(.46, .505, t) * (1 - seg(.505, .56, t));
-      const lock = 1, rack = seg(.68, .73, t) * (1 - seg(.8, .83, t));
-      a.slide = t < .68 ? .86 * lock : t < .8 ? mix(.86, 1, rack) : .86 * (1 - seg(.8, .83, t));
-      a.lhZ = rack * .022;
+      const rack = seg(.68, .73, t);
+      a.slide = (.86 * seg(0, .05, t) + .14 * rack) * (1 - seg(.805, .83, t));
+      a.lhZ = rack * (1 - seg(.8, .83, t)) * .022;
     },
   };
 }
 function shotgunReload(w, empty) {
   const P = w.poses, n = empty ? 4 : 2, start = .07, end = empty ? .72 : .9, step = (end - start) / n;
-  const ev = [], lh = [[0, P.rest]], ports = new Float32Array(n);
+  const ev = [], lh = [[0, P.rest]], ports = new Float32Array(n), near = shiftPose(P.port, -.035, -.022);
   for (let i = 0; i < n; i++) {
     const a = start + step * i;
-    lh.push([a + step * .12, P.pouch], [a + step * .32, P.pouch], [a + step * .72, P.port], [a + step * .86, P.port]);
-    ports[i] = a + step * .76; ev.push([ports[i], 'shell']);
+    lh.push([a + step * .2, P.pouch], [a + step * .3, P.pouch], [a + step * .65, near], [a + step * .76, P.port], [a + step * .85, P.port]);
+    ports[i] = a + step * .76; ev.push([a + step * .2, 'pouch'], [ports[i], 'shell']);       // shell time unchanged: the engine credits one round on it
   }
   if (empty) {
     lh.push([.79, P.rest], [1, P.rest]); ev.push([.84, 'pump'], [.86, '$eject0']);
@@ -545,24 +554,24 @@ function shotgunReload(w, empty) {
     run(a, t) {
       a.heldShell = 0;
       for (let i = 0; i < n; i++) {
-        const s = start + step * i;
-        if (t >= s + step * .28 && t < ports[i]) a.heldShell = 1;
-        if (t >= ports[i] && t < ports[i] + step * .1) a.shellPush = 1 - (t - ports[i]) / (step * .1);
+        const s = start + step * i, p = ports[i];
+        if (t >= s + step * .26 && t < p) a.heldShell = 1;
+        a.lhZ += -.02 * seg(p - step * .07, p, t) * (1 - seg(p, p + step * .14, t));       // the thumb pushes the shell home
       }
       if (empty) a.pump = seg(.8, .86, t) * (1 - seg(.88, .95, t));
     },
   };
 }
 function lmgReload(w) {
-  const P = w.poses, h = w.cfg.handle;
+  const P = w.poses, h = w.cfg.handle, over = shiftPose(P.charge, 0, .07, -.075);
   return {
-    ev: [[.09, 'boltBack'], [.28, 'magOut'], [.6, 'magIn'], [.91, 'boltForward']], attach: [.28, .6], tilt: [.06, .1, .3],
-    lh: [[0, P.rest], [.05, P.charge], [.07, P.charge], [.11, P.charge], [.17, P.coverHand], [.24, P.coverHand], [.28, P.mag], [.31, P.mag], [.44, P.pouch], [.5, P.pouch], [.6, P.mag], [.65, P.mag], [.72, P.coverHand], [.84, P.coverHand], [.88, P.charge], [.93, P.charge], [.98, P.rest], [1, P.rest]],
+    ev: [[.09, 'boltBack'], [.31, 'magOut'], [.445, 'pouch'], [.6, 'magIn'], [.65, 'magTap'], [.91, 'boltForward']], attach: [.31, .6], tilt: [.06, .1, .3],
+    lh: [[0, P.rest], [.034, over], [.06, P.charge], [.11, P.charge], [.17, P.coverHand], [.24, P.coverHand], ...magSwap(P, .28, .31, .445, .465, .6, .65), [.72, P.coverHand], [.84, P.coverHand], [.88, P.charge], [.925, P.charge], [.95, over], [.985, P.rest], [1, P.rest]],
     run(a, t) {
       const pull = seg(.07, .1, t) * (1 - seg(.13, .16, t)) + seg(.88, .905, t) * (1 - seg(.91, .94, t));
-      a.handle = pull; a.lhZ = pull * h; a.bolt = Math.max(pull, t > .1 && t < .91 ? 1 : 0);
+      a.handle = pull; a.lhZ = pull * h; a.bolt = Math.max(pull, seg(.08, .1, t) * (1 - seg(.905, .925, t)));
       a.cover = seg(.17, .25, t) * (1 - seg(.76, .85, t));
-      a.beltAttach = t > .28 && t < .66 ? 1 : 0;
+      a.beltAttach = t > .31 && t < .66 ? 1 : 0;
       a.magSeat = seg(.57, .605, t) * (1 - seg(.605, .66, t));
     },
   };
@@ -574,13 +583,13 @@ function sniperReload(w, empty) {
     a.boltRot = up; a.bolt = back; a.rhZ = back;
   };
   if (!empty) return {
-    ev: [[.22, 'magOut'], [.68, 'magIn']], attach: [.22, .68], tilt: [.07, .12, .34],
-    lh: [[0, P.rest], [.14, P.mag], [.22, P.mag], [.42, P.pouch], [.5, P.pouch], [.68, P.mag], [.74, P.mag], [.92, P.rest], [1, P.rest]],
+    ev: [[.22, 'magOut'], [.42, 'pouch'], [.68, 'magIn'], [.75, 'magTap']], attach: [.22, .68], tilt: [.07, .12, .34],
+    lh: [[0, P.rest], ...magSwap(P, .14, .22, .42, .45, .68, .75), [.92, P.rest], [1, P.rest]],
     run(a, t) { a.magSeat = seg(.64, .69, t) * (1 - seg(.69, .76, t)); },
   };
   return {
-    ev: [[.12, 'boltBack'], [.27, 'magOut'], [.58, 'magIn'], [.79, 'boltForward']], attach: [.27, .58], tilt: [.07, .12, .32],
-    lh: [[0, P.rest], [.19, P.mag], [.27, P.mag], [.4, P.pouch], [.46, P.pouch], [.58, P.mag], [.64, P.mag], [.82, P.rest], [1, P.rest]],
+    ev: [[.12, 'boltBack'], [.27, 'magOut'], [.4, 'pouch'], [.58, 'magIn'], [.635, 'magTap'], [.79, 'boltForward']], attach: [.27, .58], drop: [.325, .4], tilt: [.07, .12, .32],
+    lh: [[0, P.rest], ...magSwap(P, .19, .27, .4, .42, .58, .635), [.82, P.rest], [1, P.rest]],
     rh: [[0, P.grip], [.07, P.boltHand], [.84, P.boltHand], [.95, P.grip], [1, P.grip]],
     run(a, t) { bolt(a, t, .07, .15, .7, .85); a.magSeat = seg(.54, .585, t) * (1 - seg(.585, .65, t)); },
   };
@@ -832,14 +841,14 @@ function buildREV(k) {
 function revolverReload(w) {
   const P = w.poses;
   return {
-    ev: [[.11, 'cylOpen'], [.26, 'cylEject'], [.265, '$drop'], [.275, '$drop'], [.285, '$drop'], [.295, '$drop'], [.305, '$drop'], [.315, '$drop'], [.66, 'cylLoad'], [.85, 'cylClose']],
+    ev: [[.11, 'cylOpen'], [.26, 'cylEject'], [.265, '$drop'], [.275, '$drop'], [.285, '$drop'], [.295, '$drop'], [.305, '$drop'], [.315, '$drop'], [.46, 'pouch'], [.66, 'cylLoad'], [.85, 'cylClose']],
     attach: null, tilt: [0, .12, .5],
     lh: [[0, P.rest], [.07, P.crane], [.13, P.crane], [.21, P.rod], [.33, P.rod], [.42, P.pouch], [.5, P.pouch], [.63, P.load], [.71, P.load], [.79, P.crane], [.87, P.crane], [.96, P.rest], [1, P.rest]],
     run(a, t) {
       a.cyl = seg(.09, .16, t) * (1 - seg(.82, .88, t));
       a.rod = seg(.23, .265, t) * (1 - seg(.29, .34, t)); a.lhZ = a.rod * .024 + seg(.63, .665, t) * (1 - seg(.67, .72, t)) * -.02;
       a.rigRX = .5 * seg(.14, .22, t) * (1 - seg(.33, .43, t)) - .26 * seg(.46, .58, t) * (1 - seg(.74, .84, t));
-      a.held = t > .46 && t < .665 ? 1 : 0;
+      a.held = t > .49 && t < .665 ? 1 : 0;
     },
   };
 }
@@ -1100,29 +1109,29 @@ function buildDBS(k) {
     poses: P => ({ port: sidePose(-.06, .05, -.03, [.7, .75, .8, .8, .5]) }),
     post(w) { nest(w, 'rims', 'barrels'); },
     scripts: w => ({ tac: breakReload(w, false), empty: breakReload(w, true) }),
-    animate(w, a) { w.parts.barrels.rotation.x = -a.brk * .52; w.parts.rims.visible = !a.rod; },
+    animate(w, a) { w.parts.barrels.rotation.x = -a.brk * .52; w.parts.rims.visible = a.rod < .5; },
   };
 }
 function breakReload(w, empty) {
-  const P = w.poses, n = empty ? 2 : 1, s0 = .2, s1 = .82, step = (s1 - s0) / n, ports = new Float32Array(n);
+  const P = w.poses, n = empty ? 2 : 1, s0 = .2, s1 = .82, step = (s1 - s0) / n, ports = new Float32Array(n), near = shiftPose(P.port, -.05, .03);
   const ev = [[.08, 'breakOpen'], [.13, '$eject0']], lh = [[0, P.rest], [.14, P.rest]];
   if (empty) ev.push([.15, '$eject0']);
   for (let i = 0; i < n; i++) {
     const a = s0 + step * i;
-    lh.push([a + step * .1, P.pouch], [a + step * .3, P.pouch], [a + step * .7, P.port], [a + step * .88, P.port]);
-    ports[i] = a + step * .76; ev.push([ports[i], 'shell']);
+    lh.push([a + step * .2, P.pouch], [a + step * .3, P.pouch], [a + step * .64, near], [a + step * .76, P.port], [a + step * .85, P.port]);
+    ports[i] = a + step * .76; ev.push([a + step * .2, 'pouch'], [ports[i], 'shell']);
   }
-  lh.push([.88, P.rest], [1, P.rest]); ev.push([.92, 'breakClose']);
+  lh.push([.9, P.rest], [1, P.rest]); ev.push([.92, 'breakClose']);
   return {
     ev, lh, attach: null, tilt: [.1, .12, .4],
     run(a, t) {
       a.brk = seg(.04, .12, t) * (1 - seg(.88, .94, t));
-      if (t < .16 || t > .86) a.lhY = -a.brk * .05;
+      a.lhY = -a.brk * .05 * (1 - seg(.14, .2, t) * (1 - seg(.86, .9, t)));       // the support hand rides the barrels down, then lets go
       a.heldShell = 0; a.rod = t > .13 && t < ports[n - 1] ? 1 : 0;        // rod = chambers shown empty
       for (let i = 0; i < n; i++) {
-        const s = s0 + step * i;
-        if (t >= s + step * .26 && t < ports[i]) a.heldShell = 1;
-        if (t >= ports[i] && t < ports[i] + step * .1) a.lhZ = -.02 * (1 - (t - ports[i]) / (step * .1));
+        const s = s0 + step * i, p = ports[i];
+        if (t >= s + step * .26 && t < p) a.heldShell = 1;
+        a.lhZ += -.02 * seg(p - step * .06, p, t) * (1 - seg(p, p + step * .12, t));
       }
     },
   };
@@ -1168,8 +1177,8 @@ function buildMINI(k) {
 function miniReload(w) {
   const P = w.poses;
   return {
-    ev: [[.14, 'magOut'], [.6, 'magIn'], [.8, 'boltForward']], attach: [.14, .6], tilt: [.16, .16, .5],
-    lh: [[0, P.rest], [.08, P.mag], [.14, P.mag], [.3, P.pouch], [.42, P.pouch], [.6, P.mag], [.66, P.mag], [.76, P.charge], [.83, P.charge], [.94, P.rest], [1, P.rest]],
+    ev: [[.14, 'magOut'], [.31, 'pouch'], [.6, 'magIn'], [.66, 'magTap'], [.8, 'boltForward']], attach: [.14, .6], tilt: [.16, .16, .5],
+    lh: [[0, P.rest], ...magSwap(P, .08, .14, .31, .34, .6, .66), [.75, P.charge], [.83, P.charge], [.94, P.rest], [1, P.rest]],
     run(a, t) { a.magSeat = seg(.56, .605, t) * (1 - seg(.605, .66, t)); a.lhY = -.012 * seg(.78, .8, t) * (1 - seg(.8, .84, t)); a.rigY = .05 * seg(0, .1, t) * (1 - seg(.9, 1, t)); },
   };
 }
@@ -1267,7 +1276,7 @@ function buildRL(k) {
 function rocketReload(w) {
   const P = w.poses;
   return {
-    ev: [[.64, 'rocketIn'], [.8, 'rocketLock']], attach: [.3, .665], tilt: [-.12, .42, .26], wob: t => 1 - seg(.4, .5, t),
+    ev: [[.2, 'pouch'], [.64, 'rocketIn'], [.8, 'rocketLock']], attach: [.3, .665], tilt: [-.12, .42, .26],
     lh: [[0, P.rest], [.14, P.pouch], [.3, P.pouch], [.5, P.magOut], [.55, P.magOut], [.665, P.mag], [.72, P.mag], [.8, P.mag], [.92, P.rest], [1, P.rest]],
     run(a, t) {
       const e = seg(0, .14, t) * (1 - seg(.82, 1, t));
@@ -1320,8 +1329,8 @@ function glReload(w) {
   const ev = [[.11, 'cylOpen']], lh = [[0, P.rest], [.06, P.crane], [.15, P.crane]];
   for (let i = 0; i < n; i++) {
     const a = s0 + step * i;
-    lh.push([a - step * .1, P.pouch], [a + step * .14, P.pouch], [a + step * .6, P.load], [a + step * .78, P.load]);
-    ins[i] = a + step * .66; ev.push([ins[i], 'grenadeIn']);
+    lh.push([a + step * .16, P.pouch], [a + step * .24, P.pouch], [a + step * .6, P.load], [a + step * .76, P.load]);
+    ins[i] = a + step * .66; ev.push([a + step * .16, 'pouch'], [ins[i], 'grenadeIn']);
   }
   lh.push([.88, P.crane], [.94, P.crane], [.985, P.rest], [1, P.rest]); ev.push([.92, 'cylClose']);
   return {
@@ -1330,8 +1339,8 @@ function glReload(w) {
       a.cyl = seg(.09, .17, t) * (1 - seg(.88, .94, t));
       a.held = 0; a.rod = 0;
       for (let i = 0; i < n; i++) {
-        if (t > s0 + step * (i + .04) && t < ins[i]) a.held = 1;
-        if (t >= ins[i] && t < ins[i] + step * .12) a.lhZ = -.022 * (1 - (t - ins[i]) / (step * .12));
+        if (t > s0 + step * (i + .2) && t < ins[i]) a.held = 1;
+        a.lhZ += -.022 * seg(ins[i] - step * .06, ins[i], t) * (1 - seg(ins[i], ins[i] + step * .14, t));
         a.rod += seg(ins[i] + step * .1, ins[i] + step * .3, t) * Math.PI / 3 * 2;      // the open drum is turned to the next pair of chambers
       }
     },
@@ -1394,8 +1403,8 @@ const _fwdZ = new THREE.Vector3(0, 0, 1), _el = new THREE.Vector3(), _qi = new T
 function xbowReload(w) {
   const P = w.poses, pull = XB.rest - XB.latch - .01;
   return {
-    ev: [[.15, 'stringDraw'], [.44, 'stringLatch'], [.76, 'boltPlace']], attach: [.58, .765], tilt: [.1, .1, .26], wob: t => 1 - seg(.62, .72, t),
-    lh: [[0, P.rest], [.1, P.string], [.47, P.string], [.56, P.pouch], [.6, P.pouch], [.75, P.mag], [.8, P.mag], [.94, P.rest], [1, P.rest]],
+    ev: [[.15, 'stringDraw'], [.44, 'stringLatch'], [.585, 'pouch'], [.76, 'boltPlace']], attach: [.6, .765], tilt: [.1, .1, .26],
+    lh: [[0, P.rest], [.1, P.string], [.46, P.string], [.585, P.pouch], [.605, P.pouch], [.75, P.mag], [.8, P.mag], [.94, P.rest], [1, P.rest]],
     run(a, t) {
       a.draw = seg(.15, .43, t);
       if (t < .5) a.lhZ = a.draw * pull * (1 - seg(.45, .5, t));
@@ -1501,6 +1510,7 @@ function buildWeapon(def, mats) {
     poses.boltHand = poseFrom(V(cfg.boltKnob[0] - .062, cfg.boltKnob[1] - .012, cfg.boltKnob[2] + .058), X, Y, [.92, 1.02, 1.1, 1.12, .9]);
   }
   if (cfg.poses) Object.assign(poses, cfg.poses(poses));
+  poses.magLow = shiftPose(poses.mag, 0, -.05); poses.magTap = shiftPose(poses.mag, 0, -.016);
   const w = { def, k, root: k.root, parts: k.parts, anchors: a, cfg, poses, feel: FEEL[def.id], sight: sightP.clone(), scripts: {}, st: { loaded: true, drawn: true, n: 0, rot: 0, rotT: 0, cock: 0, snap: 0 } };
   if (cfg.post) cfg.post(w, mats);
   if (cfg.scripts) Object.assign(w.scripts, cfg.scripts(w));
@@ -1509,6 +1519,8 @@ function buildWeapon(def, mats) {
   else if (def.id === 'lmg') { w.scripts.tac = lmgReload(w); w.scripts.empty = w.scripts.tac; }
   else if (def.id === 'sr') { w.scripts.tac = sniperReload(w, false); w.scripts.empty = sniperReload(w, true); w.scripts.cycle = boltCycle(w); }
   else { w.scripts.tac = magReload(w, false); w.scripts.empty = magReload(w, true); }
+  for (const key in w.scripts) { const v = w.scripts[key]; for (const sc of Array.isArray(v) ? v : [v]) sc.ev.sort((p, q) => p[0] - q[0]); }
+  if (w.parts.mag && (w.scripts.empty && w.scripts.empty.drop)) { w.dropMag = w.parts.mag.clone(true); w.dropMag.visible = false; w.root.add(w.dropMag); }      // prebuilt: same geometry and materials, nothing compiles at first use
   return w;
 }
 
@@ -1539,6 +1551,19 @@ function sleeveGeometry() {
 
 /* ---------- module-level scratch (no per-frame allocation) ---------- */
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _q = new THREE.Quaternion(), _m = new THREE.Matrix4(), _m2 = new THREE.Matrix4(), _m3 = new THREE.Matrix4(), _s = new THREE.Vector3(), _c = new THREE.Color();
+const _q2 = new THREE.Quaternion(), _q3 = new THREE.Quaternion(), _el2 = new THREE.Vector3();
+/* stage -> reaction of the whole weapon [up, pitch, roll, back], applied to the recoil springs */
+const IMPACT = {
+  magOut: [-1.4, -1.1, .9, .2], magIn: [3.6, 2.6, -1.5, 1.2], magTap: [1.5, 1.1, -.5, .5], pouch: [0, 0, 0, 0],
+  boltBack: [.3, .8, .5, 1.6], boltForward: [-.7, -1.3, .6, -1.6], slideBack: [.2, .9, .4, 1.4], slideForward: [-.6, -1.5, .5, -1.5],
+  pump: [.3, .6, .3, 1], shell: [.7, .5, -.3, .5], cylOpen: [.2, .3, 1.1, 0], cylEject: [.6, 1, 0, 0], cylLoad: [.8, .5, -.4, .4], cylClose: [.6, -.5, -1.4, 0],
+  breakOpen: [-1.2, -1.6, .4, .2], breakClose: [2.4, 2.2, -.6, .4], rocketIn: [1, 1, -.4, 1.6], rocketLock: [1.2, .7, -.5, .4],
+  grenadeIn: [.8, .6, -.3, .5], stringDraw: [0, -.6, 0, .6], stringLatch: [.6, .8, -.3, .3], boltPlace: [.5, .4, -.2, .2],
+};
+const HOLSTER = .13;
+/* inertial blending channels: any interrupted motion glides from what was on screen to the new target */
+const IN_KEYS = ['slide', 'bolt', 'boltRot', 'pump', 'cover', 'handle', 'magSeat', 'cyl', 'rod', 'brk', 'draw', 'rigX', 'rigY', 'rigZ', 'rigRX', 'rigRY', 'rigRZ'];
+const IN_RIG = 0, IN_HL = 6, IN_HR = 9, IN_FL = 12, IN_FR = 17, IN_MAG = 22, IN_ANIM = 25, IN_N = IN_ANIM + IN_KEYS.length, IN_W = 26;
 const _up = new THREE.Vector3(0, 1, 0), _e = new THREE.Euler(), _right = new THREE.Vector3(), _fwd = new THREE.Vector3(), _camUp = new THREE.Vector3();
 
 /* ---------- view model ---------- */
@@ -1554,7 +1579,7 @@ export function createViewModel(camera, scene) {
     const g = new THREE.Group(); rig.add(g);
     const palm = new THREE.Mesh(handGeometry(s), mats.glove); palm.frustumCulled = false; g.add(palm);
     const sl = new THREE.Mesh(sleeveGeometry(), mats.sleeve); sl.frustumCulled = false; rig.add(sl);
-    return { s, g, sl, p: new THREE.Vector3(), q: new THREE.Quaternion(), f: new Float32Array(5), from: { p: new THREE.Vector3(), q: new THREE.Quaternion(), f: new Float32Array(5) } };
+    return { s, g, sl, p: new THREE.Vector3(), q: new THREE.Quaternion(), f: new Float32Array(5) };
   };
   const handR = mkHand(1), handL = mkHand(-1);
   const elbowR = new THREE.Vector3(.2, -.42, .36), elbowL = new THREE.Vector3(-.34, -.42, .22);
@@ -1564,6 +1589,41 @@ export function createViewModel(camera, scene) {
   { const a = new THREE.CylinderGeometry(.0105, .0105, .054, 10), b = new THREE.CylinderGeometry(.0112, .0112, .014, 10); b.translate(0, -.03, 0);
     const m1 = new THREE.Mesh(a, new THREE.MeshStandardMaterial({ color: 0x96241d, roughness: .55, fog: false })), m2 = new THREE.Mesh(b, new THREE.MeshStandardMaterial({ color: 0xc79a48, metalness: .9, roughness: .4, envMap: mats.brass.envMap, fog: false }));
     m1.frustumCulled = m2.frustumCulled = false; heldShell.add(m1, m2); heldShell.visible = false; }
+
+  /* hand grenade held in the left hand: prebuilt with the shared materials, so the first throw compiles and allocates nothing */
+  const nadeKit = new Kit({ ...mats, paint: mats.olive }); BUILDERS.frag(nadeKit); nadeKit.build();
+  const nade = nadeKit.root, nadePin = nadeKit.parts.pin, nadePinBase = nadePin.userData.base.clone(), nadeWorld = new THREE.Vector3();
+  nade.position.set(.006, .15, .024); nade.visible = false; handL.g.add(nade);
+  const gkey = (t, px, py, pz, yx, yy, yz, zx, zy, zz, f, hold = false) => {
+    const Y = new THREE.Vector3(yx, yy, yz).normalize(), Z = new THREE.Vector3(zx, zy, zz).normalize(), X = new THREE.Vector3().crossVectors(Y, Z);
+    const k = poseFrom(new THREE.Vector3(px, py, pz), X, Y, f); k.t = t; k.hold = hold; k.m = new THREE.Vector3(); return k;
+  };
+  /* key frames in camera space (seconds after the key press): reach down, grab, bring up, pin, wind up, release at .5, follow through, back */
+  const GK = [
+    gkey(0, -.2, -.24, -.42, .4, .1, -.9, .9, .1, .4, [.8, .85, .9, .9, .5], true),
+    gkey(.15, -.3, -.42, -.22, .12, -.75, -.65, .92, -.12, .36, [.3, .32, .35, .35, .25], true),
+    gkey(.185, -.3, -.43, -.22, .12, -.75, -.65, .92, -.12, .36, [.95, 1, 1.02, 1.02, .75], true),
+    gkey(.3, -.17, -.17, -.37, .34, .72, -.6, .88, -.42, .2, [.95, 1, 1.02, 1.02, .75], true),
+    gkey(.355, -.21, -.15, -.37, .34, .72, -.6, .88, -.42, .2, [.95, 1, 1.02, 1.02, .8]),
+    gkey(.45, -.25, -.03, -.3, .12, .9, .42, .2, .4, -.9, [.95, 1, 1.02, 1.02, .8]),
+    gkey(.5, -.13, .02, -.47, .12, .42, -.9, .1, -.9, -.42, [.7, .72, .75, .75, .5]),
+    gkey(.62, -.02, -.21, -.43, .35, -.5, -.8, .4, -.8, .42, [.25, .28, .3, .3, .2]),
+    gkey(.8, -.17, -.28, -.42, .45, .08, -.88, .88, .1, .45, [.6, .65, .7, .7, .4]),
+    gkey(.95, -.2, -.24, -.42, .4, .1, -.9, .9, .1, .4, [.8, .85, .9, .9, .5], true),
+  ];
+  for (let i = 1; i < GK.length - 1; i++) if (!GK[i].hold) GK[i].m.subVectors(GK[i + 1].p, GK[i - 1].p).divideScalar(GK[i + 1].t - GK[i - 1].t);
+  const NADE_EV = [[.16, 'grenadeGrab'], [.32, 'pinPull'], [.5, 'throw'], [.515, 'spoon']], NADE_END = .95;
+  const gren = { active: false, t: 0, ev: 0, cb: null, thrown: false };
+  const tmpNade = { p: new THREE.Vector3(), q: new THREE.Quaternion(), f: new Float32Array(5) };
+  const sampleNade = (T, out) => {
+    let i = 0; while (i < GK.length - 2 && T >= GK[i + 1].t) i++;
+    const a = GK[i], b = GK[i + 1], h = b.t - a.t, r = sat((T - a.t) / h), r2 = r * r, r3 = r2 * r;
+    const h00 = 2 * r3 - 3 * r2 + 1, h10 = (r3 - 2 * r2 + r) * h, h01 = 3 * r2 - 2 * r3, h11 = (r3 - r2) * h;
+    out.p.set(h00 * a.p.x + h10 * a.m.x + h01 * b.p.x + h11 * b.m.x, h00 * a.p.y + h10 * a.m.y + h01 * b.p.y + h11 * b.m.y, h00 * a.p.z + h10 * a.m.z + h01 * b.p.z + h11 * b.m.z);
+    const k = r2 * (3 - 2 * r); out.q.slerpQuaternions(a.q, b.q, k);
+    for (let j = 0; j < 5; j++) out.f[j] = mix(a.f[j], b.f[j], k);
+  };
+  const stopNade = () => { gren.active = false; gren.cb = null; nade.visible = false; inMark = true; };
 
   /* muzzle flash + light */
   const flashTex = flashTexture();
@@ -1616,20 +1676,60 @@ export function createViewModel(camera, scene) {
   const clearAnim = () => { for (const key in anim) anim[key] = 0; };
   const tmpPose = { p: new THREE.Vector3(), q: new THREE.Quaternion(), f: new Float32Array(5) };
   const action = { s: null, t: 0, dur: 1, idx: 0, kind: '' };
-  let time = Math.random() * 10, bob = 0, bobAmt = 0, wasGrounded = true, cyc = 1, raise = 1, recover = 0, lastSign = 1, trigger = 0;
+  let time = Math.random() * 10, bob = 0, bobAmt = 0, wasGrounded = true, cyc = 1, raise = 1, lastSign = 1, trigger = 0, sprintK = 0, sleeveK = 0;
   let spinT = 0, spinV = 0, spinKick = 0;
 
+  /* inertial blending */
+  const inX = new Float32Array(IN_N), inV = new Float32Array(IN_N), inLast = new Float32Array(IN_N), inLastV = new Float32Array(IN_N);
+  const qOffL = new THREE.Quaternion(), qOffR = new THREE.Quaternion(), qOffM = new THREE.Quaternion(), qLastL = new THREE.Quaternion(), qLastR = new THREE.Quaternion(), qLastM = new THREE.Quaternion();
+  let inMark = false, inFresh = true, inNow = false, inDt = 0, inE = 1, qW = 0, qWv = 0;
+  const ch = (i, cur) => {
+    if (inFresh) { inX[i] = inV[i] = inLastV[i] = 0; inLast[i] = cur; return cur; }
+    if (inNow) { inX[i] = inLast[i] - cur; inV[i] = inLastV[i] * .6; }
+    let out = cur;
+    if (inX[i] !== 0 || inV[i] !== 0) {
+      const j = (inV[i] + IN_W * inX[i]) * inDt, nx = (inX[i] + j) * inE; inV[i] = (inV[i] - IN_W * j) * inE; inX[i] = nx;
+      if (Math.abs(nx) < 1e-5 && Math.abs(inV[i]) < 1e-4) inX[i] = inV[i] = 0;
+      out = cur + inX[i];
+    }
+    if (inDt > 0) inLastV[i] = clamp((out - inLast[i]) / inDt, -12, 12);
+    inLast[i] = out; return out;
+  };
+  const chQ = (q, off, last) => {
+    if (inFresh) { off.identity(); last.copy(q); return; }
+    if (inNow) off.copy(last).multiply(_q2.copy(q).invert());
+    if (qW > 0) { _q3.identity().slerp(off, qW); q.premultiply(_q3); }
+    last.copy(q);
+  };
+  const chHand = (h, ip, ifg, off, last) => {
+    h.p.x = ch(ip, h.p.x); h.p.y = ch(ip + 1, h.p.y); h.p.z = ch(ip + 2, h.p.z);
+    for (let j = 0; j < 5; j++) h.f[j] = ch(ifg + j, h.f[j]);
+    chQ(h.q, off, last);
+  };
+
+  /* weapon swap: holster, then draw from the same low pose */
+  const pend = { def: null, outfit: null, t: 0, reload: false, rd: 0, re: false }; let drawDue = false;
+
+  /* dropped magazine */
+  const dropV = new THREE.Vector3(), dropW = new THREE.Vector3(); let dropT = 0, dropOwner = null, magGone = false;
+
   /* ---------- helpers ---------- */
-  const samplePose = (stops, t, out) => {
+  const samplePose = (stops, t, out, side = -1) => {
     let i = 0; while (i < stops.length - 2 && t >= stops[i + 1][0]) i++;
-    const a = stops[i], b = stops[i + 1], k = seg(a[0], b[0], t), A = a[1], B = b[1];
-    out.p.lerpVectors(A.p, B.p, k); out.q.slerpQuaternions(A.q, B.q, k);
-    for (let j = 0; j < 5; j++) out.f[j] = mix(A.f[j], B.f[j], k);
+    const a = stops[i], b = stops[i + 1], A = a[1], B = b[1], span = b[0] - a[0], r = span > 0 ? sat((t - a[0]) / span) : 1;
+    if (A === B) { out.p.copy(A.p); out.q.copy(A.q); for (let j = 0; j < 5; j++) out.f[j] = A.f[j]; return; }
+    const kp = mj(r), kq = mj(sat(r * 1.16 - .12)), kf = mj(sat(r * 1.3 - .3));     // the wrist turns a little after the arm leaves, the fingers close last
+    out.p.lerpVectors(A.p, B.p, kp); out.q.slerpQuaternions(A.q, B.q, kq);
+    const d = A.p.distanceTo(B.p), arc = Math.sin(kp * Math.PI);
+    if (d > .02) {
+      /* curved path, out to the hand's own side: from under the gun to over it, it must go around the receiver */
+      const across = (A.p.y + .012) * (B.p.y + .012) < 0;
+      out.p.x += side * arc * Math.max(d * .2, across ? .16 : 0); out.p.z += arc * d * .1;
+    }
+    const open = d > .05 ? arc * .3 : 0;
+    for (let j = 0; j < 5; j++) out.f[j] = mix(A.f[j], B.f[j], kf) * (1 - open);
   };
-  const setHand = (h, src, blend) => {
-    if (blend <= 0) { h.p.copy(src.p); h.q.copy(src.q); for (let j = 0; j < 5; j++) h.f[j] = src.f[j]; return; }
-    h.p.lerp(src.p, blend); h.q.slerp(src.q, blend); for (let j = 0; j < 5; j++) h.f[j] = mix(h.f[j], src.f[j], blend);
-  };
+  const setHand = (h, src) => { h.p.copy(src.p); h.q.copy(src.q); for (let j = 0; j < 5; j++) h.f[j] = src.f[j]; };
   const writeFinger = (idx, M, r, L) => { _m3.makeScale(r * 2, L * 1.26, r * 2); _m2.multiplyMatrices(M, _m3); fingers.setMatrixAt(idx, _m2); };
   const poseFingers = (h, base, trig) => {
     h.g.position.copy(h.p); h.g.quaternion.copy(h.q); h.g.updateMatrix();
@@ -1691,12 +1791,40 @@ export function createViewModel(camera, scene) {
   };
   const startAction = (script, dur, delay, kind) => {
     action.s = script; action.t = -delay; action.dur = Math.max(.15, dur); action.idx = 0; action.kind = kind;
-    vm.reloading = kind === 'reload';
+    vm.reloading = kind === 'reload'; inMark = true;
   };
-  const endAction = () => { action.s = null; action.kind = ''; vm.reloading = false; recover = 1; };
+  const endAction = () => { action.s = null; action.kind = ''; vm.reloading = false; inMark = true; };
   const emit = (name) => {
-    if (name.charCodeAt(0) === 36) { spawnCasing(name === '$drop' ? 1 : 0); return; }
+    if (name.charCodeAt(0) === 36) { if (!gren.active) spawnCasing(name === '$drop' ? 1 : 0); return; }
+    const im = IMPACT[name];
+    if (im && w) { const k = 1 / w.feel.weight; sp.y.v += im[0] * k; sp.pitch.v += im[1] * k; sp.roll.v += im[2] * k; sp.z.v += im[3] * k; }
+    if (gren.active && name !== 'shell' && name !== 'grenadeGrab' && name !== 'pinPull' && name !== 'throw' && name !== 'spoon' && name !== 'draw' && name !== 'holster') return;      // the left hand is busy: no magazine sounds under the throw
     if (typeof vm.onSound === 'function') vm.onSound(name);
+  };
+  const doEquip = (def, outfit) => {
+    const known = BUILDERS[def.id] ? def : { ...def, id: def.slot === 1 ? 'p9' : 'ar' };
+    let nw = weapons.get(known.id);
+    if (!nw) { nw = buildWeapon(known, mats); nw.root.visible = false; rig.add(nw.root); weapons.set(known.id, nw); }
+    if (w && w !== nw) w.root.visible = false;
+    if (dropOwner) { dropOwner.dropMag.visible = false; dropOwner = null; dropT = 0; }
+    if (w && w.parts.mag && magGone) w.parts.mag.visible = true;
+    magGone = false;
+    w = nw; w.def = def; w.root.visible = true;
+    if (Number.isFinite(def.col)) mats.paint.color.setHex(def.col).lerp(_c.setHex(0x55564c), .18);
+    if (outfit && outfit.c) {
+      mats.sleeve.map = camoTexture(outfit.c); mats.sleeve.needsUpdate = true;
+      mats.glove.color.setHex(0x26231e).lerp(_c.setHex(outfit.c[1]), .14);
+    } else if (!mats.sleeve.map) { mats.sleeve.map = camoTexture([0x59633e, 0x3a4429, 0x7b7650]); mats.sleeve.needsUpdate = true; }
+    w.anchors.muzzle.add(flash); flash.visible = false; flashSize = w.feel.flash; flashT = 0; flashMat.opacity = 0;
+    w.anchors.muzzle.getWorldPosition(_v); light.position.copy(w.anchors.muzzle.position);
+    action.s = null; action.kind = ''; vm.reloading = false; vm.scoped = false; heldShell.visible = false; clearAnim();
+    for (const key in sp) if (key !== 'dead') sp[key].reset();
+    raise = 1; cyc = 1; sprintK = 0; sleeveK = 0; setHand(handR, w.poses.grip); setHand(handL, w.poses.rest); inFresh = true; inMark = false; qW = 0; qWv = 0;
+  };
+  const finishSwap = () => {
+    const d = pend.def, o = pend.outfit, again = pend.reload, rd = pend.rd, re = pend.re;
+    pend.def = null; pend.reload = false; doEquip(d, o); emit('draw');
+    if (again) vm.reload(rd, re);
   };
 
   /* ---------- public API ---------- */
@@ -1704,21 +1832,17 @@ export function createViewModel(camera, scene) {
     group, reloading: false, scoped: false, onSound: () => {},
     equip(def, outfit) {
       if (!def) return;
-      const known = BUILDERS[def.id] ? def : { ...def, id: def.slot === 1 ? 'p9' : 'ar' };
-      let nw = weapons.get(known.id);
-      if (!nw) { nw = buildWeapon(known, mats); nw.root.visible = false; rig.add(nw.root); weapons.set(known.id, nw); }
-      if (w && w !== nw) w.root.visible = false;
-      w = nw; w.def = def; w.root.visible = true;
-      if (Number.isFinite(def.col)) mats.paint.color.setHex(def.col).lerp(_c.setHex(0x55564c), .18);
-      if (outfit && outfit.c) {
-        mats.sleeve.map = camoTexture(outfit.c); mats.sleeve.needsUpdate = true;
-        mats.glove.color.setHex(0x26231e).lerp(_c.setHex(outfit.c[1]), .14);
-      } else if (!mats.sleeve.map) { mats.sleeve.map = camoTexture([0x59633e, 0x3a4429, 0x7b7650]); mats.sleeve.needsUpdate = true; }
-      w.anchors.muzzle.add(flash); flash.visible = false; flashSize = w.feel.flash; flashT = 0; flashMat.opacity = 0;
-      w.anchors.muzzle.getWorldPosition(_v); light.position.copy(w.anchors.muzzle.position);
-      action.s = null; action.kind = ''; vm.reloading = false; vm.scoped = false; heldShell.visible = false; clearAnim();
-      for (const key in sp) if (key !== 'dead') sp[key].reset();
-      raise = 1; recover = 0; cyc = 1; setHand(handR, w.poses.grip, 0); setHand(handL, w.poses.rest, 0);
+      pend.def = null; pend.reload = false;       // a throw in progress survives a weapon change (loot pickup): only cancelGrenade() or death stops it
+      doEquip(def, outfit);
+    },
+    /* in-match weapon change: the current weapon is lowered first, the new one comes up from the same pose */
+    switchTo(def, outfit) {
+      if (!def) return;
+      if (!w || !group.visible) { vm.equip(def, outfit); drawDue = true; return; }
+      if (action.s) endAction();
+      const was = !!pend.def;
+      pend.def = def; pend.outfit = outfit; pend.reload = false;
+      if (!was) { pend.t = 0; inMark = true; emit('holster'); }
     },
     fire() {
       if (!w) return;
@@ -1743,14 +1867,32 @@ export function createViewModel(camera, scene) {
     },
     reload(duration, empty) {
       if (!w) return;
+      if (pend.def) { pend.reload = true; pend.rd = Math.max(.25, (Number.isFinite(duration) ? duration : pend.def.reload || 1.5) - (pend.def.id === 'sg' ? 0 : HOLSTER - pend.t)); pend.re = empty; return; }
       const rs = empty ? w.scripts.empty : w.scripts.tac; if (!rs) return;
       startAction(rs, Number.isFinite(duration) ? duration : w.def.reload || 1.5, 0, 'reload');
     },
-    cancelReload() { if (vm.reloading) { heldShell.visible = false; endAction(); } },
+    cancelReload() { pend.reload = false; if (vm.reloading) { heldShell.visible = false; endAction(); } },
+    /* G: full throw gesture. onRelease(handWorldPos) is called once, on the 'throw' stage, unless death or a reset cancels it first. */
+    throwGrenade(onRelease) {
+      if (gren.active || !w) return false;
+      gren.active = true; gren.t = 0; gren.ev = 0; gren.cb = onRelease || null; gren.thrown = false;
+      nade.visible = false; nadePin.position.copy(nadePinBase); nadePin.rotation.set(0, 0, 0); nadePin.visible = true; inMark = true;
+      return true;
+    },
+    cancelGrenade() { if (gren.active) stopNade(); },
+    get grenadeBusy() { return gren.active; },
+    /* true from the key press until the grenade has left the hand */
+    get throwPending() { return gren.active && !gren.thrown; },
+    get grenadeTime() { return gren.active ? gren.t : -1; },
+    /* read-only snapshot for the animation tests */
+    debugState(o) {
+      o.lp = handL.p; o.lq = handL.q; o.rp = handR.p; o.rq = handR.q; o.rigP = rig.position; o.rigQ = rig.quaternion;
+      o.mag = w && w.parts.mag ? w.parts.mag : null; o.nade = nade; o.w = w; o.script = action.s; o.t = action.s ? action.t / action.dur : 0; o.kind = action.kind; return o;
+    },
     /* optional: 0..1 barrel spin for rotary guns (the barrels also spin up by themselves while firing) */
     spin(amount) { spinT = sat(Number.isFinite(amount) ? amount : 0); },
     /* optional: rounds left in the current weapon, so single-shot visuals (rocket, bolt, grenade) match the ammo count */
-    setAmmo(n) { if (w) { w.st.loaded = n > 0; if (n > 0) w.st.drawn = true; } },
+    setAmmo(n) { if (w && !pend.def) { w.st.loaded = n > 0; if (n > 0) w.st.drawn = true; } },
     muzzle(target) {
       if (!w) return camera.getWorldPosition(target);
       w.anchors.muzzle.updateWorldMatrix(true, false);
@@ -1758,10 +1900,20 @@ export function createViewModel(camera, scene) {
     },
     update(dtIn, st) {
       if (!w) return;
-      const dt = clamp(Number.isFinite(dtIn) ? dtIn : 0, 0, .05), f = w.feel, ads = f.noAim ? 0 : sat(st?.ads ?? 0), a = ads * ads * (3 - 2 * ads);
+      const dt = clamp(Number.isFinite(dtIn) ? dtIn : 0, 0, .05);
+      let hol = 0;
+      if (drawDue) { drawDue = false; emit('draw'); }
+      if (pend.def) { pend.t += dt; hol = mj(sat(pend.t / HOLSTER)); if (pend.t >= HOLSTER) finishSwap(); }
+      const f = w.feel, ads = f.noAim ? 0 : sat(st?.ads ?? 0), a = ads * ads * (3 - 2 * ads);
       const speed = Number.isFinite(st?.speed) ? st.speed : 0, grounded = st?.grounded !== false, sliding = !!st?.sliding, blocked = sat(st?.blocked ?? 0), dead = !!st?.dead;
       const yawD = Number.isFinite(st?.yawDelta) ? st.yawDelta : 0, pitchD = Number.isFinite(st?.pitchDelta) ? st.pitchDelta : 0;
       time += dt;
+      if (dead && gren.active) stopNade();
+
+      /* inertial blending for this frame */
+      inNow = inMark; inMark = false; inDt = dt; inE = Math.exp(-IN_W * dt);
+      if (inNow && !inFresh) { qW = 1; qWv = 0; }
+      if (qW > 0) { const j = (qWv + IN_W * qW) * dt; qW = (qW + j) * inE; qWv = (qWv - IN_W * j) * inE; if (qW < .0005) qW = qWv = 0; }
 
       /* action timeline */
       clearAnim();
@@ -1772,19 +1924,18 @@ export function createViewModel(camera, scene) {
         while (action.idx < script.ev.length && n >= script.ev[action.idx][0]) emit(script.ev[action.idx++][1]);
         if (n >= 1) {
           while (action.idx < script.ev.length) emit(script.ev[action.idx++][1]);
-          endAction(); script = null;
+          endAction(); script = null; inNow = true; if (!inFresh) { qW = 1; qWv = 0; }
         } else if (action.s === script) script.run(anim, sat(n));
         else script = action.s;
       }
       const t = script ? sat(action.t / action.dur) : 0;
+      for (let i = 0; i < IN_KEYS.length; i++) { const key = IN_KEYS[i]; anim[key] = ch(IN_ANIM + i, anim[key]); }
 
       /* hands */
-      if (recover > 0) recover = Math.max(0, recover - dt / .2);
-      const blend = recover > 0 ? 1 - Math.exp(-dt * 24) : 0;
-      if (script) samplePose(script.lh, t, tmpPose); else { tmpPose.p.copy(w.poses.rest.p); tmpPose.q.copy(w.poses.rest.q); tmpPose.f.set(w.poses.rest.f); }
-      setHand(handL, tmpPose, blend);
-      if (script && script.rh) samplePose(script.rh, t, tmpPose); else { tmpPose.p.copy(w.poses.grip.p); tmpPose.q.copy(w.poses.grip.q); tmpPose.f.set(w.poses.grip.f); }
-      setHand(handR, tmpPose, blend);
+      if (script) samplePose(script.lh, t, tmpPose, -1); else { tmpPose.p.copy(w.poses.rest.p); tmpPose.q.copy(w.poses.rest.q); tmpPose.f.set(w.poses.rest.f); }
+      setHand(handL, tmpPose);
+      if (script && script.rh) samplePose(script.rh, t, tmpPose, 1); else { tmpPose.p.copy(w.poses.grip.p); tmpPose.q.copy(w.poses.grip.q); tmpPose.f.set(w.poses.grip.f); }
+      setHand(handR, tmpPose);
 
       /* mechanical parts */
       const P = w.parts;
@@ -1800,26 +1951,40 @@ export function createViewModel(camera, scene) {
       if (P.pump) { const o = anim.pump * f.travel; P.pump.position.z = P.pump.userData.base.z + o; if (!script || !script.rh) handL.p.z += o; if (P.bolt && w.def.id === 'sg') P.bolt.position.z = P.bolt.userData.base.z + o * .86; }
       if (P.cover) P.cover.rotation.x = -anim.cover * 1.22;
       if (anim.lhZ) handL.p.z += anim.lhZ;
+      if (anim.lhY) handL.p.y += anim.lhY;
       if (anim.rhZ) { handR.p.z += anim.rhZ * f.travel; if (anim.boltRot) handR.p.y += anim.boltRot * .012; }
+      chHand(handL, IN_HL, IN_FL, qOffL, qLastL); chHand(handR, IN_HR, IN_FR, qOffR, qLastR);
       if (P.mag) {
-        const b = P.mag.userData.base;
-        if (script && script.attach && t >= script.attach[0] && t <= script.attach[1]) {
-          P.mag.position.set(b.x + handL.p.x - w.poses.mag.p.x, b.y + handL.p.y - w.poses.mag.p.y, b.z + handL.p.z - w.poses.mag.p.z);
-          const k = Math.sin((t - script.attach[0]) / (script.attach[1] - script.attach[0]) * Math.PI) * (script.wob ? script.wob(t) : 1); P.mag.rotation.set(k * .5, 0, k * -.35);
-        } else { P.mag.position.copy(b); P.mag.rotation.set(0, 0, 0); }
-        P.mag.position.y += anim.magSeat * .004;
+        const b = P.mag.userData.base, carried = !!(script && script.attach && !gren.active && t >= script.attach[0] && t <= script.attach[1]);
+        if (carried) {       // rigid in the hand: the magazine turns with the wrist and meets the magwell exactly at the seat pose
+          _q2.copy(w.poses.mag.q).invert(); _q3.multiplyQuaternions(handL.q, _q2);
+          _v.copy(b).sub(w.poses.mag.p).applyQuaternion(_q3).add(handL.p); P.mag.quaternion.copy(_q3);
+        } else { _v.copy(b); P.mag.quaternion.identity(); }
+        _v.y += anim.magSeat * .004;
+        P.mag.position.set(ch(IN_MAG, _v.x), ch(IN_MAG + 1, _v.y), ch(IN_MAG + 2, _v.z));
+        chQ(P.mag.quaternion, qOffM, qLastM);
+        const gone = !!(script && script.drop && !gren.active && t >= script.drop[0] && t < script.drop[1]);
+        if (gone && !magGone && w.dropMag) {
+          const d = w.dropMag; d.position.copy(P.mag.position); d.quaternion.copy(P.mag.quaternion); d.visible = true;
+          dropV.set(-.22, -.75, .12); dropW.set(3.6, .9, -2.8); dropT = .6; dropOwner = w;
+        }
+        if (gone !== magGone) { magGone = gone; P.mag.visible = !gone; }
+      }
+      if (dropT > 0 && dropOwner) {
+        const d = dropOwner.dropMag; dropT -= dt; dropV.y -= 5.2 * dt; d.position.addScaledVector(dropV, dt);
+        _e.set(dropW.x * dt, dropW.y * dt, dropW.z * dt); _q.setFromEuler(_e); d.quaternion.multiply(_q);
+        if (dropT <= 0) { d.visible = false; dropOwner = null; }
       }
       if (P.belt) {
         const b = P.belt.userData.base, m = P.mag;
-        if (anim.beltAttach) { P.belt.position.set(b.x + m.position.x - m.userData.base.x, b.y + m.position.y - m.userData.base.y, b.z + m.position.z - m.userData.base.z); P.belt.rotation.copy(m.rotation); }
+        if (anim.beltAttach) { P.belt.position.set(b.x + m.position.x - m.userData.base.x, b.y + m.position.y - m.userData.base.y, b.z + m.position.z - m.userData.base.z); P.belt.quaternion.copy(m.quaternion); }
         else { P.belt.position.copy(b); P.belt.rotation.set(blow * .018, 0, blow * .03); P.belt.position.y += blow * .0016; }
       }
-      heldShell.visible = anim.heldShell > 0;
-      if (anim.lhY) handL.p.y += anim.lhY;
-      if (P.held) { P.held.visible = anim.held > 0; if (anim.held > 0) { P.held.position.copy(handL.p); P.held.quaternion.copy(handL.q); } }
+      heldShell.visible = anim.heldShell > 0 && !gren.active;
+      if (P.held) { const on = anim.held > 0 && !gren.active; P.held.visible = on; if (on) { P.held.position.copy(handL.p); P.held.quaternion.copy(handL.q); } }
       spinKick = Math.max(0, spinKick - dt * 3);
       const spinGoal = Math.max(spinT, spinKick > 0 ? 1 : 0);
-      spinV += (spinGoal - spinV) * Math.min(1, dt * (spinGoal > spinV ? 7 : 1.8));
+      spinV += (spinGoal - spinV) * (1 - Math.exp(-dt * (spinGoal > spinV ? 7 : 1.8)));
       if (w.cfg.spin && P.barrels) P.barrels.rotation.z = (P.barrels.rotation.z + spinV * w.cfg.spin * dt) % (Math.PI * 2);
       if (w.cfg.animate) w.cfg.animate(w, anim, dt, script, t, time);
 
@@ -1829,7 +1994,7 @@ export function createViewModel(camera, scene) {
       poseFingers(handL, 14, 0);
       fingers.instanceMatrix.needsUpdate = true;
       poseSleeve(handR, elbowR); poseSleeve(handL, elbowL);
-      const hideL = !!w.cfg.oneHand && !(script && script.lhShow && script.lhShow(t));
+      const hideL = !!w.cfg.oneHand && !gren.active && !(script && script.lhShow && script.lhShow(t));
       if (handL.g.visible === hideL) handL.g.visible = handL.sl.visible = !hideL;
       if (hideL) { _m.makeScale(0, 0, 0); for (let i = 14; i < 28; i++) fingers.setMatrixAt(i, _m); }
 
@@ -1844,20 +2009,26 @@ export function createViewModel(camera, scene) {
 
       /* locomotion */
       const moving = grounded && !sliding ? clamp(speed / 6.5, 0, 1.45) : 0;
-      bobAmt += (moving - bobAmt) * Math.min(1, dt * 9);
+      bobAmt += (moving - bobAmt) * (1 - Math.exp(-dt * 9));
       bob += dt * (3.2 + speed * 1.28);
       const free = 1 - a, bx = Math.cos(bob) * .0105 * bobAmt, by = -Math.abs(Math.sin(bob)) * .0125 * bobAmt, br = Math.cos(bob) * .018 * bobAmt;
-      const sprint = seg(7.5, 11, speed) * free * (grounded ? 1 : .4);
+      sprintK += (seg(7.5, 11, speed) * (grounded ? 1 : .4) - sprintK) * (1 - Math.exp(-dt * 12));
+      const sprint = sprintK * free;
       const br1 = Math.sin(time * 1.35), br2 = Math.sin(time * .73 + 1.1);
       const recoilK = mix(1, .46, a);
-      raise = Math.max(0, raise - dt / .42); const up = raise * raise * (3 - 2 * raise);
-      const reloadAmt = script && action.kind === 'reload' ? seg(0, .1, t) * (1 - seg(.9, 1, t)) : script ? seg(0, .16, t) * (1 - seg(.82, 1, t)) : 0;
+      raise = Math.max(0, raise - dt / .42); const up = pend.def ? hol : raise * raise * (3 - 2 * raise);
+      let reloadAmt = 0;
+      if (script) {
+        if (action.kind === 'reload') reloadAmt = mj(t / .13) * (1 - mj((t - .86) / .14)) - Math.sin(Math.PI * sat(t / .09)) * .13 - Math.sin(Math.PI * sat((t - .91) / .09)) * .07;      // small anticipation, then a settle past the rest pose
+        else reloadAmt = mj(t / .16) * (1 - mj((t - .82) / .18));
+      }
       const tilt = script ? script.tilt : null;
 
       /* hip -> ADS */
       const S = RIG_SCALE, sg = w.sight;
       const ax = f.aim ? f.aim[0] : -S * sg.x, ay = f.aim ? f.aim[1] : -S * sg.y, az = f.aim ? f.aim[2] : -f.eye - S * sg.z;
       let x = mix(f.hip[0], ax, a), y = mix(f.hip[1], ay, a) - Math.sin(a * Math.PI) * .012, z = mix(f.hip[2], az, a);
+      const bodyX = x, bodyY = y, bodyZ = z;
       x += (sp.swayX.x + bx) * (1 - a * .88) + sp.tilt.x * -.028 * free - sprint * .045;
       y += (sp.swayY.x + by) * (1 - a * .88) + (br1 * .0017) * free + sp.land.x * .04 * (1 - a * .6) + sp.y.x * .018 * recoilK - sprint * .03;
       z += sp.z.x * .082 * recoilK + sprint * .022;
@@ -1867,12 +2038,18 @@ export function createViewModel(camera, scene) {
       if (tilt) { rx += tilt[0] * reloadAmt; ry += tilt[1] * reloadAmt; rz += tilt[2] * reloadAmt; y -= reloadAmt * .02; x -= reloadAmt * .03 * free; }
       if (f.rot) { rx += f.rot[0] * free; ry += f.rot[1] * free; rz += f.rot[2] * free; }
       x += anim.rigX; y += anim.rigY; z += anim.rigZ; rx += anim.rigRX; ry += anim.rigRY; rz += anim.rigRZ;
+      /* grenade: the weapon dips aside while the left hand works, and follows the throw */
+      if (gren.active) {
+        const T = gren.t + dt, k = mj(T / .17) * (1 - mj((T - .6) / .33)), sw = Math.sin(Math.PI * sat((T - .4) / .26));
+        x += k * .05 + sw * .012; y -= k * .075; z += k * .035 - sw * .02; rx -= k * .24; ry -= k * .34; rz -= k * .44 - sw * .09;
+      }
       /* wall block, raise, death */
       const bk = sat(sp.block.x);
       y -= bk * .075; z += bk * .15; x += bk * .03; rx -= bk * .82; ry += bk * .18;
       y -= up * .3; rx -= up * 1.05; rz -= up * .3;
       const dd = sat(sp.dead.x);
       y -= dd * .55; rx -= dd * 1.1; rz += dd * .35;
+      x = ch(IN_RIG, x); y = ch(IN_RIG + 1, y); z = ch(IN_RIG + 2, z); rx = ch(IN_RIG + 3, rx); ry = ch(IN_RIG + 4, ry); rz = ch(IN_RIG + 5, rz);
       rig.position.set(x, y, z);
       _e.set(rx, ry, rz, 'YXZ'); rig.quaternion.setFromEuler(_e);
       if (anim.rigX !== 0 || anim.rigY !== 0 || anim.rigZ !== 0 || anim.rigRX !== 0 || anim.rigRY !== 0 || anim.rigRZ !== 0) {
@@ -1880,6 +2057,48 @@ export function createViewModel(camera, scene) {
         _e.set(rx - anim.rigRX, ry - anim.rigRY, rz - anim.rigRZ, 'YXZ'); _q.setFromEuler(_e); _qi.copy(rig.quaternion).invert();
         _el.copy(elbowR).multiplyScalar(S).applyQuaternion(_q); _el.x -= anim.rigX; _el.y -= anim.rigY; _el.z -= anim.rigZ; _el.applyQuaternion(_qi).divideScalar(S); poseSleeve(handR, _el);
         _el.copy(elbowL).multiplyScalar(S).applyQuaternion(_q); _el.x -= anim.rigX; _el.y -= anim.rigY; _el.z -= anim.rigZ; _el.applyQuaternion(_qi).divideScalar(S); poseSleeve(handL, _el);
+      }
+      /* during a reload the elbows stay with the body while the weapon tilts: the arms bend, and the sleeve ends never swing into view */
+      sleeveK += ((script && action.kind === 'reload' ? 1 : 0) - sleeveK) * (1 - Math.exp(-dt * 16));
+      if (sleeveK > .002) {
+        _qi.copy(rig.quaternion).invert();
+        _el2.copy(elbowR).multiplyScalar(S); _el2.x += bodyX; _el2.y += bodyY; _el2.z += bodyZ; _el2.sub(rig.position).applyQuaternion(_qi).divideScalar(S); _el.copy(elbowR).lerp(_el2, sleeveK); poseSleeve(handR, _el);
+        _el2.copy(elbowL).multiplyScalar(S); _el2.x += bodyX; _el2.y += bodyY; _el2.z += bodyZ; _el2.sub(rig.position).applyQuaternion(_qi).divideScalar(S); _el.copy(elbowL).lerp(_el2, sleeveK); poseSleeve(handL, _el);
+      }
+      inFresh = false; inNow = false;
+
+      /* grenade gesture: the left hand follows a path in camera space, whatever the weapon is doing */
+      if (gren.active) {
+        gren.t += dt; const T = gren.t;
+        const k = mj(T / .1) * (1 - mj((T - .74) / .21));
+        sampleNade(T, tmpNade);
+        _el2.copy(tmpNade.p); _el2.x -= .3; _el2.y -= .42; _el2.z += .23;
+        _qi.copy(rig.quaternion).invert();
+        tmpNade.p.sub(rig.position).applyQuaternion(_qi).divideScalar(S); tmpNade.q.premultiply(_qi);
+        handL.p.lerp(tmpNade.p, k); handL.q.slerp(tmpNade.q, k);
+        for (let j = 0; j < 5; j++) handL.f[j] = mix(handL.f[j], tmpNade.f[j], k);
+        inLast[IN_HL] = handL.p.x; inLast[IN_HL + 1] = handL.p.y; inLast[IN_HL + 2] = handL.p.z; inLastV[IN_HL] = inLastV[IN_HL + 1] = inLastV[IN_HL + 2] = 0;
+        for (let j = 0; j < 5; j++) { inLast[IN_FL + j] = handL.f[j]; inLastV[IN_FL + j] = 0; }
+        qLastL.copy(handL.q);
+        if (!handL.g.visible) handL.g.visible = handL.sl.visible = true;
+        poseFingers(handL, 14, 0); fingers.instanceMatrix.needsUpdate = true;
+        _el2.sub(rig.position).applyQuaternion(_qi).divideScalar(S); _el.copy(elbowL).lerp(_el2, k); poseSleeve(handL, _el);
+        if (!gren.thrown) {
+          nade.visible = T >= NADE_EV[0][0];
+          const pull = sat((T - .31) / .07);
+          nadePin.position.copy(nadePinBase); nadePin.position.x -= mj(pull) * .05;
+          if (T > .37) { const d = T - .37; nadePin.position.y -= d * d * 2.6; nadePin.position.x -= d * .05; nadePin.rotation.z = d * 9; nadePin.visible = T < .5; }
+        }
+        while (gren.active && gren.ev < NADE_EV.length && T >= NADE_EV[gren.ev][0]) {
+          const name = NADE_EV[gren.ev++][1];
+          if (name === 'throw') {
+            nade.updateWorldMatrix(true, false); nadeWorld.setFromMatrixPosition(nade.matrixWorld);
+            gren.thrown = true; nade.visible = false; nadePin.visible = false;
+            const cb = gren.cb; gren.cb = null; if (cb) { try { cb(nadeWorld); } catch (e) { console.error('[viewmodel] throw', e); } }
+          }
+          emit(name);
+        }
+        if (T >= NADE_END) stopNade();
       }
 
       /* flash */
@@ -1891,7 +2110,7 @@ export function createViewModel(camera, scene) {
       } else if (light.intensity !== 0) light.intensity = 0;
 
       /* scope state */
-      vm.scoped = !!w.def.scope && ads >= .92 && !vm.reloading && !dead && blocked < .5;
+      vm.scoped = !!w.def.scope && ads >= .92 && !vm.reloading && !dead && blocked < .5 && !gren.active;
       group.visible = !vm.scoped && dd < .95;
     },
     tick(dtIn) {

@@ -43,7 +43,7 @@ const TEMPLATE = `
 <div data-h="cross"><i></i><i></i><i></i><i></i><b></b><u></u></div><div data-h="hit"></div><div data-h="nums"></div><div data-h="markers"></div>
 <canvas data-h="map" width="170" height="170"></canvas>
 <div data-h="top"><span data-h="sL"><small></small><b></b></span><span data-h="mid"><b data-h="timer"></b><i data-h="center"></i></span><span data-h="sR"><small></small><b></b></span></div>
-<div data-h="obj"></div><div data-h="earn"><b></b><small></small></div><div data-h="feed"></div><div data-h="msg"></div><div data-h="prompt"></div>
+<div data-h="obj"></div><div data-h="earn"><b></b><small></small></div><div data-h="feed"></div><div data-h="msg"></div><div data-h="prompt"></div><div data-h="loot"></div>
 <div data-h="prog"><span></span><i><u></u></i></div><div data-h="hint"></div><div data-h="spec"></div><div data-h="fps"></div><div data-h="lock"></div>
 <div data-h="vit"><span class="n" data-h="hpN">100</span><small data-h="cls"></small><div class="meter" data-h="arm"><u></u></div><div class="meter" data-h="hp"><u></u></div></div>
 <div data-h="wp"><div class="a"><b data-h="am">0</b> <span data-h="mg"></span></div><div data-h="wname"></div><div data-h="gear"></div><div data-h="torch"></div></div>
@@ -54,7 +54,7 @@ export function createHud(root, { settings, i18n, onResume, onQuit }) {
   const t = makeT(i18n);
   if (!root.querySelector('[data-h="cross"]')) root.innerHTML = TEMPLATE;
   const $ = k => root.querySelector(`[data-h="${k}"]`);
-  const el = {}; for (const k of ['vig', 'scope', 'dmg', 'cross', 'hit', 'nums', 'markers', 'map', 'top', 'sL', 'sR', 'timer', 'center', 'obj', 'earn', 'feed', 'msg', 'prompt', 'prog', 'hint', 'spec', 'fps', 'lock', 'vit', 'hpN', 'cls', 'arm', 'hp', 'wp', 'am', 'mg', 'wname', 'gear', 'torch', 'board', 'load', 'pause', 'pmain', 'ptitle', 'resume', 'opts', 'quit', 'pset', 'psetbody', 'psetback']) el[k] = $(k);
+  const el = {}; for (const k of ['vig', 'scope', 'dmg', 'cross', 'hit', 'nums', 'markers', 'map', 'top', 'sL', 'sR', 'timer', 'center', 'obj', 'earn', 'feed', 'msg', 'prompt', 'loot', 'prog', 'hint', 'spec', 'fps', 'lock', 'vit', 'hpN', 'cls', 'arm', 'hp', 'wp', 'am', 'mg', 'wname', 'gear', 'torch', 'board', 'load', 'pause', 'pmain', 'ptitle', 'resume', 'opts', 'quit', 'pset', 'psetbody', 'psetback']) el[k] = $(k);
   const tx = (e, v) => { if (e._t !== v) { e._t = v; e.textContent = v; } };
   const sw = (e, k, v) => { if (e['_' + k] !== v) { e['_' + k] = v; e.style[k] = v; } };
   const vis = (e, on) => sw(e, 'display', on ? '' : 'none');
@@ -69,7 +69,8 @@ export function createHud(root, { settings, i18n, onResume, onQuit }) {
   let crossDirty = true, earnT = 0;
   const earnB = el.earn.querySelector('b'), earnS = el.earn.querySelector('small');
   let hitT = 0, hurtT = 0, msgT = 0, board = null, boardOn = false, boardT = 0, unmount = null, crossG = -1, crossKey = '', timerV = null, clock = 0, lowHp = false, deadV = false;
-  for (const k of ['msg', 'prompt', 'prog', 'hint', 'spec', 'fps', 'lock', 'board', 'load', 'pause', 'obj', 'earn', 'pset', 'gear', 'torch']) vis(el[k], false);
+  el.loot.style.cssText = 'left:50%;top:67%;transform:translateX(-50%);font-size:clamp(14px,2.4vw,19px);color:#fff;background:rgba(10,12,8,.74);border:1px solid var(--line);padding:4px 14px;width:max-content;max-width:88vw;text-align:center';
+  for (const k of ['msg', 'prompt', 'loot', 'prog', 'hint', 'spec', 'fps', 'lock', 'board', 'load', 'pause', 'obj', 'earn', 'pset', 'gear', 'torch']) vis(el[k], false);
 
   function texts() {
     el.ptitle.textContent = t('pause.title'); el.resume.textContent = t('pause.resume'); el.opts.textContent = t('settings'); el.quit.textContent = t('pause.quit'); el.psetback.textContent = t('back');
@@ -138,7 +139,7 @@ export function createHud(root, { settings, i18n, onResume, onQuit }) {
     show(on) { vis(root, on); },
     reset() {
       el.feed.textContent = ''; feedItems.length = 0; for (const k of markers.values()) k.d.remove(); markers.clear(); board = null; boardOn = false; vis(el.board, false);
-      api.set({ left: null, right: null, center: '', timer: null, objective: null }); api.prompt(null); api.progress('', null); vis(el.msg, false); msgT = 0; hitT = hurtT = 0; dmgT.fill(0); for (const d of dmgI) d.style.opacity = 0;
+      api.set({ left: null, right: null, center: '', timer: null, objective: null }); api.prompt(null); tx(el.loot, ''); vis(el.loot, false); api.progress('', null); vis(el.msg, false); msgT = 0; hitT = hurtT = 0; dmgT.fill(0); for (const d of dmgI) d.style.opacity = 0;
       vis(el.hint, false); vis(el.spec, false); vis(el.earn, false); for (const q of nums) { q.t = 0; q.d.style.opacity = 0; }
     },
     /** Kill-feed line with highlighted names. */
@@ -148,6 +149,9 @@ export function createHud(root, { settings, i18n, onResume, onQuit }) {
     },
     earn(total, n, reason) { vis(el.earn, total > 0); tx(earnB, '+' + total + ' ₡'); if (n) { tx(earnS, '+' + n + (reason ? ' ' + reason : '')); earnT = 2.2; sw(earnS, 'opacity', 1); } else { earnT = 0; sw(earnS, 'opacity', 0); } },
     invalidate() { crossDirty = true; },
+    /** Pickup prompt, separate from the mode's objective prompt (which has priority on the interact key: see promptOn). */
+    loot(text) { tx(el.loot, text || ''); vis(el.loot, !!text); },
+    get promptOn() { return !!el.prompt._t; },
     vitals(hp, maxHp, armor, maxArmor, cls, alive) {
       tx(el.hpN, String(Math.max(0, Math.ceil(hp)))); sw(hpBar, 'width', Math.round(Math.max(0, hp) / maxHp * 100) + '%'); lowHp = alive && hp > 0 && hp < maxHp * 0.3; deadV = !alive;
       sw(hpBar, 'background', lowHp ? 'var(--red)' : '#f1e7cd'); sw(armBar, 'width', Math.round(Math.max(0, Math.min(1, armor / Math.max(maxArmor, 1))) * 100) + '%'); tx(el.cls, cls);

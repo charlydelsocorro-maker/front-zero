@@ -35,8 +35,6 @@ function hashStr(str) {
 const SURFACES = ['sand', 'concrete', 'metal', 'wood', 'snow'];
 const surfaceOf = (s) => (SURFACES.includes(s) ? s : 'concrete');
 const CAPS = { gunOwn: 6, gun: 12, step: 6, foley: 8, reload: 4, impact: 10, whizz: 3, casing: 4, hud: 3, ui: 3, amb: 10, boom: 4, rumble: 3, debris: 3, launch: 4, melee: 4 };
-const RELOAD_STAGES = ['magOut', 'magIn', 'boltBack', 'boltForward', 'pump', 'shell', 'slideBack', 'slideForward',
-  'cylOpen', 'cylEject', 'cylLoad', 'cylClose', 'breakOpen', 'breakClose', 'rocketIn', 'rocketLock', 'grenadeIn', 'stringDraw', 'stringLatch', 'boltPlace'];
 
 // ---------------------------------------------------------------------------
 // Weapon designs
@@ -231,11 +229,8 @@ function generateIR(ctx, cfg, seed) {
       d[i] = (lp - hp) * Math.exp(-6.91 * t / cfg.rt) * Math.min(1, t / .004) * cfg.level;
     }
     for (const [f, amp, tau] of cfg.modes) {
-      const ph = rng() * TAU, ff = f * (1 + (c ? .004 : -.004));
-      for (let i = start; i < len; i++) {
-        const t = (i - start) / sr;
-        d[i] += amp * Math.exp(-t / tau) * Math.sin(TAU * ff * t + ph);
-      }
+      const bq = new Biquad('bp', f * (1 + (c ? .004 : -.004)), 1.2, sr), k = amp * .5 / (.577 * Math.sqrt(Math.PI * (f / 1.2) / sr));
+      for (let i = start; i < len; i++) d[i] += k * Math.exp(-(i - start) / sr / tau) * bq.tick(rng() * 2 - 1);
     }
     for (const [time, gain, pan] of cfg.taps) {
       const side = c === 0 ? 1 - Math.max(0, pan) : 1 + Math.min(0, pan);
@@ -280,18 +275,30 @@ function addNoise(o, sr, rng, t, dur, amp, tau, type, f, q = .8, attack = .0005)
   const bq = new Biquad(type, f, q, sr), a = Math.floor(t * sr), n = Math.min(o.length - a, Math.ceil(dur * sr)), atk = Math.max(1, attack * sr);
   for (let i = 0; i < n; i++) o[a + i] += bq.tick(rng() * 2 - 1) * amp * Math.exp(-i / (tau * sr)) * Math.min(1, i / atk);
 }
-function addRing(o, sr, t, f, amp, tau, phase = 0) {
-  const a = Math.floor(t * sr), n = Math.min(o.length - a, Math.ceil(tau * 7 * sr)), w = TAU * f / sr, atk = Math.max(1, .00015 * sr);
-  for (let i = 0; i < n; i++) o[a + i] += Math.sin(w * i + phase) * amp * Math.exp(-i / (tau * sr)) * Math.min(1, i / atk);
+// Every procedural sound is shaped noise: there is no sine, oscillator or tuned resonance left, so nothing can read as a beep.
+let noiseState = 0x2f6e2b1;
+const white = () => { noiseState ^= noiseState << 13; noiseState ^= noiseState >>> 17; noiseState ^= noiseState << 5; return (noiseState >>> 0) / 2147483648 - 1; };
+// A knock with colour around f: a wide band of noise that dies within a few tens of milliseconds.
+function addRing(o, sr, t, f, amp, tau) {
+  const q = Math.min(.9, f / 480), d = Math.min(tau, .014), a = Math.floor(t * sr), n = Math.min(o.length - a, Math.ceil(d * 6 * sr)), bw = f / q, bq = new Biquad('bp', f, q, sr);
+  const k = amp * .5 / (.577 * Math.sqrt(Math.PI * bw / sr)), atk = Math.max(1, .00015 * sr);
+  for (let i = 0; i < n; i++) o[a + i] += bq.tick(white()) * k * Math.exp(-i / (d * sr)) * Math.min(1, i / atk);
 }
+// A body thud: a steep sub-bass band of noise for the weight, under a broad short knock (200 Hz - 2 kHz) that keeps it a thud and not a pitch.
 function addDrop(o, sr, t, f0, f1, amp, tau) {
-  const a = Math.floor(t * sr), n = Math.min(o.length - a, Math.ceil(tau * 7 * sr));
-  let ph = 0;
+  const a = Math.floor(t * sr), n = Math.min(o.length - a, Math.ceil(tau * 6 * sr)), c = clamp(f1 * 1.5, 62, 118), top = clamp(f0 * 9, 1100, 2400), knockTau = Math.min(tau * .55, .03);
+  const l1 = new Biquad('lp', c, .7, sr), l2 = new Biquad('lp', c, .7, sr), l3 = new Biquad('lp', c, .7, sr), hp = new Biquad('hp', 210, .7, sr), hp2 = new Biquad('hp', 210, .7, sr), lk = new Biquad('lp', top, .6, sr);
+  const kb = amp * .62 / (.577 * Math.sqrt(2 * c / sr)), kk = amp * .3 / (.577 * Math.sqrt(2 * top / sr));
   for (let i = 0; i < n; i++) {
-    const u = i / n, f = f0 * Math.pow(f1 / f0, Math.min(1, u * 2));
-    ph += TAU * f / sr;
-    o[a + i] += Math.sin(ph) * amp * Math.exp(-i / (tau * sr)) * Math.min(1, i / (.001 * sr));
+    const atk = Math.min(1, i / (.001 * sr));
+    o[a + i] += l3.tick(l2.tick(l1.tick(white()))) * kb * Math.exp(-i / (tau * sr)) * atk + lk.tick(hp2.tick(hp.tick(white()))) * kk * Math.exp(-i / (knockTau * sr)) * atk;
   }
+}
+// Takes the hump out of the low mids, where the skirt of a sub-bass noise band would otherwise gather and read as a note.
+function scoop(d, sr, f, q, k) {
+  const bq = new Biquad('bp', f, q, sr);
+  for (let i = 0; i < d.length; i++) d[i] -= k * bq.tick(d[i]);
+  return d;
 }
 function addGrains(o, sr, rng, t, span, count, amp, fLo, fHi) {
   for (let i = 0; i < count; i++) {
@@ -336,7 +343,8 @@ function genLand(sr, rng, surface) {
   const base = genStep(sr, rng, surface, 1.75), o = outBuf(sr, base.length / sr + .12);
   o.set(base, 0);
   addDrop(o, sr, .004, 92, 38, .72, .06);
-  addNoise(o, sr, rng, .01, .17, .17, .05, 'bp', 420, .6, .008);
+  addNoise(o, sr, rng, .01, .17, .17, .05, 'bp', 800, .34, .008);
+  softClip(o, 1.9);
   return polish(o, sr, .86);
 }
 
@@ -380,143 +388,6 @@ function metalClack(o, sr, rng, t, amp, base, low = 240, ratios = [1, 1.59, 2.37
 }
 const friction = (o, sr, rng, t, dur, amp, f) => addNoise(o, sr, rng, t, dur, amp, dur * .85, 'bp', f, 1.6, dur * .3);
 
-function genReload(sr, rng, stage) {
-  const o = outBuf(sr, .34);
-  switch (stage) {
-    case 'magOut':
-      metalClack(o, sr, rng, .004, .72, 2650);
-      friction(o, sr, rng, .012, .075, .14, 1500);
-      metalClack(o, sr, rng, .082, .38, 1180, 170);
-      break;
-    case 'magIn':
-      friction(o, sr, rng, 0, .055, .16, 1750);
-      metalClack(o, sr, rng, .052, 1, 980, 150);
-      metalClack(o, sr, rng, .071, .54, 3050);
-      break;
-    case 'boltBack':
-      friction(o, sr, rng, 0, .082, .2, 2300);
-      metalClack(o, sr, rng, .078, .84, 1720, 210);
-      break;
-    case 'boltForward':
-      friction(o, sr, rng, 0, .032, .15, 2800);
-      metalClack(o, sr, rng, .028, 1, 1320, 170);
-      metalClack(o, sr, rng, .043, .42, 3420);
-      break;
-    case 'pump':
-      friction(o, sr, rng, 0, .075, .22, 1300);
-      metalClack(o, sr, rng, .07, .86, 1040, 130);
-      friction(o, sr, rng, .15, .06, .2, 1650);
-      metalClack(o, sr, rng, .205, 1, 1420, 145);
-      break;
-    case 'shell':
-      friction(o, sr, rng, 0, .045, .11, 2100);
-      addRing(o, sr, .04, 720, .34, .012);
-      addRing(o, sr, .04, 1540, .18, .007);
-      metalClack(o, sr, rng, .059, .62, 2420, 190);
-      break;
-    case 'slideBack':
-      friction(o, sr, rng, 0, .05, .17, 3000);
-      metalClack(o, sr, rng, .047, .74, 2520, 260);
-      break;
-    case 'cylOpen':
-      metalClack(o, sr, rng, .004, .6, 2900);
-      friction(o, sr, rng, .02, .05, .1, 1900);
-      metalClack(o, sr, rng, .07, .5, 1500, 200);
-      break;
-    case 'cylEject':
-      friction(o, sr, rng, 0, .03, .12, 2600);
-      metalClack(o, sr, rng, .012, .6, 2200, 200);
-      for (let i = 0; i < 6; i++) addRing(o, sr, .03 + i * .014 + rng() * .008, 4200 + rng() * 1500, .13, .012, rng() * TAU);
-      break;
-    case 'cylLoad':
-      friction(o, sr, rng, 0, .06, .14, 2400);
-      metalClack(o, sr, rng, .05, .8, 1250, 180);
-      metalClack(o, sr, rng, .11, .4, 3300);
-      break;
-    case 'cylClose':
-      metalClack(o, sr, rng, .006, 1, 1150, 160);
-      metalClack(o, sr, rng, .022, .5, 2900);
-      break;
-    case 'breakOpen':
-      metalClack(o, sr, rng, .004, .7, 2400, 220);
-      friction(o, sr, rng, .02, .07, .16, 900);
-      metalClack(o, sr, rng, .09, .75, 820, 120);
-      break;
-    case 'breakClose':
-      friction(o, sr, rng, 0, .04, .12, 1000);
-      metalClack(o, sr, rng, .04, 1, 760, 110);
-      metalClack(o, sr, rng, .058, .5, 2600);
-      break;
-    case 'rocketIn':
-      friction(o, sr, rng, 0, .16, .22, 700);
-      friction(o, sr, rng, .02, .14, .1, 2100);
-      addRing(o, sr, .15, 182, .25, .05);
-      addRing(o, sr, .15, 365, .12, .035);
-      metalClack(o, sr, rng, .16, .5, 520, 90);
-      break;
-    case 'rocketLock':
-      metalClack(o, sr, rng, .004, .9, 1400, 150);
-      metalClack(o, sr, rng, .03, .45, 3200);
-      addRing(o, sr, .004, 240, .2, .04);
-      break;
-    case 'grenadeIn':
-      friction(o, sr, rng, 0, .05, .14, 1100);
-      addDrop(o, sr, .045, 260, 150, .5, .02);
-      addRing(o, sr, .045, 410, .3, .03);
-      metalClack(o, sr, rng, .05, .5, 1700, 200);
-      break;
-    case 'stringDraw':
-      friction(o, sr, rng, 0, .27, .2, 520);
-      for (let i = 0; i < 8; i++) metalClack(o, sr, rng, .03 + i * .03, .2 + i * .03, 2400 + i * 120, 300);
-      break;
-    case 'stringLatch':
-      metalClack(o, sr, rng, .004, .9, 2100, 240);
-      addRing(o, sr, .004, 640, .12, .02);
-      break;
-    case 'boltPlace':
-      addNoise(o, sr, rng, .004, .008, .2, .0015, 'hp', 3200);
-      addRing(o, sr, .004, 1900, .2, .012);
-      addRing(o, sr, .004, 3100, .12, .008);
-      friction(o, sr, rng, .01, .05, .06, 3200);
-      break;
-    default: // slideForward
-      friction(o, sr, rng, 0, .022, .13, 3300);
-      metalClack(o, sr, rng, .02, .96, 2120, 230);
-      metalClack(o, sr, rng, .031, .32, 4100);
-  }
-  return polish(o, sr, .8);
-}
-
-function genDry(sr, rng) {
-  const o = outBuf(sr, .09);
-  metalClack(o, sr, rng, .002, 1, 3350, 320);
-  metalClack(o, sr, rng, .021, .3, 2200, 240);
-  return polish(o, sr, .55);
-}
-
-function genCasing(sr, rng, surface) {
-  const o = outBuf(sr, .62);
-  if (surface === 'sand' || surface === 'snow') {
-    addDrop(o, sr, .002, 340, 180, .32, .006);
-    addNoise(o, sr, rng, .002, .05, .2, .012, 'bp', surface === 'snow' ? 950 : 1500, .8);
-    addRing(o, sr, .002, 3100 + rng() * 800, .05, .006);
-    return polish(o, sr, .34);
-  }
-  const hard = surface === 'wood' ? .5 : 1, base = (surface === 'metal' ? 4300 : 3650) * (.94 + rng() * .12);
-  let t = .002, a = 1, gap = .08 + rng() * .045;
-  for (let n = 0; n < 5 && t < .56; n++) {
-    const tilt = 1 + (rng() * 2 - 1) * .018;
-    addRing(o, sr, t, base * tilt, .42 * a * hard, .022 * (surface === 'wood' ? .35 : 1), rng() * TAU);
-    addRing(o, sr, t, base * 1.51 * tilt, .24 * a * hard, .014 * (surface === 'wood' ? .35 : 1), rng() * TAU);
-    addRing(o, sr, t, base * 2.32 * tilt, .13 * a * hard, .009, rng() * TAU);
-    addNoise(o, sr, rng, t, .006, .16 * a, .0012, 'hp', 3000);
-    t += gap;
-    gap *= .68 + rng() * .1;
-    a *= .62;
-  }
-  return polish(o, sr, .45);
-}
-
 function genImpact(sr, rng, surface) {
   const o = outBuf(sr, surface === 'metal' ? .62 : .42);
   const v = (x, a = .08) => x * (1 + (rng() * 2 - 1) * a);
@@ -531,6 +402,7 @@ function genImpact(sr, rng, surface) {
       [[v(1180), .5, .11], [v(1876), .42, .085], [v(2930), .3, .062], [v(4415), .2, .038], [v(6220), .1, .022]]
         .forEach(([f, a, tau]) => addRing(o, sr, 0, f, a, tau, rng() * TAU));
       addDrop(o, sr, 0, 280, 130, .25, .014);
+      softClip(o, 3.4);
       break;
     case 'wood':
       addNoise(o, sr, rng, 0, .025, .68, .005, 'bp', v(2300), .8);
@@ -555,40 +427,24 @@ function genImpact(sr, rng, surface) {
 
 function genWhizz(sr, rng) {
   const dur = .34 + rng() * .08, o = outBuf(sr, dur), mid = .34 + rng() * .1;
-  const bq = new Biquad('bp', 3000, 5, sr), body = new Biquad('bp', 900, 1.4, sr);
+  const bq = new Biquad('bp', 3000, 1.6, sr), body = new Biquad('bp', 900, 1.4, sr);
   const f0 = 3700 + rng() * 1200, f1 = 620 + rng() * 260;
-  let ph = 0;
   for (let i = 0; i < o.length; i++) {
     const u = i / o.length, s = 1 / (1 + Math.exp((u - mid) * 15));
     const f = f1 + (f0 - f1) * s;
-    if ((i & 15) === 0) { bq.set(f, 4.5); body.set(f * .42, 1.3); }
-    ph += TAU * f * .92 / sr;
+    if ((i & 15) === 0) { bq.set(f, 1.6); body.set(f * .42, .9); }
     const e = Math.exp(-Math.pow((u - mid) / (u < mid ? .16 : .27), 2));
     const n = rng() * 2 - 1;
-    o[i] = (bq.tick(n) * .72 + body.tick(n) * .34 + Math.sin(ph) * .055) * e;
+    o[i] = (bq.tick(n) * .72 + body.tick(n) * .34) * e;
   }
   return polish(o, sr, .8, 10);
 }
 
 function genUi(sr, kind, rng) {
   const o = outBuf(sr, kind === 'kill' ? .34 : kind === 'buy' ? .42 : kind === 'hurt' ? .48 : .14);
-  if (kind === 'hit') {
-    addRing(o, sr, 0, 1750, .36, .009);
-    addRing(o, sr, 0, 3120, .2, .006);
-    addNoise(o, sr, rng, 0, .012, .16, .002, 'hp', 3000);
-  } else if (kind === 'head') {
-    addRing(o, sr, 0, 2460, .36, .016);
-    addRing(o, sr, 0, 4010, .24, .012);
-    addRing(o, sr, .018, 3320, .2, .018);
-    addNoise(o, sr, rng, 0, .012, .15, .002, 'hp', 3400);
-  } else if (kind === 'kill') {
-    addDrop(o, sr, 0, 170, 76, .44, .035);
-    addRing(o, sr, .004, 1320, .17, .022);
-    addRing(o, sr, .082, 1760, .2, .036);
-    addRing(o, sr, .082, 2640, .08, .024);
-  } else if (kind === 'hurt') {
+  if (kind === 'hurt') {
     addDrop(o, sr, 0, 110, 38, .9, .06);
-    addNoise(o, sr, rng, 0, .22, .3, .05, 'lp', 420, .7, .002);
+    addNoise(o, sr, rng, 0, .22, .16, .05, 'bp', 720, .34, .002);
     addNoise(o, sr, rng, .012, .05, .08, .012, 'bp', 1200, .8);
   } else if (kind === 'buy') {
     addRing(o, sr, 0, 880, .24, .04);
@@ -599,32 +455,19 @@ function genUi(sr, kind, rng) {
     addRing(o, sr, 0, 1180, .3, .007);
     addNoise(o, sr, rng, 0, .008, .08, .0015, 'hp', 2800);
   }
+  if (kind === 'hurt') softClip(o, 3.2);
   return polish(o, sr, kind === 'hurt' ? .82 : .5, 8);
 }
 
 function genArtillery(sr, rng) {
   const o = outBuf(sr, 3.4);
   addDrop(o, sr, .004, 72, 25, .9, .34);
-  addNoise(o, sr, rng, .004, 3.2, .55, .62, 'lp', 150, .7, .025);
+  addNoise(o, sr, rng, .004, 3.2, .55, .62, 'lp', 62, .7, .025);
+  addNoise(o, sr, rng, .004, 1.6, .3, .32, 'bp', 760, .3, .012);
   for (let i = 0; i < 4; i++) addDrop(o, sr, .32 + i * (.34 + rng() * .25), 52 + rng() * 15, 24, .24 / (1 + i * .4), .24);
+  softClip(o, 4.5);
+  scoop(o, sr, 215, .55, .8);
   return polish(o, sr, .82, 60);
-}
-function genGull(sr, rng) {
-  const notes = 2 + Math.floor(rng() * 3), o = outBuf(sr, .32 * notes + .2);
-  let t = .01;
-  for (let n = 0; n < notes; n++) {
-    const dur = .18 + rng() * .1, a = Math.floor(t * sr), len = Math.floor(dur * sr), f0 = 1450 + rng() * 650, f1 = f0 * (.62 + rng() * .1);
-    let ph = 0, fm = 0;
-    for (let i = 0; i < len && a + i < o.length; i++) {
-      const u = i / len, f = f0 + (f1 - f0) * u * u;
-      fm += TAU * 34 / sr;
-      ph += TAU * (f + Math.sin(fm) * 42) / sr;
-      const e = Math.sin(Math.PI * Math.min(1, u * 1.05)) ** 1.5;
-      o[a + i] += (Math.sin(ph) + .3 * Math.sin(ph * 2.01) + .12 * Math.sin(ph * 3.02)) * e * .4;
-    }
-    t += dur + .03 + rng() * .08;
-  }
-  return polish(o, sr, .5, 20);
 }
 function genWaterLap(sr, rng) {
   const o = outBuf(sr, 1.15), a = new Biquad('bp', 420, .8, sr), b = new Biquad('bp', 1250, 1.6, sr);
@@ -640,22 +483,16 @@ function genWaterLap(sr, rng) {
 function genCreak(sr, rng) {
   const dur = .75 + rng() * .85, o = outBuf(sr, dur), f0 = 120 + rng() * 90;
   let ph = 0, nextPulse = 0;
-  const bq = new Biquad('bp', 900 + rng() * 800, 3.2, sr);
+  const bq = new Biquad('bp', 900 + rng() * 800, .8, sr);
   for (let i = 0; i < o.length; i++) {
     const u = i / o.length;
     const f = f0 * (1 + .55 * Math.sin(Math.PI * u) + .08 * Math.sin(u * 19));
     ph += f / sr;
     let pulse = 0;
-    if (ph >= nextPulse) { pulse = .7 + rng() * .3; nextPulse += .7 + rng() * .6; }
-    o[i] = bq.tick(pulse) * Math.sin(Math.PI * u) ** .7;
+    if (ph >= nextPulse) { pulse = .7 + rng() * .3; nextPulse += .4 + rng() * 1.5; }
+    o[i] = bq.tick(pulse + (rng() * 2 - 1) * .035) * Math.sin(Math.PI * u) ** .7;
   }
   return polish(o, sr, .42, 25);
-}
-function genTick(sr, rng) {
-  const o = outBuf(sr, .3);
-  addRing(o, sr, 0, 1900 + rng() * 1800, .4, .025, rng() * TAU);
-  addRing(o, sr, 0, 5100 + rng() * 1000, .12, .012, rng() * TAU);
-  return polish(o, sr, .3, 12);
 }
 function genGunFallback(sr, rng, spec) {
   const o = outBuf(sr, Math.min(.42, spec.dur));
@@ -690,16 +527,20 @@ function genBoomNear(sr, rng) {
   sweepNoise(o, sr, rng, .001, .5, 1.5, 2600, 160, .6, (u) => Math.exp(-u * 7)); // fireball
   addDrop(o, sr, .001, 110, 30, 1.3, .2); // pressure wave
   addDrop(o, sr, .03, 64, 22, .9, .34);
-  addNoise(o, sr, rng, .02, 1.5, .5, .32, 'lp', 240, .7, .01); // rolling body
-  addNoise(o, sr, rng, .05, .7, .22, .16, 'bp', 900, .6, .02);
-  softClip(o, 2.4);
+  addNoise(o, sr, rng, .02, 1.5, .5, .32, 'lp', 62, .7, .01); // rolling body
+  addNoise(o, sr, rng, .03, .9, .4, .2, 'bp', 900, .32, .012);
+  softClip(o, 5);
+  scoop(o, sr, 215, .55, .8);
   return polish(o, sr, .9, 40);
 }
 function genBoomRumble(sr, rng) {
   const o = outBuf(sr, 3.6);
   addDrop(o, sr, .004, 70, 24, .95, .4);
-  addNoise(o, sr, rng, .004, 3.4, .6, .7, 'lp', 135, .7, .03);
+  addNoise(o, sr, rng, .004, 3.4, .6, .7, 'lp', 60, .7, .03);
+  addNoise(o, sr, rng, .004, 1.8, .34, .36, 'bp', 760, .3, .014);
   for (let i = 0; i < 4; i++) addDrop(o, sr, .3 + i * (.32 + rng() * .25), 50 + rng() * 16, 23, .26 / (1 + i * .45), .26);
+  softClip(o, 4.5);
+  scoop(o, sr, 215, .55, .8);
   return polish(o, sr, .84, 80);
 }
 function genDebris(sr, rng) {
@@ -719,7 +560,8 @@ function genRocketLaunch(sr, rng) {
   addNoise(o, sr, rng, 0, .03, .9, .006, 'hp', 1500, .7, .0002); // ignition pop
   addDrop(o, sr, .002, 150, 46, 1, .11); // back-blast
   sweepNoise(o, sr, rng, .004, 1.2, 1, 500, 2600, .7, (u) => Math.min(1, u * 30) * Math.exp(-u * 3.4)); // motor leaving
-  addNoise(o, sr, rng, .01, 1.2, .5, .3, 'lp', 300, .7, .01);
+  addNoise(o, sr, rng, .01, 1.2, .5, .3, 'lp', 110, .7, .01);
+  addNoise(o, sr, rng, .01, .6, .12, .14, 'bp', 900, .35, .006);
   softClip(o, 1.8);
   return polish(o, sr, .86, 50);
 }
@@ -762,33 +604,14 @@ function genXbow(sr, rng) {
   metalClack(o, sr, rng, .012, .22, 2300, 260);
   return polish(o, sr, .7, 20);
 }
-function genSwing(sr, rng, thrust) {
-  const dur = thrust ? .16 : .24, o = outBuf(sr, dur + .04), mid = thrust ? .3 : .45;
-  sweepNoise(o, sr, rng, 0, dur, 1, thrust ? 900 : 520, thrust ? 2600 : 1900, 1.1, (u) => bell(u, mid, .24));
-  sweepNoise(o, sr, rng, 0, dur, .35, 2400, 5200, 1.5, (u) => bell(u, mid, .16));
-  return polish(o, sr, .6, 12);
-}
 function genFlesh(sr, rng) {
   const o = outBuf(sr, .3);
   addDrop(o, sr, .001, 170, 62, .8, .03);
-  addNoise(o, sr, rng, .001, .1, .5, .022, 'lp', 520, .8, .0005);
+  addNoise(o, sr, rng, .001, .1, .34, .02, 'bp', 760, .35, .0005);
   addNoise(o, sr, rng, .006, .09, .32, .018, 'bp', 1500, .9, .002);
   addGrains(o, sr, rng, .01, .09, 14, .08, 500, 1800);
+  softClip(o, 2.4);
   return polish(o, sr, .74, 12);
-}
-function genPin(sr, rng) {
-  const o = outBuf(sr, .34);
-  addNoise(o, sr, rng, .002, .008, .3, .0015, 'hp', 4000);
-  [[3650, .3, .03], [5480, .22, .022], [7900, .12, .014]].forEach(([f, a, tau]) => addRing(o, sr, .002, f * (.97 + rng() * .06), a, tau, rng() * TAU)); // ring
-  friction(o, sr, rng, .004, .03, .08, 3600);
-  metalClack(o, sr, rng, .1, .5, 2750, 300); // safety lever
-  return polish(o, sr, .5, 10);
-}
-function genThrow(sr, rng) {
-  const o = outBuf(sr, .34);
-  sweepNoise(o, sr, rng, 0, .3, 1, 380, 1200, .8, (u) => bell(u, .5, .28));
-  addNoise(o, sr, rng, .02, .2, .2, .05, 'lp', 300, .7, .02);
-  return polish(o, sr, .5, 16);
 }
 function genBounce(sr, rng, surface) {
   const o = outBuf(sr, .36), soft = surface === 'sand' || surface === 'snow';
@@ -806,12 +629,6 @@ function genBounce(sr, rng, surface) {
   }
   return polish(o, sr, .7, 14);
 }
-function genClick(sr, rng) {
-  const o = outBuf(sr, .08);
-  metalClack(o, sr, rng, .002, .8, 3100, 420);
-  return polish(o, sr, .45, 6);
-}
-
 // ---------------------------------------------------------------------------
 // Offline rendering
 // ---------------------------------------------------------------------------
@@ -883,32 +700,25 @@ async function renderGun(Off, spec, seed, sr) {
 
   // Muzzle blast: band-limited noise whose centre falls quickly.
   const blastDur = vary(spec.blast.d), blastT = .0006;
-  const blast = noiseSrc(oc, nb, rng, blastT, blastDur * 2.2), bp = filt(oc, 'bandpass', vary(spec.blast.f0), spec.blast.q);
+  const blast = noiseSrc(oc, nb, rng, blastT, blastDur * 2.2), bp = filt(oc, 'bandpass', vary(spec.blast.f0), Math.min(spec.blast.q, .6));
   bp.frequency.setValueAtTime(vary(spec.blast.f0), blastT);
   bp.frequency.exponentialRampToValueAtTime(vary(spec.blast.f1), blastT + blastDur * 1.5);
   blast.connect(bp).connect(envGain(oc, blastT, spec.blast.g, .0012, blastDur)).connect(mix);
 
   // Body resonance of the receiver and barrel.
   const bodyDur = vary(spec.body.d), body = noiseSrc(oc, nb, rng, .001, bodyDur * 2);
-  body.connect(filt(oc, 'bandpass', vary(spec.body.f), spec.body.q)).connect(envGain(oc, .001, spec.body.g, .002, bodyDur)).connect(mix);
+  body.connect(filt(oc, 'bandpass', vary(spec.body.f), Math.min(spec.body.q, .6))).connect(envGain(oc, .001, spec.body.g, .002, bodyDur)).connect(mix);
 
   // Low-frequency thump with pitch drop.
-  const th = oc.createOscillator(), thDur = vary(spec.thump.d);
-  th.type = 'sine';
-  th.frequency.setValueAtTime(vary(spec.thump.f0), 0);
-  th.frequency.exponentialRampToValueAtTime(vary(spec.thump.f1), thDur * .9);
-  th.connect(envGain(oc, 0, spec.thump.g, .0018, thDur)).connect(mix);
-  th.start(0); th.stop(Math.min(spec.dur, thDur + .02));
+  const thDur = vary(spec.thump.d), th = noiseSrc(oc, nb, rng, 0, thDur + .02), thLp = filt(oc, 'lowpass', vary(spec.thump.f0) * 3, .6);
+  thLp.frequency.exponentialRampToValueAtTime(Math.max(160, vary(spec.thump.f1) * 3), thDur * .9);
+  th.connect(thLp).connect(envGain(oc, 0, spec.thump.g * 2.4, .0018, thDur)).connect(mix);
 
   // Mechanical action: bolt travelling back then slamming home.
   for (let k = 0; k < 2; k++) {
     const t = spec.mech.t * vary(1, .1) + k * spec.mech.gap, f = vary(spec.mech.f, .05) * (k ? .82 : 1), g = spec.mech.g * (k ? 1 : .7);
     [1, 1.57, 2.43].forEach((r, i) => {
-      const o = oc.createOscillator();
-      o.type = i ? 'sine' : 'triangle';
-      o.frequency.value = f * r;
-      o.connect(envGain(oc, t, g / (1 + i * .75), .0006, .018 / (1 + i * .35))).connect(mix);
-      o.start(t); o.stop(Math.min(spec.dur, t + .035));
+      noiseSrc(oc, nb, rng, t, .035).connect(filt(oc, 'bandpass', f * r, 1.1)).connect(envGain(oc, t, g * 2 / (1 + i * .75), .0006, .018 / (1 + i * .35))).connect(mix);
     });
     const c = noiseSrc(oc, nb, rng, t, .012);
     c.connect(filt(oc, 'highpass', 2800)).connect(envGain(oc, t, g * .75, .0003, .006)).connect(mix);
@@ -936,18 +746,16 @@ async function renderGun(Off, spec, seed, sr) {
     src.connect(f).connect(env);
     env.connect(left).connect(merge, 0, 0);
     env.connect(right).connect(merge, 0, 1);
-    const low = oc.createOscillator();
-    low.frequency.setValueAtTime(vary(82), t);
-    low.frequency.exponentialRampToValueAtTime(38, t + d * .8);
-    const lowEnv = envGain(oc, t, a * .7, .01, d * .75);
-    low.connect(lowEnv);
+    const low = noiseSrc(oc, nb, rng, t, d), lowLp = filt(oc, 'lowpass', vary(82) * 3, .6), lowEnv = envGain(oc, t, a * 1.6, .01, d * .75);
+    lowLp.frequency.setValueAtTime(vary(82) * 3, t);
+    lowLp.frequency.exponentialRampToValueAtTime(120, t + d * .8);
+    low.connect(lowLp).connect(lowEnv);
     lowEnv.connect(left); lowEnv.connect(right);
-    low.start(t); low.stop(Math.min(spec.dur, t + d));
   }
 
   const out = await renderOffline(oc);
   if (!bufferValid(out)) throw new Error('invalid gun buffer');
-  for (let c = 0; c < out.numberOfChannels; c++) polish(out.getChannelData(c), sr, 1, 25);
+  for (let c = 0; c < out.numberOfChannels; c++) polish(scoop(out.getChannelData(c), sr, 340, .5, .7), sr, 1, 25);
   let peak = 1e-6;
   for (let c = 0; c < out.numberOfChannels; c++) { const d = out.getChannelData(c); for (let i = 0; i < d.length; i++) peak = Math.max(peak, Math.abs(d[i])); }
   const scale = .89 / peak;
@@ -979,24 +787,25 @@ function windLayer(oc, nb, rng, dest, type, f, q, gain, gust, dur) {
   s2.connect(side).connect(sideGain).connect(merge, 0, 1);
   merge.connect(dest);
 }
-function hum(oc, dest, f, gain, rng) {
-  const o = oc.createOscillator(), g = oc.createGain();
-  o.frequency.value = f * (1 + (rng() - .5) * .003);
-  g.gain.value = gain;
-  o.connect(g).connect(dest);
-  o.start(0);
+function hum(oc, nb, dest, f, gain, rng) {
+  const s = oc.createBufferSource(), bp = filt(oc, 'bandpass', f * (1 + (rng() - .5) * .003), 1.4), g = oc.createGain();
+  s.buffer = nb; s.loop = true;
+  g.gain.value = gain * 3.2;
+  s.connect(bp).connect(g).connect(dest);
+  s.start(0, rng() * nb.duration * .9);
 }
 async function renderBed(Off, name) {
   const sr = 24000, dur = 9, xf = 1.2, oc = new Off(2, Math.ceil((dur + xf) * sr), sr), rng = rngOf(hashStr('bed:' + name));
   const nb = noiseBuffer(oc, rng, 7.3), bus = oc.createGain(), total = dur + xf;
   bus.gain.value = .5; bus.connect(oc.destination);
-  const W = (type, f, q, g, gust) => windLayer(oc, nb, rng, bus, type, f, q, g, gust, total);
-  if (name === 'desert') { W('lowpass', 390, .6, .62, .4); W('bandpass', 1350, 1.1, .1, .6); W('highpass', 3400, .5, .012, .5); }
-  else if (name === 'urban') { W('lowpass', 165, .6, .8, .22); W('bandpass', 620, .55, .1, .35); W('bandpass', 2300, .7, .018, .4); hum(oc, bus, 62, .025, rng); }
+  const W = (type, f, q, g, gust) => windLayer(oc, nb, rng, bus, type, type === 'lowpass' ? f * .42 : f, type === 'lowpass' ? .5 : Math.min(q, 1), g, gust, total);
+  windLayer(oc, nb, rng, bus, 'bandpass', 950, .32, .075, .4, total);
+  if (name === 'desert') { W('lowpass', 390, .6, .36, .4); W('bandpass', 1350, 1.1, .17, .6); W('highpass', 3400, .5, .012, .5); }
+  else if (name === 'urban') { W('lowpass', 165, .6, .8, .22); W('bandpass', 620, .55, .1, .35); W('bandpass', 2300, .7, .018, .4); hum(oc, nb, bus, 62, .025, rng); }
   else if (name === 'port') { W('lowpass', 340, .6, .46, .36); W('bandpass', 430, .5, .3, .55); W('highpass', 2800, .5, .025, .65); }
   else if (name === 'bunker') {
     W('lowpass', 115, .7, .52, .08); W('bandpass', 315, 3.2, .16, .1); W('bandpass', 1240, 1.8, .018, .15);
-    hum(oc, bus, 50, .09, rng); hum(oc, bus, 100, .055, rng); hum(oc, bus, 150, .022, rng); hum(oc, bus, 237, .01, rng);
+    hum(oc, nb, bus, 50, .09, rng); hum(oc, nb, bus, 100, .055, rng); hum(oc, nb, bus, 150, .022, rng); hum(oc, nb, bus, 237, .01, rng);
   } else { W('bandpass', 640, 2.1, .25, .62); W('lowpass', 240, .6, .46, .3); W('bandpass', 1680, 4.5, .025, .75); }
   const r = await renderOffline(oc);
   const n = Math.floor(dur * sr), fade = Math.floor(xf * sr), out = oc.createBuffer(2, n, sr);
@@ -1075,29 +884,21 @@ export function createAudio() {
     land: (s) => bank(`land:${s}`, 3, (sr, r) => genLand(sr, r, s)),
     slide: (s) => bank(`slide:${s}`, 2, (sr, r) => genSlide(sr, r, s)),
     jump: () => bank('jump', 3, genJump),
-    reload: (st) => bank(`reload:${st}`, 3, (sr, r) => genReload(sr, r, st)),
-    dry: () => bank('dry', 2, genDry),
-    casing: (s) => bank(`casing:${s}`, 4, (sr, r) => genCasing(sr, r, s)),
     impact: (s) => bank(`impact:${s}`, 4, (sr, r) => genImpact(sr, r, s)),
     whizz: () => bank('whizz', 4, genWhizz),
     ui: (k) => bank(`ui:${k}`, 1, (sr, r) => genUi(sr, k, r)),
     artillery: () => bank('artillery', 3, genArtillery),
-    gull: () => bank('gull', 4, genGull),
     water: () => bank('water', 4, genWaterLap),
     creak: () => bank('creak', 4, genCreak),
-    tick: () => bank('tick', 3, genTick),
   };
   function warmBanks() {
     for (const s of SURFACES) {
       warm(`step:${s}:0`, 4, (sr, r) => genStep(sr, r, s, .86));
       warm(`step:${s}:1`, 4, (sr, r) => genStep(sr, r, s, 1.18));
       warm(`impact:${s}`, 4, (sr, r) => genImpact(sr, r, s));
-      warm(`casing:${s}`, 4, (sr, r) => genCasing(sr, r, s));
       warm(`land:${s}`, 3, (sr, r) => genLand(sr, r, s));
     }
-    for (const st of ['magOut', 'magIn', 'boltBack', 'boltForward', 'pump', 'shell', 'slideBack', 'slideForward']) warm(`reload:${st}`, 3, (sr, r) => genReload(sr, r, st));
     warm('whizz', 4, genWhizz);
-    warm('dry', 2, genDry);
     for (const s of SURFACES) warm(`slide:${s}`, 2, (sr, r) => genSlide(sr, r, s));
     warm('artillery', 3, genArtillery);
     startIdle();
@@ -1112,12 +913,8 @@ export function createAudio() {
     loop: () => bank('rl:loop', 1, genRocketLoop),
     thump: () => bank('gl:thump', 3, genThump),
     xbow: () => bank('xbow', 3, genXbow),
-    swing: (thrust) => bank(`swing:${thrust ? 1 : 0}`, 3, (sr, r) => genSwing(sr, r, thrust)),
     flesh: () => bank('flesh', 3, genFlesh),
-    pin: () => bank('pin', 2, genPin),
-    toss: () => bank('throw', 2, genThrow),
     bounce: (s) => bank(`bounce:${s}`, 3, (sr, r) => genBounce(sr, r, s)),
-    click: () => bank('click', 1, genClick),
   };
   const lastOnce = {}, flying = [], wanted = [], gunPending = {};
   let extraChain = Promise.resolve();
@@ -1394,17 +1191,19 @@ export function createAudio() {
       const id = pick(['ar', 'lmg', 'smg', 'ar', 'p9']), n = id === 'p9' ? 1 + Math.floor(Math.random() * 3) : 3 + Math.floor(Math.random() * 5);
       const gap = id === 'lmg' ? .1 : id === 'smg' ? .068 : id === 'p9' ? .24 : .094;
       const level = rand(.1, .24), lp = rand(650, 1500);
-      for (let i = 0; i < n; i++) ambVoice(gunBuffer(id), t + i * gap * rand(.94, 1.06), level * rand(.86, 1.05), pan, lp, .22, .24, rand(.96, 1.01));
+      for (let i = 0; i < n; i++) {      // far-off fire is the real distant recording of that weapon, or nothing while it is not decoded
+        const take = smp && smp.shot(id, false, .9);
+        if (take && take[0]) ambVoice(take[0].buffer, t + i * gap * rand(.94, 1.06), level * Math.min(1.2, take[0].gain) * rand(.86, 1.05), pan, lp, .22, .24, take[0].rate * rand(.96, 1.01));
+      }
     } else if (type === 'artillery') {
-      ambVoice(B.artillery(), t, rand(.34, .62), pan, rand(220, 520), .3, .25, rand(.88, 1.08));
-    } else if (type === 'gull') {
-      ambVoice(B.gull(), t, rand(.08, .18), pan, 6500, .28, .08, rand(.93, 1.08));
+      ambVoice(B.artillery(), t, rand(.46, .84), pan, rand(220, 520), .3, .25, rand(.88, 1.08));
     } else if (type === 'water') {
       ambVoice(B.water(), t, rand(.14, .28), pan, 3200, .1, 0, rand(.85, 1.12));
     } else if (type === 'creak') {
       ambVoice(B.creak(), t, rand(.07, .18), pan, 3600, .4, .08, rand(.82, 1.14));
-    } else if (type === 'tick') {
-      ambVoice(B.tick(), t, rand(.04, .1), pan, 8000, .7, .05, rand(.9, 1.15));
+    } else if (type === 'tick') {     // a distant metal tick: a real recording, or nothing
+      const sm = smp && smp.handling(null, 'casing');
+      if (sm) ambVoice(sm.buffer, t, rand(.04, .1), pan, 8000, .7, .05, rand(.9, 1.15));
     }
   }
   function ambienceTick() {
@@ -1439,6 +1238,25 @@ export function createAudio() {
     buses.amb.gain.cancelScheduledValues(now);
     glide(buses.amb.gain, 0, now, .9);
     stopBed(1);
+  }
+
+  // Weapon handling, grenade, knife and feedback sounds come only from the recorded bank (audio-samples.js). There is no synthesized
+  // fallback: a sound that is not decoded yet, or a stage nobody knows, is simply silent. Returns true when a recording was started.
+  function rec(stage, o, gain, cat = 'foley', send = .03, wid, extra) {
+    if (!smp) return false;
+    if (mine(o)) return smp.hand(play, wid, stage, Object.assign({ gain, rate: rand(.97, 1.03), send: send * E().ownWet }, extra), cat);
+    const p = spatial(o, 2.5, 1.3, !!o.occluded);
+    if (p.atten < .008) return false;
+    return smp.hand(play, wid, stage, { when: ctx.currentTime + p.delay, gain: gain * p.atten, pan: p.pan, lp: p.lp, rate: rand(.96, 1.03), send: send * (1 + p.far * 2) }, cat);
+  }
+  // Launcher reports built from real blasts; false while they are not decoded (the caller then uses its procedural voice).
+  function recShot(id, o, gain, ref, roll, send, echo) {
+    if (!smp) return false;
+    const now = ctx.currentTime;
+    if (mine(o)) return smp.fire(play, 'launch', id, null, { gain, rate: rand(.985, 1.015), send: send * E().ownWet, echo }, now);
+    const s = spatial(o, ref, roll, !!o.occluded);
+    if (s.atten < .008) return true;
+    return smp.fire(play, 'launch', id, s, { when: now + s.delay, gain: gain * s.atten, pan: s.pan, lp: s.lp, rate: rand(.97, 1.02), send: send * (1 + s.far * 2), echo: echo * (1 + s.far) }, now, o);
   }
 
   // Public API
@@ -1514,7 +1332,7 @@ export function createAudio() {
       if (id === 'gl') { a.thump(o); return; }
       if (id === 'knife') { a.swing(o); return; }
       if (id === 'frag') { a.throw(o); return; }
-      if (id === 'xbow') { oneShot('launch', X.xbow(), o, .4, 3, 1.3, { send: .03 }); return; }
+      if (id === 'xbow') { if (!recShot('xbow', o, .62, 3, 1.3, .03, 0)) oneShot('launch', X.xbow(), o, .4, 3, 1.3, { send: .03 }); return; }
       const key = GUNS[id] ? id : 'ar', spec = GUNS[key], env = E(), buf = gunBuffer(key), now = ctx.currentTime;
       if (isOwn(o)) {
         const gapShot = now - lastOwnShot, duck = (gapShot < .16 ? .84 : 1) * (spec.rapid && gapShot < .07 ? spec.rapid : 1);
@@ -1539,17 +1357,18 @@ export function createAudio() {
       });
     }),
     // wid (optional) = the weapon in hand, so the recorded handling matches it; without it, the weapon the player fired last
-    dry: guard((wid) => { if (smp && smp.hand(play, wid, 'dry', { gain: .34, rate: rand(.97, 1.03), send: .025 })) return; play('reload', B.dry(), { gain: .34, rate: rand(.97, 1.03), send: .025 }); }),
+    dry: guard((wid) => { rec('dry', undefined, .36, 'reload', .025, wid); }),
+    // Every stage the viewmodel reports, known or not: a recording, or silence.
     reload: guard((stage, wid) => {
-      // the viewmodel also reports knife and grenade moments through its sound stages
+      if (typeof stage !== 'string') return;
       if (stage === 'swing') { a.swing(); return; }
       if (stage === 'stab') { a.stab(false); return; }
       if (stage === 'pinPull') { a.pinPull(); return; }
       if (stage === 'throw') { a.throw(); return; }
-      if (smp && smp.hand(play, wid, stage, { gain: .46, rate: rand(.975, 1.025), send: .05 * E().ownWet })) return;
-      const st = RELOAD_STAGES.includes(stage) ? stage : 'magIn';
-      play('reload', B.reload(st), { gain: .46, rate: rand(.975, 1.025), send: .05 * E().ownWet });
+      rec(stage, undefined, .5, 'reload', .05, wid);
     }),
+    // Shouldering the weapon: a light cloth movement (for game.js to call when aiming starts).
+    aim: guard(() => { if (once('aim:own', .25)) rec('aim', undefined, .4, 'foley', .015); }),
     step: guard((surface, o = {}) => {
       const s = surfaceOf(surface), run = !!o.run, buf = B.step(s, run);
       if (isOwn(o)) { play('step', buf, { gain: (run ? .25 : .17) * rand(.86, 1.08), rate: rand(.93, 1.07), send: .025 * E().ownWet }); return; }
@@ -1574,10 +1393,11 @@ export function createAudio() {
       play('whizz', B.whizz(), { gain: .34 * p.atten, pan: p.pan, lp: Math.max(p.lp, 6000), rate: rand(.92, 1.1), send: .025 });
     }),
     casing: guard((surface) => {
-      play('casing', B.casing(surfaceOf(surface)), { when: ctx.currentTime + rand(.24, .46), gain: rand(.08, .15), pan: rand(.1, .45), rate: rand(.95, 1.08), send: .025 });
+      const soft = surface === 'sand' || surface === 'snow';
+      rec('casing', undefined, rand(.22, .36) * (soft ? .5 : 1), 'casing', .025, undefined, { when: ctx.currentTime + rand(.24, .46), pan: rand(.1, .45), rate: rand(.95, 1.08), lp: soft ? 1900 : undefined });
     }),
-    hit: guard((isHead) => { play('hud', B.ui(isHead ? 'head' : 'hit'), { gain: isHead ? .24 : .2 }); }),
-    kill: guard(() => { play('hud', B.ui('kill'), { gain: .25 }); }),
+    hit: guard((isHead) => { rec(isHead ? 'head' : 'hit', undefined, isHead ? .44 : .4, 'hud', 0); }),
+    kill: guard(() => { rec('kill', undefined, .44, 'hud', 0); }),
     hurt: guard(() => { play('hud', B.ui('hurt'), { gain: .44, lp: 1800 }); }),
     ui: guard(() => { play('ui', B.ui('tick'), { gain: .18 }); }),
     buy: guard(() => { play('ui', B.ui('buy'), { gain: .22 }); }),
@@ -1597,17 +1417,17 @@ export function createAudio() {
       const near = level * p.atten * (1 - p.far * .55);
       if (near > .01) {
         play('boom', X.boom(), {
-          when: now + p.delay, gain: near, pan: p.pan * .8, lp: p.lp, rate: rate * rand(.96, 1.04),
+          when: now + p.delay, gain: near * 1.35, pan: p.pan * .8, lp: p.lp, rate: rate * rand(.96, 1.04),
           send: Math.min(1.2, carry * (.3 + p.far * .5)), echo: carry * (.25 + p.far * .3),
         });
       }
       const roll = Math.min(.9, carry * (.3 + p.far * .5));
-      if (roll > .01) play('rumble', X.rumble(), { when: now + p.delay + .02, gain: roll, pan: p.pan * .4, lp: Math.min(p.lp, 2400 - p.far * 1700), rate: rate * rand(.92, 1.05), send: .18 });
+      if (roll > .01) play('rumble', X.rumble(), { when: now + p.delay + .02, gain: roll * 1.35, pan: p.pan * .4, lp: Math.min(p.lp, 2400 - p.far * 1700), rate: rate * rand(.92, 1.05), send: .18 });
       if (p.d < 45 && !o.occluded) play('debris', X.debris(), { when: now + p.delay + .1, gain: .42 * level * (1 - p.d / 45), pan: p.pan, lp: Math.min(p.lp, 9000), rate: rand(.9, 1.1), send: .12 });
     }),
     rocketLaunch: guard((o = {}) => {
       if (mine(o) && !once('rl:own', .08)) return;
-      oneShot('launch', X.launch(), o, .78, 9, 1, { send: .3, echo: .2 });
+      if (!recShot('rl', o, .8, 9, 1, .3, .2)) oneShot('launch', X.launch(), o, .78, 9, 1, { send: .3, echo: .2 });
     }),
     // Looping whoosh for a rocket in flight. Always returns { update({x,y,z}), stop() } (inert before unlock). At most four at once.
     rocketFly(o = {}) {
@@ -1651,7 +1471,7 @@ export function createAudio() {
     },
     thump: guard((o = {}) => {
       if (mine(o) && !once('gl:own', .06)) return;
-      oneShot('launch', X.thump(), o, .66, 7, 1.05, { send: .2, echo: .1 });
+      if (!recShot('gl', o, .7, 7, 1.05, .2, .1)) oneShot('launch', X.thump(), o, .66, 7, 1.05, { send: .2, echo: .1 });
     }),
     // Grenade hitting a surface; o.size (0..1) is the impact strength.
     bounce: guard((surface, o = {}) => {
@@ -1662,28 +1482,29 @@ export function createAudio() {
     // Knife through the air. No argument (or own) = the player's own blade; a position plays it in the world.
     swing: guard((o) => {
       if (mine(o) && !once('melee:own', .12)) return;
-      oneShot('melee', X.swing(false), o, mine(o) ? .3 : .34, 2.5, 1.3, { send: .02 });
+      rec('swing', o, .56, 'melee', .02);
     }),
     // Knife thrust. stab(true) or stab({x,y,z,own}) adds the hit on a body; stab(false) or stab() is the thrust alone.
     stab: guard((arg) => {
       const o = arg && typeof arg === 'object' ? arg : undefined, hit = o ? true : !!arg;
       if (mine(o)) {
-        if (once('melee:own', .12)) play('melee', X.swing(true), { gain: .3, rate: rand(.94, 1.1), send: .02 });
+        if (once('melee:own', .12)) rec('stab', undefined, .56, 'melee', .02);
         if (hit && once('flesh:own', .08)) play('melee', X.flesh(), { when: ctx.currentTime + .03, gain: .5, rate: rand(.92, 1.08), send: .03 });
         return;
       }
-      oneShot('melee', hit ? X.flesh() : X.swing(true), o, hit ? .6 : .34, 2.5, 1.3, { send: .03 });
+      if (hit) oneShot('melee', X.flesh(), o, .6, 2.5, 1.3, { send: .03 });
+      else rec('stab', o, .56, 'melee', .03);
     }),
     pinPull: guard((o) => {
       if (mine(o) && !once('pin:own', .15)) return;
-      oneShot('foley', X.pin(), o, .3, 2, 1.4, { send: .03 });
+      rec('pinPull', o, .5, 'foley', .03);
     }),
     throw: guard((o) => {
       if (mine(o) && !once('throw:own', .15)) return;
       // a pin pulled in the same instant (quick throw) is heard first
-      oneShot('foley', X.toss(), o, .3, 2.5, 1.3, { send: .02, when: mine(o) && since('pin:own') < .06 ? ctx.currentTime + .16 : undefined });
+      rec('throw', o, .52, 'foley', .02, undefined, mine(o) && since('pin:own') < .06 ? { when: ctx.currentTime + .16 } : undefined);
     }),
-    click: guard(() => { play('ui', X.click(), { gain: .2, rate: rand(.97, 1.03) }); }),
+    click: guard(() => { rec('click', undefined, .34, 'ui', 0); }),
     // The recorded-sound bank once its module has loaded (stats(), setEnabled(bool), settled), else null. For diagnostics and tests.
     samples: () => smp,
   };

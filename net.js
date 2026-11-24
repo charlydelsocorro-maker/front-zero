@@ -1,6 +1,6 @@
 /* FRONT ZERO multiplayer client. n.remote(id, timeNow) expects performance.now() milliseconds. */
-const EVENTS = ['room', 'start', 'state', 'shot', 'damage', 'death', 'respawn', 'score', 'round', 'action', 'end', 'error', 'close', 'boom'];
-const SEND_INTERVAL = 50, INTERP_DELAY = 100, MAX_EXTRAPOLATE = 100, BUFFER = 24, SNAP_DIST = 8, PING_MS = 2000;
+const EVENTS = ['room', 'start', 'state', 'shot', 'damage', 'death', 'respawn', 'score', 'round', 'action', 'end', 'error', 'close', 'boom', 'loot'];
+const SEND_INTERVAL = 50, INTERP_DELAY = 100, MIN_DELAY = 90, MAX_DELAY = 240, MAX_EXTRAPOLATE = 100, COAST = 0.07, BUFFER = 24, SNAP_DIST = 8, PING_MS = 2000;
 const WAKE_MS = 75000, WAKE_RETRY_MS = 2500;   // a free host sleeps when idle and can take up to a minute to answer
 
 const clock = () => performance.now();
@@ -62,18 +62,68 @@ export function createNet(url) {
     b.push({ ...s, ts });
     if (b.length > BUFFER) b.shift();
   }
+  // Playback clock of the remote players: the server clock estimate is slewed (a new best ping must not move everybody at once)
+  // and the delay follows the real lateness of the packets, so a late one is waited for instead of guessed and corrected.
+  let clockS = NaN, lastRemote = 0, delayS = INTERP_DELAY, latePeak = 0, lastArrival = 0;
+  function noteArrival(ts) {
+    const now = clock(), late = now + (clockS === clockS ? clockS : offset) - ts;
+    latePeak = Math.max(late, latePeak - (now - lastArrival) * 0.012); lastArrival = now;
+  }
+  function playbackTime(now) {
+    const step = Math.min(100, Math.max(0, now - lastRemote)); lastRemote = now;
+    if (!(clockS === clockS) || Math.abs(offset - clockS) > 250) clockS = offset;
+    else { const m = step * 0.03, d = offset - clockS; clockS += d > m ? m : d < -m ? -m : d; }
+    const want = Math.min(MAX_DELAY, Math.max(MIN_DELAY, latePeak + 16)), r = step * (want > delayS ? 0.12 : 0.02), e = want - delayS;
+    delayS += e > r ? r : e < -r ? -r : e;
+    return now + clockS - delayS;
+  }
+  const outs = new Map();
+  function sampleRemote(b, at, o) {
+    const last = b[b.length - 1];
+    if (at >= last.ts) {       // nothing newer yet: coast, slowing down, so a player who stopped is not carried past the spot and pulled back
+      const t = Math.min(at - last.ts, MAX_EXTRAPOLATE) / 1000, d = t < 0.05 ? t : 0.05 + COAST * (1 - Math.exp(-(t - 0.05) / COAST));
+      Object.assign(o, last); o.x = last.x + last.vx * d; o.z = last.z + last.vz * d;
+      return;
+    }
+    if (at <= b[0].ts) { Object.assign(o, b[0]); return; }
+    let i = b.length - 2;
+    while (i > 0 && b[i].ts > at) i--;
+    const a = b[i], c = b[i + 1];
+    if (Math.hypot(c.x - a.x, c.y - a.y, c.z - a.z) > SNAP_DIST) { Object.assign(o, c); return; }
+    const k = (at - a.ts) / (c.ts - a.ts), h = (c.ts - a.ts) / 1000, cx = (c.x - a.x) / h, cz = (c.z - a.z) / h;
+    Object.assign(o, c); o.ts = at;
+    o.x = hermite(a.x, c.x, tangent(a.vx, cx) * h, tangent(c.vx, cx) * h, k);       // speed stays continuous across snapshots
+    o.z = hermite(a.z, c.z, tangent(a.vz, cz) * h, tangent(c.vz, cz) * h, k);
+    o.y = lerp(a.y, c.y, k); o.vx = lerp(a.vx, c.vx, k); o.vz = lerp(a.vz, c.vz, k);
+    o.yaw = lerpAngle(a.yaw, c.yaw, k); o.pitch = lerp(a.pitch, c.pitch, k);
+  }
+  const tangent = (v, chord) => (typeof v === 'number' && Math.abs(v - chord) < 2.5 ? v : chord);   // a wall hit or a stop: the reported speed no longer describes the segment
+  function hermite(p0, p1, m0, m1, t) {
+    const t2 = t * t, t3 = t2 * t;
+    return (2 * t3 - 3 * t2 + 1) * p0 + (t3 - 2 * t2 + t) * m0 + (-2 * t3 + 3 * t2) * p1 + (t3 - t2) * m1;
+  }
   function pruneBuffers(players) {
     const ids = new Set(players.map(p => p.id));
     for (const id of buffers.keys()) if (!ids.has(id)) buffers.delete(id);
+  }
+  // Drops of the running match: they can arrive while this client is still loading the map, the engine reads them once it is ready.
+  const lootItems = new Map();
+  function lootMirror(m) {
+    if (m.op === 'clear' || m.op === 'sync') lootItems.clear();
+    if (m.op === 'add' || m.op === 'sync') { const at = clock(); for (const d of m.items || []) lootItems.set(d.id, { ...d, at }); }
+    else if (m.op === 'del') { for (const id of m.ids || []) lootItems.delete(id); }
+    else if (m.op === 'upd') { const d = lootItems.get(m.id); if (d) { d.a = m.a; d.r = m.r; } }
   }
   function onMessage(ev) {
     let m;
     try { m = JSON.parse(ev.data); } catch { return; }
     if (!m || typeof m.t !== 'string') return;
     switch (m.t) {
-      case 'welcome': return;
+      case 'welcome': n.lootOk = m.loot === 1; return;
+      case 'loot': lootMirror(m); break;
       case 'pong': return onPong(m);
       case 'states':
+        noteArrival(m.ts);
         for (const s of m.s) {
           if (s.id === n.id) continue;
           pushSnapshot(s, m.ts);
@@ -84,14 +134,15 @@ export function createNet(url) {
         n.room = m; pruneBuffers(m.players);
         break;
       case 'start':
-        n.room = m; buffers.clear(); n.lastRound = null; n.lastScore = null;
+        n.room = m; buffers.clear(); outs.clear(); n.lastRound = null; n.lastScore = null; lootItems.clear(); n.life = m.life | 0;
         break;
       // The match's first 'round' and 'score' arrive while the client is still loading the map: keep the latest for a late replay.
       case 'round': n.lastRound = { ...m, at: clock() }; break;
       case 'score': n.lastScore = { ...m, at: clock() }; break;
-      case 'end': n.lastRound = null; n.lastScore = null; break;
+      case 'end': n.lastRound = null; n.lastScore = null; lootItems.clear(); break;
       case 'respawn':
-        buffers.delete(m.id);
+        buffers.delete(m.id); outs.delete(m.id);
+        if (m.id === n.id && m.life) n.life = m.life;
         break;
     }
     if (handlers.has(m.t)) {
@@ -193,6 +244,12 @@ export function createNet(url) {
     /** Detonation of one of our own projectiles. The server relays it ('boom' event: {id, x, y, z, weapon, pid}) and validates the splash hits that follow against it. */
     sendBoom({ x, y, z, weapon, pid }) { send({ t: 'boom', x, y, z, weapon, pid: pid || 0 }); },
     sendAction(type, data) { send({ t: 'action', type, data }); },
+    // Loot (only when this server announced it in 'welcome'; an older server would count these as bad messages).
+    lootOk: false, life: 0,
+    sendInv(w, g) { if (n.lootOk && isOpen() && n.id) raw({ t: 'inv', l: n.life, w, g }); },
+    sendTake(id, swap) { if (n.lootOk && isOpen() && n.id) raw({ t: 'take', id, swap: !!swap }); },
+    /** The drops currently on the map, with their remaining lifetime. */
+    lootNow() { const now = clock(), out = []; for (const d of lootItems.values()) out.push({ ...d, ttl: Math.max(0, d.ttl - (now - d.at)) }); return out; },
 
     on(event, fn) {
       if (!handlers.has(event)) throw new Error(`Unknown net event: ${event}`);
@@ -203,24 +260,19 @@ export function createNet(url) {
     remote(id, timeNow = clock()) {
       const b = buffers.get(id);
       if (!b || !b.length) return null;
-      const at = timeNow + offset - INTERP_DELAY;
-      const last = b[b.length - 1];
-      if (at >= last.ts) {
-        const dt = Math.min(at - last.ts, MAX_EXTRAPOLATE) / 1000;
-        return { ...last, x: last.x + last.vx * dt, z: last.z + last.vz * dt };
+      const at = playbackTime(timeNow);
+      let o = outs.get(id); if (!o) outs.set(id, o = { _t: -1, _x: 0, _z: 0, _ex: 0, _ez: 0 });       // one result object per player: called every frame
+      sampleRemote(b, at, o);
+      // A late packet can move the sampled path by a few cm at once: that gap is absorbed over ~90 ms instead of shown as a jump.
+      const dts = o._t < 0 ? 0 : Math.min(0.2, Math.max(0, timeNow - o._t) / 1000), tx = o.x, tz = o.z;
+      if (o._t < 0 || Math.hypot(tx - o._x, tz - o._z) > SNAP_DIST * 0.5) { o._ex = o._ez = 0; }
+      else {
+        const fade = Math.exp(-dts / 0.09), jx = tx - o._x - (o.vx || 0) * dts, jz = tz - o._z - (o.vz || 0) * dts;
+        o._ex *= fade; o._ez *= fade;
+        if (jx * jx + jz * jz > 0.0009) { o._ex -= jx; o._ez -= jz; }
       }
-      if (at <= b[0].ts) return { ...b[0] };
-      let i = b.length - 2;
-      while (i > 0 && b[i].ts > at) i--;
-      const a = b[i], c = b[i + 1];
-      if (Math.hypot(c.x - a.x, c.y - a.y, c.z - a.z) > SNAP_DIST) return { ...c };
-      const k = (at - a.ts) / (c.ts - a.ts);
-      return {
-        ...c, ts: at,
-        x: lerp(a.x, c.x, k), y: lerp(a.y, c.y, k), z: lerp(a.z, c.z, k),
-        vx: lerp(a.vx, c.vx, k), vz: lerp(a.vz, c.vz, k),
-        yaw: lerpAngle(a.yaw, c.yaw, k), pitch: lerp(a.pitch, c.pitch, k),
-      };
+      o._t = timeNow; o._x = tx; o._z = tz; o.x = tx + o._ex; o.z = tz + o._ez;
+      return o;
     },
   };
   return n;

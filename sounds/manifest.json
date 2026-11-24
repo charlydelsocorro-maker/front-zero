@@ -1,5 +1,5 @@
 {
- "version": 2,
+ "version": 3,
  "library": "The Free Firearm Sound Library",
  "license": "CC0-1.0",
  "format": "mp3",
@@ -11,11 +11,11 @@
   "handling": -29.75
  },
  "mix": {
-  "near": 1,
-  "mid": 1,
-  "far": 1,
-  "handling": 1,
-  "dry": 1,
+  "near": 1.7,
+  "mid": 1.4,
+  "far": 1.7,
+  "handling": 0.6,
+  "dry": 0.75,
   "sub": 1
  },
  "priority": [
@@ -114,7 +114,13 @@
    "rel": 0.08,
    "lp": 9500
   },
-  "mini": {},
+  "mini": {
+   "set": "carbine762",
+   "rate": 0.97,
+   "rel": 0.035,
+   "lp": 10000,
+   "gain": 0.9
+  },
   "dmr": {
    "set": "boltrifle",
    "rate": 1.04,
@@ -131,7 +137,23 @@
    "rel": 0.2,
    "sub": 0.4
   },
-  "gl": {}
+  "gl": {
+   "set": "launchgl",
+   "rate": 1,
+   "rel": 0.14
+  },
+  "rl": {
+   "set": "launchrl",
+   "rate": 1,
+   "rel": 0.3
+  },
+  "xbow": {
+   "set": "launchxbow",
+   "rate": 1,
+   "rel": 0.08
+  },
+  "knife": {},
+  "frag": {}
  },
  "events": {
   "shot:p9": {
@@ -141,19 +163,23 @@
   },
   "reload:magOut:p9": {
    "from": "pistol9/magOut",
-   "rate": 1
+   "rate": 1,
+   "gain": 0.67
   },
   "reload:magIn:p9": {
    "from": "pistol9/magIn",
-   "rate": 1
+   "rate": 1,
+   "gain": 0.67
   },
   "reload:slideBack:p9": {
    "from": "pistol9/slideBack",
-   "rate": 1
+   "rate": 1,
+   "gain": 0.67
   },
   "reload:slideForward:p9": {
    "from": "pistol9/slideForward",
-   "rate": 1
+   "rate": 1,
+   "gain": 0.67
   },
   "dry:p9": {
    "from": "pistol9/dry",
@@ -166,23 +192,27 @@
   },
   "reload:magOut:hp": {
    "from": "pistol45/magOut",
-   "rate": 0.96
+   "rate": 0.96,
+   "gain": 1.051
   },
   "reload:magIn:hp": {
    "from": "pistol45/magIn",
-   "rate": 0.96
+   "rate": 0.96,
+   "gain": 1.051
   },
   "reload:slideBack:hp": {
    "from": "pistol45/slideBack",
-   "rate": 0.96
+   "rate": 0.96,
+   "gain": 1.051
   },
   "reload:slideForward:hp": {
    "from": "pistol45/slideForward",
-   "rate": 0.96
+   "rate": 0.96,
+   "gain": 1.051
   },
   "dry:hp": {
-   "from": "pistol45/dry",
-   "rate": 0.96
+   "from": "pistol9/dry",
+   "rate": 0.92
   },
   "shot:rev": {
    "near": "revolver38/near",
@@ -191,19 +221,23 @@
   },
   "reload:cylOpen:rev": {
    "from": "revolver/cylOpen",
-   "rate": 0.94
+   "rate": 0.94,
+   "gain": 0.724
   },
   "reload:cylEject:rev": {
    "from": "revolver/cylEject",
-   "rate": 0.94
+   "rate": 0.94,
+   "gain": 0.724
   },
   "reload:cylLoad:rev": {
    "from": "revolver/cylLoad",
-   "rate": 0.94
+   "rate": 0.94,
+   "gain": 0.724
   },
   "reload:cylClose:rev": {
    "from": "revolver/cylClose",
-   "rate": 0.94
+   "rate": 0.94,
+   "gain": 0.724
   },
   "dry:rev": {
    "from": "revolver/dry",
@@ -216,19 +250,23 @@
   },
   "reload:magOut:mp": {
    "from": "pistol9/magOut",
-   "rate": 1.07
+   "rate": 1.07,
+   "gain": 0.811
   },
   "reload:magIn:mp": {
    "from": "pistol9/magIn",
-   "rate": 1.07
+   "rate": 1.07,
+   "gain": 0.811
   },
   "reload:slideBack:mp": {
    "from": "pistol9/slideBack",
-   "rate": 1.07
+   "rate": 1.07,
+   "gain": 0.811
   },
   "reload:slideForward:mp": {
    "from": "pistol9/slideForward",
-   "rate": 1.07
+   "rate": 1.07,
+   "gain": 0.811
   },
   "dry:mp": {
    "from": "pistol9/dry",
@@ -241,19 +279,23 @@
   },
   "reload:magOut:ar": {
    "from": "rifle556/magOut",
-   "rate": 1
+   "rate": 1,
+   "gain": 0.856
   },
   "reload:magIn:ar": {
    "from": "rifle556/magIn",
-   "rate": 1
+   "rate": 1,
+   "gain": 0.856
   },
   "reload:boltBack:ar": {
    "from": "rifle556/boltBack",
-   "rate": 1
+   "rate": 1,
+   "gain": 0.856
   },
   "reload:boltForward:ar": {
    "from": "rifle556/boltForward",
-   "rate": 1
+   "rate": 1,
+   "gain": 0.856
   },
   "dry:ar": {
    "from": "rifle556/dry",
@@ -266,19 +308,23 @@
   },
   "reload:magOut:car": {
    "from": "rifle556/magOut",
-   "rate": 1.05
+   "rate": 1.05,
+   "gain": 0.735
   },
   "reload:magIn:car": {
    "from": "rifle556/magIn",
-   "rate": 1.05
+   "rate": 1.05,
+   "gain": 0.735
   },
   "reload:boltBack:car": {
    "from": "rifle556/boltBack",
-   "rate": 1.05
+   "rate": 1.05,
+   "gain": 0.735
   },
   "reload:boltForward:car": {
    "from": "rifle556/boltForward",
-   "rate": 1.05
+   "rate": 1.05,
+   "gain": 0.735
   },
   "dry:car": {
    "from": "rifle556/dry",
@@ -291,19 +337,23 @@
   },
   "reload:magOut:akr": {
    "from": "rifle762/magOut",
-   "rate": 1
+   "rate": 1,
+   "gain": 0.922
   },
   "reload:magIn:akr": {
    "from": "rifle762/magIn",
-   "rate": 1
+   "rate": 1,
+   "gain": 0.922
   },
   "reload:boltBack:akr": {
    "from": "rifle762/boltBack",
-   "rate": 1
+   "rate": 1,
+   "gain": 0.922
   },
   "reload:boltForward:akr": {
    "from": "rifle762/boltForward",
-   "rate": 1
+   "rate": 1,
+   "gain": 0.922
   },
   "dry:akr": {
    "from": "rifle762/dry",
@@ -320,19 +370,23 @@
   },
   "reload:magOut:brst": {
    "from": "rifle556/magOut",
-   "rate": 0.97
+   "rate": 0.97,
+   "gain": 0.695
   },
   "reload:magIn:brst": {
    "from": "rifle556/magIn",
-   "rate": 0.97
+   "rate": 0.97,
+   "gain": 0.695
   },
   "reload:boltBack:brst": {
    "from": "rifle556/boltBack",
-   "rate": 0.97
+   "rate": 0.97,
+   "gain": 0.695
   },
   "reload:boltForward:brst": {
    "from": "rifle556/boltForward",
-   "rate": 0.97
+   "rate": 0.97,
+   "gain": 0.695
   },
   "dry:brst": {
    "from": "rifle556/dry",
@@ -349,19 +403,23 @@
   },
   "reload:magOut:bat": {
    "from": "rifle762/magOut",
-   "rate": 0.95
+   "rate": 0.95,
+   "gain": 0.894
   },
   "reload:magIn:bat": {
    "from": "rifle762/magIn",
-   "rate": 0.95
+   "rate": 0.95,
+   "gain": 0.894
   },
   "reload:boltBack:bat": {
    "from": "rifle762/boltBack",
-   "rate": 0.95
+   "rate": 0.95,
+   "gain": 0.894
   },
   "reload:boltForward:bat": {
    "from": "rifle762/boltForward",
-   "rate": 0.95
+   "rate": 0.95,
+   "gain": 0.894
   },
   "dry:bat": {
    "from": "rifle762/dry",
@@ -374,19 +432,23 @@
   },
   "reload:magOut:smg": {
    "from": "smg9/magOut",
-   "rate": 1
+   "rate": 1,
+   "gain": 0.67
   },
   "reload:magIn:smg": {
    "from": "smg9/magIn",
-   "rate": 1
+   "rate": 1,
+   "gain": 0.67
   },
   "reload:boltBack:smg": {
    "from": "smg9/boltBack",
-   "rate": 1
+   "rate": 1,
+   "gain": 0.67
   },
   "reload:boltForward:smg": {
    "from": "smg9/boltForward",
-   "rate": 1
+   "rate": 1,
+   "gain": 0.67
   },
   "dry:smg": {
    "from": "rifle556/dry",
@@ -399,19 +461,23 @@
   },
   "reload:magOut:pdw": {
    "from": "smg762/magOut",
-   "rate": 1.05
+   "rate": 1.05,
+   "gain": 0.757
   },
   "reload:magIn:pdw": {
    "from": "smg762/magIn",
-   "rate": 1.05
+   "rate": 1.05,
+   "gain": 0.757
   },
   "reload:boltBack:pdw": {
    "from": "smg9/boltBack",
-   "rate": 1.05
+   "rate": 1.05,
+   "gain": 0.757
   },
   "reload:boltForward:pdw": {
    "from": "smg9/boltForward",
-   "rate": 1.05
+   "rate": 1.05,
+   "gain": 0.757
   },
   "dry:pdw": {
    "from": "rifle556/dry",
@@ -424,19 +490,23 @@
   },
   "reload:magOut:hsmg": {
    "from": "smg9/magOut",
-   "rate": 0.93
+   "rate": 0.93,
+   "gain": 0.772
   },
   "reload:magIn:hsmg": {
    "from": "smg9/magIn",
-   "rate": 0.93
+   "rate": 0.93,
+   "gain": 0.772
   },
   "reload:boltBack:hsmg": {
    "from": "smg9/boltBack",
-   "rate": 0.93
+   "rate": 0.93,
+   "gain": 0.772
   },
   "reload:boltForward:hsmg": {
    "from": "smg9/boltForward",
-   "rate": 0.93
+   "rate": 0.93,
+   "gain": 0.772
   },
   "dry:hsmg": {
    "from": "rifle556/dry",
@@ -449,19 +519,23 @@
   },
   "reload:boltBack:sg": {
    "from": "shotgun/boltBack",
-   "rate": 1
+   "rate": 1,
+   "gain": 1.259
   },
   "reload:boltForward:sg": {
    "from": "shotgun/boltForward",
-   "rate": 1
+   "rate": 1,
+   "gain": 1.259
   },
   "reload:pump:sg": {
    "from": "shotgun/pump",
-   "rate": 1
+   "rate": 1,
+   "gain": 1.259
   },
   "reload:shell:sg": {
    "from": "shotgun/shell",
-   "rate": 1
+   "rate": 1,
+   "gain": 1.259
   },
   "dry:sg": {
    "from": "shotgun/dry",
@@ -474,27 +548,33 @@
   },
   "reload:magOut:asg": {
    "from": "rifle762/magOut",
-   "rate": 0.9
+   "rate": 0.9,
+   "gain": 0.867
   },
   "reload:magIn:asg": {
    "from": "rifle762/magIn",
-   "rate": 0.9
+   "rate": 0.9,
+   "gain": 0.867
   },
   "reload:boltBack:asg": {
    "from": "shotgun/boltBack",
-   "rate": 1
+   "rate": 1,
+   "gain": 0.867
   },
   "reload:boltForward:asg": {
    "from": "shotgun/boltForward",
-   "rate": 1
+   "rate": 1,
+   "gain": 0.867
   },
   "reload:pump:asg": {
    "from": "shotgun/pump",
-   "rate": 1
+   "rate": 1,
+   "gain": 0.867
   },
   "reload:shell:asg": {
    "from": "shotgun/shell",
-   "rate": 1
+   "rate": 1,
+   "gain": 0.867
   },
   "dry:asg": {
    "from": "shotgun/dry",
@@ -507,7 +587,18 @@
   },
   "reload:shell:dbs": {
    "from": "shotgun/shell",
-   "rate": 0.96
+   "rate": 0.96,
+   "gain": 1.132
+  },
+  "reload:breakOpen:dbs": {
+   "from": "break/breakOpen",
+   "rate": 1,
+   "gain": 1.132
+  },
+  "reload:breakClose:dbs": {
+   "from": "break/breakClose",
+   "rate": 1,
+   "gain": 1.132
   },
   "dry:dbs": {
    "from": "shotgun/dry",
@@ -520,39 +611,47 @@
   },
   "reload:magOut:lmg": {
    "from": "rifle762/magOut",
-   "rate": 0.88
+   "rate": 0.88,
+   "gain": 1.027
   },
   "reload:magIn:lmg": {
    "from": "rifle762/magIn",
-   "rate": 0.88
+   "rate": 0.88,
+   "gain": 1.027
   },
   "reload:boltBack:lmg": {
    "from": "rifle762/boltBack",
-   "rate": 0.88
+   "rate": 0.88,
+   "gain": 1.027
   },
   "reload:boltForward:lmg": {
    "from": "rifle762/boltForward",
-   "rate": 0.88
+   "rate": 0.88,
+   "gain": 1.027
   },
   "dry:lmg": {
    "from": "rifle762/dry",
    "rate": 0.88
   },
+  "shot:mini": {
+   "near": "carbine762/near",
+   "mid": "rifle762/mid",
+   "far": "rifle762/far"
+  },
   "reload:magOut:mini": {
-   "from": "rifle762/magOut",
-   "rate": 0.82
+   "from": "belt/magOut",
+   "rate": 1,
+   "gain": 0.914
   },
   "reload:magIn:mini": {
-   "from": "rifle762/magIn",
-   "rate": 0.82
-  },
-  "reload:boltBack:mini": {
-   "from": "rifle762/boltBack",
-   "rate": 0.82
+   "from": "belt/magIn",
+   "rate": 1,
+   "gain": 0.914
   },
   "reload:boltForward:mini": {
-   "from": "rifle762/boltForward",
-   "rate": 0.82
+   "from": "belt/boltForward",
+   "rate": 1,
+   "gain": 0.914
   },
   "dry:mini": {
    "from": "rifle762/dry",
@@ -565,19 +664,23 @@
   },
   "reload:magOut:dmr": {
    "from": "rifle556/magOut",
-   "rate": 0.93
+   "rate": 0.93,
+   "gain": 0.88
   },
   "reload:magIn:dmr": {
    "from": "rifle556/magIn",
-   "rate": 0.93
+   "rate": 0.93,
+   "gain": 0.88
   },
   "reload:boltBack:dmr": {
    "from": "rifle556/boltBack",
-   "rate": 0.93
+   "rate": 0.93,
+   "gain": 0.88
   },
   "reload:boltForward:dmr": {
    "from": "rifle556/boltForward",
-   "rate": 0.93
+   "rate": 0.93,
+   "gain": 0.88
   },
   "dry:dmr": {
    "from": "rifle556/dry",
@@ -590,19 +693,23 @@
   },
   "reload:magOut:sr": {
    "from": "boltrifle/magOut",
-   "rate": 1
+   "rate": 1,
+   "gain": 1.241
   },
   "reload:magIn:sr": {
    "from": "boltrifle/magIn",
-   "rate": 1
+   "rate": 1,
+   "gain": 1.241
   },
   "reload:boltBack:sr": {
    "from": "boltrifle/boltBack",
-   "rate": 1
+   "rate": 1,
+   "gain": 1.241
   },
   "reload:boltForward:sr": {
    "from": "boltrifle/boltForward",
-   "rate": 1
+   "rate": 1,
+   "gain": 1.241
   },
   "dry:sr": {
    "from": "boltrifle/dry",
@@ -615,35 +722,94 @@
   },
   "reload:magOut:hsr": {
    "from": "boltrifle/magOut",
-   "rate": 0.88
+   "rate": 0.88,
+   "gain": 1.122
   },
   "reload:magIn:hsr": {
    "from": "boltrifle/magIn",
-   "rate": 0.88
+   "rate": 0.88,
+   "gain": 1.122
   },
   "reload:boltBack:hsr": {
    "from": "boltrifle/boltBack",
-   "rate": 0.88
+   "rate": 0.88,
+   "gain": 1.122
   },
   "reload:boltForward:hsr": {
    "from": "boltrifle/boltForward",
-   "rate": 0.88
+   "rate": 0.88,
+   "gain": 1.122
   },
   "dry:hsr": {
    "from": "boltrifle/dry",
    "rate": 0.88
   },
+  "shot:gl": {
+   "near": "launchgl/near",
+   "mid": "launchgl/mid",
+   "far": "launchgl/mid"
+  },
   "reload:cylOpen:gl": {
    "from": "revolver/cylOpen",
-   "rate": 0.74
+   "rate": 0.74,
+   "gain": 1.07
   },
   "reload:cylClose:gl": {
    "from": "revolver/cylClose",
-   "rate": 0.74
+   "rate": 0.74,
+   "gain": 1.07
+  },
+  "reload:grenadeIn:gl": {
+   "from": "glnch/grenadeIn",
+   "rate": 1,
+   "gain": 1.07
   },
   "dry:gl": {
    "from": "revolver/dry",
    "rate": 0.74
+  },
+  "shot:rl": {
+   "near": "launchrl/near",
+   "mid": "launchrl/mid",
+   "far": "launchrl/mid"
+  },
+  "reload:rocketIn:rl": {
+   "from": "tube/rocketIn",
+   "rate": 1,
+   "gain": 1.431
+  },
+  "reload:rocketLock:rl": {
+   "from": "tube/rocketLock",
+   "rate": 1,
+   "gain": 1.431
+  },
+  "dry:rl": {
+   "from": "tube/dry",
+   "rate": 1
+  },
+  "shot:xbow": {
+   "near": "launchxbow/near",
+   "mid": "launchxbow/mid",
+   "far": "launchxbow/mid"
+  },
+  "reload:stringDraw:xbow": {
+   "from": "xbow/stringDraw",
+   "rate": 1,
+   "gain": 1.027
+  },
+  "reload:stringLatch:xbow": {
+   "from": "xbow/stringLatch",
+   "rate": 1,
+   "gain": 1.027
+  },
+  "reload:boltPlace:xbow": {
+   "from": "xbow/boltPlace",
+   "rate": 1,
+   "gain": 1.027
+  },
+  "dry:xbow": {
+   "from": "xbow/dry",
+   "rate": 1
   }
  },
  "shots": {
@@ -692,8 +858,7 @@
     ["shots/revolver38-near-2.mp3", -23.96]
    ],
    "mid": [
-    ["shots/revolver38-mid-1.mp3", -22.12],
-    ["shots/revolver38-mid-2.mp3", -22.11]
+    ["shots/revolver38-mid-1.mp3", -22.12]
    ],
    "far": [
     ["shots/revolver38-far-1.mp3", -25.64],
@@ -751,7 +916,6 @@
   },
   "rifle3006b": {
    "near": [
-    ["shots/rifle3006b-near-1.mp3", -23.26],
     ["shots/rifle3006b-near-2.mp3", -23.29]
    ],
    "mid": [
@@ -780,7 +944,6 @@
    ],
    "mid": [
     ["shots/rifle76254-mid-1.mp3", -22.1],
-    ["shots/rifle76254-mid-2.mp3", -22.12],
     ["shots/rifle76254-mid-3.mp3", -22.12]
    ]
   },
@@ -842,11 +1005,40 @@
   },
   "shotgun12c": {
    "near": [
-    ["shots/shotgun12c-near-1.mp3", -23.3],
-    ["shots/shotgun12c-near-2.mp3", -23.32]
+    ["shots/shotgun12c-near-1.mp3", -23.3]
    ],
    "mid": [
     ["shots/shotgun12c-mid-1.mp3", -22.12]
+   ]
+  },
+  "launchrl": {
+   "near": [
+    ["shots/launchrl-near-1.mp3", -23.31],
+    ["shots/launchrl-near-2.mp3", -23.31]
+   ],
+   "mid": [
+    ["shots/launchrl-near-1.mp3", -23.31],
+    ["shots/launchrl-near-2.mp3", -23.31]
+   ]
+  },
+  "launchgl": {
+   "near": [
+    ["shots/launchgl-near-1.mp3", -23.31],
+    ["shots/launchgl-near-2.mp3", -23.31]
+   ],
+   "mid": [
+    ["shots/launchgl-near-1.mp3", -23.31],
+    ["shots/launchgl-near-2.mp3", -23.31]
+   ]
+  },
+  "launchxbow": {
+   "near": [
+    ["shots/launchxbow-near-1.mp3", -23.31],
+    ["shots/launchxbow-near-2.mp3", -23.31]
+   ],
+   "mid": [
+    ["shots/launchxbow-near-1.mp3", -23.31],
+    ["shots/launchxbow-near-2.mp3", -23.31]
    ]
   }
  },
@@ -1041,46 +1233,335 @@
    "dry": [
     ["handling/revolver-dry-1.mp3", -33.57]
    ]
+  },
+  "break": {
+   "breakOpen": [
+    ["handling/break-breakOpen-1.mp3", -29.75],
+    ["handling/break-breakOpen-2.mp3", -29.75]
+   ],
+   "breakClose": [
+    ["handling/break-breakClose-1.mp3", -29.75],
+    ["handling/break-breakClose-2.mp3", -29.75]
+   ]
+  },
+  "tube": {
+   "rocketIn": [
+    ["handling/tube-rocketIn-1.mp3", -29.75],
+    ["handling/tube-rocketIn-2.mp3", -29.75]
+   ],
+   "rocketLock": [
+    ["handling/tube-rocketLock-1.mp3", -29.75],
+    ["handling/tube-rocketLock-2.mp3", -29.75]
+   ],
+   "dry": [
+    ["handling/tube-dry-1.mp3", -29.75]
+   ]
+  },
+  "glnch": {
+   "grenadeIn": [
+    ["handling/glnch-grenadeIn-1.mp3", -29.75],
+    ["handling/glnch-grenadeIn-2.mp3", -29.75],
+    ["handling/glnch-grenadeIn-3.mp3", -29.75]
+   ]
+  },
+  "belt": {
+   "magOut": [
+    ["handling/belt-magOut-1.mp3", -29.75],
+    ["handling/belt-magOut-2.mp3", -29.75]
+   ],
+   "magIn": [
+    ["handling/belt-magIn-1.mp3", -29.75],
+    ["handling/belt-magIn-2.mp3", -29.75]
+   ],
+   "boltForward": [
+    ["handling/belt-boltForward-1.mp3", -29.75],
+    ["handling/belt-boltForward-2.mp3", -29.75]
+   ]
+  },
+  "xbow": {
+   "stringDraw": [
+    ["handling/xbow-stringDraw-1.mp3", -29.75],
+    ["handling/xbow-stringDraw-2.mp3", -29.75]
+   ],
+   "stringLatch": [
+    ["handling/xbow-stringLatch-1.mp3", -29.75],
+    ["handling/xbow-stringLatch-2.mp3", -29.75]
+   ],
+   "boltPlace": [
+    ["handling/xbow-boltPlace-1.mp3", -29.75],
+    ["handling/xbow-boltPlace-2.mp3", -29.75]
+   ],
+   "dry": [
+    ["handling/xbow-dry-1.mp3", -29.75]
+   ]
+  },
+  "gear": {
+   "pouch": [
+    ["handling/gear-pouch-1.mp3", -29.75],
+    ["handling/gear-pouch-2.mp3", -29.75],
+    ["handling/gear-pouch-3.mp3", -29.75]
+   ],
+   "grenadeGrab": [
+    ["handling/gear-grenadeGrab-1.mp3", -29.75],
+    ["handling/gear-grenadeGrab-2.mp3", -29.75]
+   ],
+   "magTap": [
+    ["handling/gear-magTap-1.mp3", -29.75],
+    ["handling/gear-magTap-2.mp3", -29.75],
+    ["handling/gear-magTap-3.mp3", -29.75]
+   ],
+   "draw": [
+    ["handling/gear-draw-1.mp3", -29.75],
+    ["handling/gear-draw-2.mp3", -29.75],
+    ["handling/gear-draw-3.mp3", -29.75]
+   ],
+   "holster": [
+    ["handling/gear-holster-1.mp3", -29.75],
+    ["handling/gear-holster-2.mp3", -29.75]
+   ],
+   "aim": [
+    ["handling/gear-aim-1.mp3", -29.75],
+    ["handling/gear-aim-2.mp3", -29.75],
+    ["handling/gear-aim-3.mp3", -29.75]
+   ],
+   "pinPull": [
+    ["handling/gear-pinPull-1.mp3", -29.75],
+    ["handling/gear-pinPull-2.mp3", -29.75]
+   ],
+   "spoon": [
+    ["handling/gear-spoon-1.mp3", -29.75],
+    ["handling/gear-spoon-2.mp3", -29.75]
+   ],
+   "throw": [
+    ["handling/gear-throw-1.mp3", -29.75],
+    ["handling/gear-throw-2.mp3", -29.75]
+   ],
+   "swing": [
+    ["handling/gear-swing-1.mp3", -29.75],
+    ["handling/gear-swing-2.mp3", -29.75],
+    ["handling/gear-swing-3.mp3", -29.75]
+   ],
+   "stab": [
+    ["handling/gear-stab-1.mp3", -29.75],
+    ["handling/gear-stab-2.mp3", -29.75]
+   ],
+   "casing": [
+    ["handling/gear-casing-1.mp3", -29.75],
+    ["handling/gear-casing-2.mp3", -29.75],
+    ["handling/gear-casing-3.mp3", -29.75],
+    ["handling/gear-casing-4.mp3", -29.75]
+   ],
+   "hit": [
+    ["handling/gear-hit-1.mp3", -29.75],
+    ["handling/gear-hit-2.mp3", -29.75]
+   ],
+   "head": [
+    ["handling/gear-head-1.mp3", -29.75],
+    ["handling/gear-head-2.mp3", -29.75]
+   ],
+   "kill": [
+    ["handling/gear-kill-1.mp3", -29.75],
+    ["handling/gear-kill-2.mp3", -29.75]
+   ],
+   "click": [
+    ["handling/gear-click-1.mp3", -29.75],
+    ["handling/gear-click-2.mp3", -29.75]
+   ]
+  }
+ },
+ "common": {
+  "pouch": {
+   "from": "gear/pouch",
+   "rate": 1,
+   "gain": 1,
+   "core": true
+  },
+  "grenadeGrab": {
+   "from": "gear/grenadeGrab",
+   "rate": 1,
+   "gain": 1.05,
+   "core": true
+  },
+  "magTap": {
+   "from": "gear/magTap",
+   "rate": 1,
+   "gain": 1.1,
+   "core": true
+  },
+  "draw": {
+   "from": "gear/draw",
+   "rate": 1,
+   "gain": 1,
+   "core": true
+  },
+  "holster": {
+   "from": "gear/holster",
+   "rate": 1,
+   "gain": 0.9,
+   "core": true
+  },
+  "aim": {
+   "from": "gear/aim",
+   "rate": 1,
+   "gain": 0.7,
+   "core": true
+  },
+  "pinPull": {
+   "from": "gear/pinPull",
+   "rate": 1,
+   "gain": 1.25,
+   "core": true
+  },
+  "spoon": {
+   "from": "gear/spoon",
+   "rate": 1,
+   "gain": 1,
+   "core": true
+  },
+  "throw": {
+   "from": "gear/throw",
+   "rate": 1,
+   "gain": 1.5,
+   "core": true
+  },
+  "swing": {
+   "from": "gear/swing",
+   "rate": 1,
+   "gain": 1.6,
+   "core": true
+  },
+  "stab": {
+   "from": "gear/stab",
+   "rate": 1,
+   "gain": 1.6,
+   "core": true
+  },
+  "casing": {
+   "from": "gear/casing",
+   "rate": 1,
+   "gain": 0.45,
+   "core": true
+  },
+  "hit": {
+   "from": "gear/hit",
+   "rate": 1,
+   "gain": 0.8,
+   "core": true
+  },
+  "head": {
+   "from": "gear/head",
+   "rate": 1,
+   "gain": 0.9,
+   "core": true
+  },
+  "kill": {
+   "from": "gear/kill",
+   "rate": 1,
+   "gain": 0.9,
+   "core": true
+  },
+  "click": {
+   "from": "gear/click",
+   "rate": 1,
+   "gain": 0.8,
+   "core": true
+  },
+  "magOut": {
+   "from": "rifle556/magOut",
+   "rate": 1
+  },
+  "magIn": {
+   "from": "rifle556/magIn",
+   "rate": 1
+  },
+  "boltBack": {
+   "from": "rifle556/boltBack",
+   "rate": 1
+  },
+  "boltForward": {
+   "from": "rifle556/boltForward",
+   "rate": 1
+  },
+  "slideBack": {
+   "from": "pistol9/slideBack",
+   "rate": 1
+  },
+  "slideForward": {
+   "from": "pistol9/slideForward",
+   "rate": 1
+  },
+  "pump": {
+   "from": "shotgun/pump",
+   "rate": 1
+  },
+  "shell": {
+   "from": "shotgun/shell",
+   "rate": 1
+  },
+  "cylOpen": {
+   "from": "revolver/cylOpen",
+   "rate": 1
+  },
+  "cylEject": {
+   "from": "revolver/cylEject",
+   "rate": 1
+  },
+  "cylLoad": {
+   "from": "revolver/cylLoad",
+   "rate": 1
+  },
+  "cylClose": {
+   "from": "revolver/cylClose",
+   "rate": 1
+  },
+  "breakOpen": {
+   "from": "break/breakOpen",
+   "rate": 1
+  },
+  "breakClose": {
+   "from": "break/breakClose",
+   "rate": 1
+  },
+  "rocketIn": {
+   "from": "tube/rocketIn",
+   "rate": 1
+  },
+  "rocketLock": {
+   "from": "tube/rocketLock",
+   "rate": 1
+  },
+  "grenadeIn": {
+   "from": "glnch/grenadeIn",
+   "rate": 1
+  },
+  "stringDraw": {
+   "from": "xbow/stringDraw",
+   "rate": 1
+  },
+  "stringLatch": {
+   "from": "xbow/stringLatch",
+   "rate": 1
+  },
+  "boltPlace": {
+   "from": "xbow/boltPlace",
+   "rate": 1
+  },
+  "dry": {
+   "from": "pistol9/dry",
+   "rate": 1
   }
  },
  "synthesized": {
-  "weapons": [
-   "mini",
-   "rl",
-   "gl",
-   "xbow",
-   "knife",
-   "frag"
-  ],
-  "dry": [
-   "rl",
-   "xbow",
-   "frag"
-  ],
-  "stages": [
-   "breakOpen",
-   "breakClose",
-   "grenadeIn",
-   "rocketIn",
-   "rocketLock",
-   "stringDraw",
-   "stringLatch",
-   "boltPlace",
-   "pinPull",
-   "throw",
-   "swing",
-   "stab"
-  ],
   "other": [
    "explosions",
    "projectile flight",
-   "minigun motor",
-   "casings",
+   "flesh hit",
    "impacts",
    "whizz",
    "footsteps",
+   "landing",
    "ambience",
-   "ui"
+   "menu ui"
   ]
  }
 }

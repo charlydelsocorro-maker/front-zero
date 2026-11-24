@@ -15,6 +15,8 @@ Sources:
 CC0 does not require attribution; it is given here as a courtesy and for traceability.
 Edits made for the game: takes cut out of the recordings, 25 Hz high-pass, fades, loudness normalisation with at most 3 dB of
 look-ahead peak limiting on a few takes, 48 kHz, MP3 (LAME VBR). The edited files are released under the same CC0 1.0 terms.
+Files marked "layered edit" (launchers, crossbow, belt, hands, cloth, grenade, knife air) are made only by cutting, layering, pitching,
+filtering and fading these same recordings: no synthesized audio is mixed in.
 The recordings are of real firearms; the weapons in the game are fictional and are not the recorded models.
 
 Source recording -> shipped files
@@ -32,6 +34,7 @@ Master_Tracks/1911/A_16.wav
 Master_Tracks/1911/A_19.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/1911/A_19.wav
     handling/pistol45-dry-1.mp3 (from 0.697 s)
+    handling/gear-head-1.mp3 (layered edit)
 Master_Tracks/1911/A_2.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/1911/A_2.wav
     handling/pistol45-magIn-1.mp3 (from 0.878 s)
@@ -39,6 +42,13 @@ Master_Tracks/1911/A_2.wav
 Master_Tracks/1911/A_3.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/1911/A_3.wav
     handling/pistol45-magOut-1.mp3 (from 1.150 s)
+    handling/gear-pouch-3.mp3 (layered edit)
+    handling/gear-swing-2.mp3 (layered edit)
+Master_Tracks/1911/A_30.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/1911/A_30.wav
+    handling/xbow-stringLatch-1.mp3 (layered edit)
+    handling/gear-grenadeGrab-2.mp3 (layered edit)
+    handling/gear-pinPull-1.mp3 (layered edit)
 Master_Tracks/1911/A_39.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/1911/A_39.wav
     shots/pistol45-far-1.mp3 (from 1.044 s)
@@ -47,6 +57,7 @@ Master_Tracks/1911/A_4.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/1911/A_4.wav
     handling/pistol45-magIn-3.mp3 (from 0.897 s)
     handling/pistol45-magIn-4.mp3 (from 2.954 s)
+    handling/gear-magTap-1.mp3 (layered edit)
 Master_Tracks/1911/A_5.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/1911/A_5.wav
     handling/pistol45-magOut-2.mp3 (from 0.197 s)
@@ -69,29 +80,62 @@ Master_Tracks/AK-47/C_1.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AK-47/C_1.wav
     handling/rifle762-boltForward-1.mp3 (from 0.290 s)
     handling/rifle762-boltForward-2.mp3 (from 0.913 s)
+    handling/tube-rocketLock-2.mp3 (layered edit)
+    handling/belt-boltForward-2.mp3 (layered edit)
 Master_Tracks/AK-47/C_10.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AK-47/C_10.wav
     handling/rifle762-magIn-1.mp3 (from 0.218 s)
+    handling/belt-magIn-2.mp3 (layered edit)
 Master_Tracks/AK-47/C_11.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AK-47/C_11.wav
     handling/rifle762-magOut-1.mp3 (from 0.295 s)
+    handling/belt-magOut-1.mp3 (layered edit)
+    handling/belt-magOut-2.mp3 (layered edit)
 Master_Tracks/AK-47/C_12.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AK-47/C_12.wav
     handling/rifle762-boltBack-3.mp3 (from 0.214 s)
     handling/rifle762-boltBack-4.mp3 (from 0.899 s)
+    handling/tube-rocketIn-2.mp3 (layered edit)
 Master_Tracks/AK-47/C_13.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AK-47/C_13.wav
     handling/rifle762-boltForward-3.mp3 (from 0.178 s)
+    handling/tube-rocketLock-1.mp3 (layered edit)
+    handling/belt-boltForward-1.mp3 (layered edit)
+Master_Tracks/AK-47/C_14.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AK-47/C_14.wav
+    handling/gear-pouch-2.mp3 (layered edit)
+    handling/gear-grenadeGrab-1.mp3 (layered edit)
+    handling/gear-draw-2.mp3 (layered edit)
+    handling/gear-holster-2.mp3 (layered edit)
+    handling/gear-swing-3.mp3 (layered edit)
+    handling/gear-stab-2.mp3 (layered edit)
+    shots/launchxbow-near-2.mp3 (layered edit)
 Master_Tracks/AK-47/C_17.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AK-47/C_17.wav
     shots/rifle762-far-1.mp3 (from 0.340 s)
     shots/rifle762-far-2.mp3 (from 4.404 s)
+Master_Tracks/AK-47/C_5.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AK-47/C_5.wav
+    handling/gear-draw-1.mp3 (layered edit)
+    handling/gear-holster-1.mp3 (layered edit)
+    handling/gear-spoon-2.mp3 (layered edit)
+    handling/gear-kill-1.mp3 (layered edit)
+Master_Tracks/AK-47/C_6.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AK-47/C_6.wav
+    handling/gear-draw-2.mp3 (layered edit)
+    handling/gear-pinPull-2.mp3 (layered edit)
+    handling/gear-spoon-1.mp3 (layered edit)
+    handling/gear-kill-2.mp3 (layered edit)
+    handling/gear-click-1.mp3 (layered edit)
 Master_Tracks/AK-47/C_7.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AK-47/C_7.wav
     handling/rifle762-dry-1.mp3 (from 0.334 s)
+    shots/launchxbow-near-1.mp3 (layered edit)
 Master_Tracks/AR-15/D_10.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AR-15/D_10.wav
     handling/rifle556-boltForward-5.mp3 (from 0.313 s)
+    handling/tube-rocketLock-2.mp3 (layered edit)
+    handling/belt-boltForward-2.mp3 (layered edit)
 Master_Tracks/AR-15/D_11.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AR-15/D_11.wav
     handling/rifle556-boltForward-2.mp3 (from 0.416 s)
@@ -102,6 +146,19 @@ Master_Tracks/AR-15/D_13.wav
 Master_Tracks/AR-15/D_16.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AR-15/D_16.wav
     handling/rifle556-dry-1.mp3 (from 0.367 s)
+    handling/gear-hit-2.mp3 (layered edit)
+    handling/gear-head-2.mp3 (layered edit)
+    handling/gear-kill-2.mp3 (layered edit)
+    shots/launchxbow-near-2.mp3 (layered edit)
+Master_Tracks/AR-15/D_19.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AR-15/D_19.wav
+    handling/xbow-stringLatch-2.mp3 (layered edit)
+    handling/gear-pinPull-2.mp3 (layered edit)
+Master_Tracks/AR-15/D_20.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AR-15/D_20.wav
+    handling/gear-draw-3.mp3 (layered edit)
+    handling/gear-pinPull-1.mp3 (layered edit)
+    handling/gear-click-2.mp3 (layered edit)
 Master_Tracks/AR-15/D_26.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AR-15/D_26.wav
     shots/rifle556-far-1.mp3 (from 0.418 s)
@@ -109,12 +166,24 @@ Master_Tracks/AR-15/D_26.wav
 Master_Tracks/AR-15/D_4.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AR-15/D_4.wav
     handling/rifle556-magIn-1.mp3 (from 1.163 s)
+    handling/belt-magIn-1.mp3 (layered edit)
+    handling/gear-magTap-2.mp3 (layered edit)
 Master_Tracks/AR-15/D_5.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AR-15/D_5.wav
     handling/rifle556-magOut-1.mp3 (from 1.271 s)
+    handling/belt-magOut-1.mp3 (layered edit)
+    handling/gear-pouch-1.mp3 (layered edit)
+    handling/gear-grenadeGrab-2.mp3 (layered edit)
+    handling/gear-holster-1.mp3 (layered edit)
+    handling/gear-throw-1.mp3 (layered edit)
+    handling/gear-swing-1.mp3 (layered edit)
+    handling/gear-stab-1.mp3 (layered edit)
+    shots/launchxbow-near-1.mp3 (layered edit)
 Master_Tracks/AR-15/D_6.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AR-15/D_6.wav
     handling/rifle556-boltBack-1.mp3 (from 0.532 s)
+    handling/tube-rocketIn-1.mp3 (layered edit)
+    handling/xbow-stringDraw-2.mp3 (layered edit)
 Master_Tracks/AR-15/D_7.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/AR-15/D_7.wav
     handling/rifle556-boltForward-1.mp3 (from 0.373 s)
@@ -138,29 +207,50 @@ Master_Tracks/Carl_Gustav_M45_Swedish_K/G_8.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Carl%20Gustav%20M45_Swedish%20K/G_8.wav
     handling/smg9-magIn-1.mp3 (from 0.401 s)
     handling/smg9-magIn-2.mp3 (from 1.768 s)
+    handling/belt-magIn-1.mp3 (layered edit)
 Master_Tracks/Carl_Gustav_M45_Swedish_K/G_9.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Carl%20Gustav%20M45_Swedish%20K/G_9.wav
     handling/smg9-magOut-1.mp3 (from 0.465 s)
     handling/smg9-magOut-2.mp3 (from 1.213 s)
+    handling/gear-pouch-2.mp3 (layered edit)
+    handling/gear-aim-1.mp3 (layered edit)
 Master_Tracks/Charles_Daly/H_0.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Charles%20Daly/H_0.wav
     handling/shotgun-boltBack-1.mp3 (from 1.406 s)
+    handling/break-breakOpen-1.mp3 (layered edit)
+    handling/break-breakOpen-2.mp3 (layered edit)
 Master_Tracks/Charles_Daly/H_1.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Charles%20Daly/H_1.wav
     handling/shotgun-boltForward-1.mp3 (from 1.105 s)
+    handling/break-breakClose-1.mp3 (layered edit)
+    handling/tube-rocketIn-2.mp3 (layered edit)
+    handling/tube-rocketLock-1.mp3 (layered edit)
+    handling/glnch-grenadeIn-3.mp3 (layered edit)
+    shots/launchgl-near-1.mp3 (layered edit)
 Master_Tracks/Charles_Daly/H_3.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Charles%20Daly/H_3.wav
     handling/shotgun-shell-1.mp3 (from 0.796 s)
     handling/shotgun-shell-2.mp3 (from 3.274 s)
+    handling/gear-draw-3.mp3 (layered edit)
+    handling/gear-aim-2.mp3 (layered edit)
 Master_Tracks/Charles_Daly/H_5.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Charles%20Daly/H_5.wav
     handling/shotgun-boltForward-2.mp3 (from 1.221 s)
+    handling/break-breakClose-2.mp3 (layered edit)
+    handling/tube-rocketIn-1.mp3 (layered edit)
+    shots/launchgl-near-2.mp3 (layered edit)
 Master_Tracks/Charles_Daly/H_6.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Charles%20Daly/H_6.wav
     handling/shotgun-pump-2.mp3 (from 1.246 s)
+Master_Tracks/Charles_Daly/H_7.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Charles%20Daly/H_7.wav
+    handling/glnch-grenadeIn-1.mp3 (layered edit)
+    handling/xbow-boltPlace-2.mp3 (layered edit)
 Master_Tracks/Charles_Daly/H_8.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Charles%20Daly/H_8.wav
     handling/shotgun-dry-1.mp3 (from 1.010 s)
+    handling/tube-dry-1.mp3 (layered edit)
+    handling/xbow-stringLatch-1.mp3 (layered edit)
 Master_Tracks/Nova/O_17.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Nova/O_17.wav
     shots/shotgun12a-far-1.mp3 (from 0.898 s)
@@ -175,26 +265,33 @@ Master_Tracks/Nova/O_7.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Nova/O_7.wav
     handling/shotgun-shell-4.mp3 (from 0.185 s)
     handling/shotgun-shell-5.mp3 (from 1.585 s)
+    handling/glnch-grenadeIn-2.mp3 (layered edit)
+    handling/glnch-grenadeIn-3.mp3 (layered edit)
 Master_Tracks/Nova/O_8.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Nova/O_8.wav
     handling/shotgun-dry-2.mp3 (from 0.251 s)
+    shots/launchxbow-near-2.mp3 (layered edit)
 Master_Tracks/PPSh/P_6.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/PPSh/P_6.wav
     handling/smg762-magIn-1.mp3 (from 0.426 s)
     handling/smg762-magIn-2.mp3 (from 2.544 s)
+    handling/belt-magIn-2.mp3 (layered edit)
 Master_Tracks/PPSh/P_7.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/PPSh/P_7.wav
     handling/smg762-magOut-1.mp3 (from 0.154 s)
     handling/smg762-magOut-2.mp3 (from 0.539 s)
+    handling/belt-magOut-2.mp3 (layered edit)
 Master_Tracks/Smith_Wesson_642/V_0.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Smith%20%26%20Wesson%20642/V_0.wav
     handling/revolver-cylOpen-1.mp3 (from 1.483 s)
 Master_Tracks/Smith_Wesson_642/V_1.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Smith%20%26%20Wesson%20642/V_1.wav
     handling/revolver-cylClose-1.mp3 (from 1.205 s)
+    handling/break-breakClose-2.mp3 (layered edit)
 Master_Tracks/Smith_Wesson_642/V_11.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Smith%20%26%20Wesson%20642/V_11.wav
     handling/revolver-cylOpen-2.mp3 (from 1.505 s)
+    handling/break-breakOpen-2.mp3 (layered edit)
 Master_Tracks/Smith_Wesson_642/V_12.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Smith%20%26%20Wesson%20642/V_12.wav
     handling/revolver-cylClose-2.mp3 (from 0.875 s)
@@ -211,6 +308,10 @@ Master_Tracks/Smith_Wesson_642/V_23.wav
 Master_Tracks/Smith_Wesson_642/V_3.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Smith%20%26%20Wesson%20642/V_3.wav
     handling/revolver-cylEject-1.mp3 (from 1.164 s)
+    handling/gear-casing-1.mp3 (layered edit)
+    handling/gear-casing-2.mp3 (layered edit)
+    handling/gear-casing-3.mp3 (layered edit)
+    handling/gear-casing-4.mp3 (layered edit)
 Master_Tracks/Smith_Wesson_642/V_5.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Smith%20%26%20Wesson%20642/V_5.wav
     handling/revolver-dry-1.mp3 (from 1.542 s)
@@ -224,6 +325,14 @@ Master_Tracks/Tikka/W_12.wav
 Master_Tracks/Tikka/W_13.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Tikka/W_13.wav
     handling/boltrifle-dry-1.mp3 (from 0.413 s)
+    handling/xbow-dry-1.mp3 (layered edit)
+    handling/gear-head-2.mp3 (layered edit)
+    shots/launchxbow-near-1.mp3 (layered edit)
+Master_Tracks/Tikka/W_15.wav
+  https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Tikka/W_15.wav
+    handling/gear-draw-1.mp3 (layered edit)
+    handling/gear-aim-3.mp3 (layered edit)
+    handling/gear-throw-2.mp3 (layered edit)
 Master_Tracks/Tikka/W_2.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Tikka/W_2.wav
     handling/boltrifle-magIn-1.mp3 (from 0.957 s)
@@ -247,6 +356,7 @@ Master_Tracks/Tikka/W_9.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Tikka/W_9.wav
     handling/boltrifle-boltBack-2.mp3 (from 0.374 s)
     handling/boltrifle-boltBack-3.mp3 (from 2.145 s)
+    handling/xbow-stringDraw-1.mp3 (layered edit)
 Master_Tracks/Walther_PPQ/X_11.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Walther%20PPQ/X_11.wav
     handling/pistol9-slideForward-1.mp3 (from 0.763 s)
@@ -256,12 +366,19 @@ Master_Tracks/Walther_PPQ/X_16.wav
 Master_Tracks/Walther_PPQ/X_17.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Walther%20PPQ/X_17.wav
     handling/pistol9-slideForward-3.mp3 (from 1.149 s)
+    handling/gear-grenadeGrab-1.mp3 (layered edit)
 Master_Tracks/Walther_PPQ/X_18.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Walther%20PPQ/X_18.wav
     handling/pistol9-dry-1.mp3 (from 0.585 s)
+    handling/gear-hit-1.mp3 (layered edit)
+    handling/gear-head-1.mp3 (layered edit)
+    handling/gear-kill-1.mp3 (layered edit)
 Master_Tracks/Walther_PPQ/X_2.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Walther%20PPQ/X_2.wav
     handling/pistol9-magIn-1.mp3 (from 0.724 s)
+    handling/xbow-boltPlace-1.mp3 (layered edit)
+    handling/gear-magTap-3.mp3 (layered edit)
+    handling/gear-stab-1.mp3 (layered edit)
 Master_Tracks/Walther_PPQ/X_3.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Master%20Tracks/Walther%20PPQ/X_3.wav
     handling/pistol9-magOut-1.mp3 (from 0.817 s)
@@ -335,6 +452,8 @@ Prepared_SFX/CD/H_21P.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/CD/H_21P.wav
     shots/shotgun12c-near-1.mp3 (from 0.464 s)
     shots/shotgun12c-near-2.mp3 (from 3.075 s)
+    shots/launchgl-near-1.mp3 (layered edit)
+    shots/launchgl-near-2.mp3 (layered edit)
 Prepared_SFX/Carl_Gustav_M45/G_20P.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/Carl%20Gustav%20M45/G_20P.wav
     shots/smg9-mid-1.mp3 (from 0.348 s)
@@ -353,6 +472,8 @@ Prepared_SFX/Model_12/K_22P.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/Model%2012/K_22P.wav
     shots/shotgun12b-near-1.mp3 (from 0.842 s)
     shots/shotgun12b-near-2.mp3 (from 7.445 s)
+    shots/launchrl-near-1.mp3 (layered edit)
+    shots/launchrl-near-2.mp3 (layered edit)
 Prepared_SFX/Mosin_Nagant/M_21P.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/Mosin%20Nagant/M_21P.wav
     shots/rifle76254-near-1.mp3 (from 1.034 s)
@@ -372,6 +493,8 @@ Prepared_SFX/Nova/O_21P.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/Nova/O_21P.wav
     shots/shotgun12a-near-1.mp3 (from 0.431 s)
     shots/shotgun12a-near-2.mp3 (from 3.465 s)
+    shots/launchrl-near-1.mp3 (layered edit)
+    shots/launchrl-near-2.mp3 (layered edit)
 Prepared_SFX/PPSh/P_16P.wav
   https://raw.githubusercontent.com/buddingmonkey/FreeFirearmsSFXLibrary/main/Prepared%20SFX/PPSh/P_16P.wav
     shots/smg762-mid-1.mp3 (from 0.292 s)

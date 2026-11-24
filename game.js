@@ -5,12 +5,13 @@ import { WEAPONS, ALL_WEAPONS, OUTFITS, CLASSES, byId } from './data.js';
 import { createWorld } from './maps.js';
 import { createViewModel } from './guns.js';
 import { createSoldier } from './soldier.js';
-import { createGrid, createMover } from './engine-grid.js';
+import { createGrid, createMover, settleStep } from './engine-grid.js';
 import { createNav } from './engine-nav.js';
 import { createFx, createPost } from './engine-fx.js';
 import { createHud, makeT } from './engine-hud.js';
 import { createAI, newBotAI, newZombieAI, ZOMBIES } from './engine-ai.js';
 import { createProjectiles, rocketTable } from './engine-projectiles.js';
+import { createLoot } from './engine-loot.js';
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v), rnd = (a, b) => a + Math.random() * (b - a);
 const TAU = Math.PI * 2, wrap = a => { a = (a + Math.PI) % TAU; if (a < 0) a += TAU; return a - Math.PI; };
@@ -19,6 +20,7 @@ const PAL_TEAM = [[0x4c5238, 0x2a2e22, 0x7c7a5c], [0x7d5a3c, 0x3b2a20, 0x9c7c58]
 const PAL_FFA = [[0x6a6a4e, 0x41452f, 0x8a8160], [0x74777a, 0x45484b, 0xa1a3a3], [0x59633e, 0x3a4429, 0x7b7650], [0x8e7a51, 0x6b5a3a, 0xb9a678], [0x2e3540, 0x1c2026, 0x4a5462], [0x6b3a2a, 0x2a211c, 0xb5441f]];
 const SURF_COL = { sand: 0x9a8a68, concrete: 0x8a8880, metal: 0xc8b48a, wood: 0x7a5c3a, snow: 0xe8eef4 };
 const QL = [[1, 1, 1], [0.85, 1, 1], [0.72, 0, 2], [0.6, 0, 2], [0.5, 0, 3]];
+const showGun = (sol, on) => { const b = sol.mesh.skeleton.getBoneByName('gun'); if (b) b.scale.setScalar(on ? 1 : 0.001); };       // found by name: soldier.js may renumber its bones
 const CALL = ['Corbeau', 'Mirage', 'Kilo', 'Tango', 'Renard', 'Sierra', 'Écho', 'Bravo', 'Loup', 'Roméo', 'Vautour', 'Orage'];
 const W = id => byId(WEAPONS, id) || byId(WEAPONS, 'ar') || WEAPONS[0];
 const WA = id => byId(ALL_WEAPONS, id) || W(id);      // network lookups: another client may carry a weapon this page has not unlocked
@@ -112,13 +114,13 @@ export function createEngine(opts) {
     if (!world.id) return;
     if (solQ) { if (solQ.indexOf(a) < 0) solQ.push(a); return; }       // loading: the loader builds them one per slice
     a.pal = a.kind === 'zombie' ? null : a.team === 0 || a.team === 1 ? PAL_TEAM[a.team] : PAL_FFA[Math.abs(a.palI | 0) % PAL_FFA.length];
-    a.sol = createSoldier(scene, { palette: a.pal || undefined, weaponId: a.weaponId, kind: a.kind, zombieType: a.zType || undefined });
+    a.sol = createSoldier(scene, { palette: a.pal || undefined, weaponId: a.weaponId, kind: a.kind, zombieType: a.zType || undefined }); a.sol.setGround(groundAt); a.ctN = 0;
     a.sol.root.position.copy(a.pos); a.shadow = true;
   }
   function place(a, at) {
     let x = at[0], z = at[1], y = at.length > 2 ? at[2] : 0;
     if (mover.blocked(x, y, z, a.body.r, a.body.h)) { const q = nav.nearest(x, z); x = q[0]; z = q[1]; y = 0; }
-    a.pos.set(x, y, z); a.body.vy = 0; a.body.grounded = true; a.body.ground = null; a.body.stepOff = 0; a.vx = a.vz = 0; a.wishX = a.wishZ = 0; a.px = x; a.pz = z;
+    a.pos.set(x, y, z); a.body.vy = 0; a.body.grounded = true; a.body.ground = null; a.body.stepOff = 0; a.body.stepV = 0; a.vx = a.vz = 0; a.wishX = a.wishZ = 0; a.px = x; a.pz = z;
     a.yaw = a.yawT = faceOpen(x, y, z, Math.atan2(x, z)); a.pitch = 0;
   }
   /** Spawn facing: toward the map centre unless a wall stands right there, then the most open of 16 directions (nearest to the centre on ties). */
@@ -156,11 +158,11 @@ export function createEngine(opts) {
   function respawn(a, o) {
     if (!a) return; const delay = (o && o.delay) || 0;
     if (delay > 0) { a.respawnT = delay; a.respawnAt = (o && o.at) || null; return; }
-    if (a.isPlayer) playerLoadout();
+    if (a.isPlayer) { playerLoadout(); invDirty = true; }       // looted gear ends with the life: back to the player's own loadout
     place(a, (o && o.at) || safeSpawn({ team: a.team }));
     a.kx = a.kz = 0; a.hp = a.maxHp; a.armor = a.maxArmor; a.alive = true; a.respawnT = -1; a.respawnAt = null; a.crouch = a.crouchT = 0; a.regenT = 0;
     if (a.ai) { const ai = a.ai; ai.path = null; ai.target = null; ai.visible = false; ai.repath = 0; ai.stuck = 0; ai.arrived = false; if (!ai.zombie) { ai.ammo = a.wdef.mag; ai.reloadT = 0; ai.coverOn = false; ai.lostT = 9; ai.huntT = 0; ai.refill = true; } else { ai.wind = 0; } }
-    if (a.sol) { a.sol.root.position.copy(a.pos); solSt.vx = solSt.vz = 0; solSt.yaw = a.yaw; solSt.aimPitch = 0; solSt.grounded = true; solSt.crouch = 0; a.sol.setVisible(true); a.sol.update(0, solSt); a.sol.respawn(); }
+    if (a.sol) { a.sol.root.position.copy(a.pos); solSt.vx = solSt.vz = 0; solSt.yaw = a.yaw; solSt.aimPitch = 0; solSt.grounded = true; solSt.crouch = 0; a.sol.setVisible(true); showGun(a.sol, true); a.sol.update(0, solSt); a.sol.respawn(); }
     if (a.isPlayer) { P.v.set(0, 0, 0); P.slide = 0; P.reload = 0; P.ads = 0; P.rc = 0; P.kick = 0; P.sprint = false; P.eye = 1.62; a.body.h = H_STAND; P.hintS = -1; hud.hint(null); hud.spectate(null); specTarget = null; vm.cancelReload(); for (const w of P.ws) { w.ammo = w.def.mag; w.res = w.def.reserve === undefined ? -1 : w.def.reserve; } if (P.gear) { P.gear.n = P.gear.def.mag + (P.gear.def.reserve || 0); P.gear.next = 0; } P.burstN = 0; P.spin = 0; P.shake = 0; P.next = Math.min(P.next, E.time + 0.2); P.yawPrev = a.yaw; P.pitchPrev = 0; }      // P.next: E.time restarts at 0 with each match, a stale value would block the trigger
     emit('spawn', { actor: a });
   }
@@ -201,10 +203,12 @@ export function createEngine(opts) {
       a.ragT = 0; }
     a.vx = a.vz = 0; a.kx = a.kz = 0; a.wishX = a.wishZ = 0;
     if (a.tag) { hud.api.marker('_t' + a.id, null); a.tag = null; }
-    if (a.isPlayer) { P.slide = 0; P.reload = 0; vm.cancelReload(); P.hintS = -1; if (!rules.autoRespawn) hud.hint(null); }
+    if (a.isPlayer) { P.slide = 0; P.reload = 0; vm.cancelReload(); vm.cancelGrenade(); P.hintS = -1; if (!rules.autoRespawn) hud.hint(null); }
     if (rules.autoRespawn && !(online && (a.isPlayer || a.isRemote))) a.respawnT = rules.respawnDelay;
     if (rules.killFeed !== false && a.kind !== 'zombie') hud.feedKill(by && by !== a ? (by === player ? t('hud.you') : by.name) : '', a === player ? t('hud.you') : a.name, head, by === player, a === player);
     if (by === player && a !== player) { try { audio.kill(); } catch { /* optional */ } hud.api.message(head ? t('hud.headshot') : t('hud.eliminated'), { kind: 'info', dur: 1.1 }); }
+    loot.onDeath(a);       // before the event: a mode may end the round or the match from its listener
+    if (a.sol && loot.enabled && a.kind === 'soldier') showGun(a.sol, false);       // the weapon is on the ground now, not in the body's hands
     emit('kill', { killer: by, victim: a, weaponId, head });
   }
 
@@ -395,13 +399,18 @@ export function createEngine(opts) {
   function throwGear() {
     const g = P.gear, now = E.time; if (!g || !player.alive || rules.frozen) return;
     if (g.n <= 0) { if (now - P.dryT > 0.45) { P.dryT = now; try { audio.dry(); } catch { /* optional */ } hud.api.message(t('noGear'), { kind: 'bad', dur: 1 }); } return; }
-    if (now < g.next) return;
-    const D = g.def, pr = D.proj; g.n--; g.next = now + Math.max(60 / D.rpm, D.reload || 0); P.sprint = false; P.burstN = 0;
+    if (now < g.next || vm.grenadeBusy) return;
+    g.next = now + Math.max(60 / g.def.rpm, g.def.reload || 0); P.sprint = false; P.burstN = 0; P.next = Math.max(P.next, now + 0.62);       // the weapon is aside until just after the release
+    vm.throwGrenade(hand => releaseGear(g, hand));
+  }
+  /** The 'throw' moment of the gesture, once per key press. Counted and sent only here: a gesture cancelled by death spends nothing, the grenade falls with the body. */
+  function releaseGear(g, hand) {
+    if (g !== P.gear || g.n <= 0 || !player.alive || rules.frozen) return;
+    const D = g.def, pr = D.proj, now = E.time; g.n--;
     camera.updateMatrixWorld(); vO.setFromMatrixPosition(camera.matrixWorld); camera.matrixWorld.extractBasis(vR, vU, vF); vF.negate();
     let dx = vF.x + vU.x * 0.16, dy = vF.y + vU.y * 0.16, dz = vF.z + vU.z * 0.16; const l = Math.sqrt(dx * dx + dy * dy + dz * dz); dx /= l; dy /= l; dz /= l;
     const vx = dx * pr.speed + P.v.x * 0.6, vy = dy * pr.speed + Math.max(0, player.body.vy) * 0.3, vz = dz * pr.speed + P.v.z * 0.6;
-    const pid = proj.spawn(D, player, vO.x, vO.y, vO.z, vx, vy, vz, 1, false, 0, vO.x + vR.x * 0.24 - vU.x * 0.16 + vF.x * 0.3, vO.y + vR.y * 0.24 - vU.y * 0.16 + vF.y * 0.3, vO.z + vR.z * 0.24 - vU.z * 0.16 + vF.z * 0.3);
-    try { if (audio.pinPull) audio.pinPull(sndOwn); if (audio.throw) audio.throw(sndOwn); } catch { /* optional */ }
+    const pid = proj.spawn(D, player, vO.x, vO.y, vO.z, vx, vy, vz, 1, false, 0, hand.x, hand.y, hand.z);       // pin and throw sounds come from the gesture's own stages
     if (online && net && pid) { try { net.sendShot({ ox: vO.x, oy: vO.y, oz: vO.z, dx, dy, dz, weapon: D.id, k: 't', pid, vx, vy, vz }); } catch (e) { console.warn('[engine] net send', e); } }
     P.next = Math.max(P.next, now + 0.3); P.kick = Math.min(1, P.kick + 0.35); evShot.actor = player; evShot.weaponId = D.id; emit('shot', evShot);
   }
@@ -414,12 +423,12 @@ export function createEngine(opts) {
   }
   vm.onSound = stage => {
     try { audio.reload(stage, player.weaponId); } catch { /* optional */ }
-    if (stage === 'shell' && P.ws.length) { const w = wNow(); if (w.def.id === 'sg' && P.reload > 0 && w.ammo < w.def.mag) w.ammo++; }
+    if (stage === 'shell' && P.ws.length) { const w = wNow(); if (w.def.id === 'sg' && P.reload > 0 && w.ammo < w.def.mag) { w.ammo++; invDirty = true; } }
   };
   function toggleTorch() { if (!player.alive) return; P.torch = !P.torch; try { if (audio.click) audio.click(); else audio.ui(); } catch { /* optional */ } }
   function switchW(i) {
     if (i === P.cur || !player.alive || !P.ws[i]) return;
-    P.cur = i; P.reload = 0; P.burstN = 0; P.spin = 0; vm.cancelReload(); P.next = E.time + 0.32; P.kick = 0.3; vm.equip(wNow().def, P.outfit); player.weaponId = wNow().def.id; player.wdef = wNow().def;
+    P.cur = i; P.reload = 0; P.burstN = 0; P.spin = 0; vm.cancelReload(); P.next = vm.grenadeBusy ? Math.max(P.next, E.time + 0.32) : E.time + 0.32; P.kick = 0.3; vm.switchTo(wNow().def, P.outfit); player.weaponId = wNow().def.id; player.wdef = wNow().def;
   }
   function playerLoadout(dry) {
     const d = profile.data; P.cls = byId(CLASSES, d.cls) || CLASSES[0]; P.outfit = byId(OUTFITS, d.outfit) || OUTFITS[0];
@@ -437,7 +446,7 @@ export function createEngine(opts) {
   function updatePlayer(dt) {
     const a = player, b = a.body, p = a.pos;
     if (!a.alive) {
-      P.eye += (0.4 - P.eye) * Math.min(1, dt * 5); P.ads = 0;
+      P.eye += (0.4 - P.eye) * Math.min(1, dt * 5); P.ads = 0; P.adsOn = false;
       if (a.respawnT >= 0) { a.respawnT -= dt; const s = Math.max(0, Math.ceil(a.respawnT)); if (s !== P.hintS) { P.hintS = s; hud.hint(t('hud.respawnIn', { s })); } if (a.respawnT < 0) respawn(a, { at: a.respawnAt }); }
       return;
     }
@@ -452,7 +461,10 @@ export function createEngine(opts) {
     P.crouched = b.h < 1.5 && P.slide <= 0; a.crouch = b.h < 1.5 ? 1 : 0;
     if (fw <= 0 || P.crouched || P.ads > 0.4) P.sprint = false;
     P.sprinting = P.sprint && b.grounded && P.slide <= 0;
-    P.ads += ((P.aim && !frozen && !(P.reload > 0 && D.id !== 'sg') && !P.sprinting ? 1 : 0) - P.ads) * Math.min(1, dt * 14);
+    const wantAds = P.aim && !frozen && !(P.reload > 0 && D.id !== 'sg') && !P.sprinting && !vm.grenadeBusy;
+    if (wantAds && !P.adsOn && D.kind !== 'melee' && D.kind !== 'thrown') { try { if (audio.aim) audio.aim(); } catch { /* optional */ } }       // once per move into the sights
+    P.adsOn = wantAds;
+    P.ads += ((wantAds ? 1 : 0) - P.ads) * (1 - Math.exp(-dt * 15.94));       // same speed as before at 60 fps, now the same at any frame rate
     const max = RUN * P.cls.spd * D.mob * (1 - P.ads * 0.48) * (P.crouched ? 0.5 : 1) * (P.sprinting ? SPRINT : 1), sp = Math.hypot(P.v.x, P.v.z);
     P.slideCd -= dt;
     if (held.slide && !frozen && b.grounded && P.slide <= 0 && P.slideCd <= 0 && sp > 4.2) { P.slide = P.cls.id === 'eclaireur' ? 0.85 : 0.68; P.slideCd = 0.28; const k = Math.min(sp * 1.3, 14.5 * P.cls.spd) / sp; P.v.x *= k; P.v.z *= k; b.h = H_LOW; try { audio.slide(surfaceOf(b)); } catch { /* optional */ } }
@@ -468,13 +480,17 @@ export function createEngine(opts) {
     const was = b.grounded || jumped, preVy = b.vy;
     b.vy -= GRAV * dt; const px = p.x, pz = p.z;
     mover.move(b, P.v.x * dt, b.vy * dt, P.v.z * dt, jumped);
-    if (dt > 0) { const ax = (p.x - px) / dt, az = (p.z - pz) / dt; if (Math.abs(ax) < Math.abs(P.v.x) * 0.5) P.v.x *= 0.6; if (Math.abs(az) < Math.abs(P.v.z) * 0.5) P.v.z *= 0.6; a.vx = ax; a.vz = az; }
+    if (dt > 0) { const ax = (p.x - px) / dt, az = (p.z - pz) / dt; if (Math.abs(ax) < Math.abs(P.v.x) * 0.5) P.v.x = ax * P.v.x > 0 ? ax : 0; if (Math.abs(az) < Math.abs(P.v.z) * 0.5) P.v.z = az * P.v.z > 0 ? az : 0; a.vx = ax; a.vz = az; }       // a wall removes the speed going into it, the rest slides along
     if (!(p.x === p.x && p.y === p.y && p.z === p.z) || p.y < -20) { const q = nav.nearest(0, 0); p.set(q[0], 0, q[1]); P.v.set(0, 0, 0); b.vy = 0; }
-    if (b.grounded && !was) { if (preVy < -6) { try { audio.land(surfaceOf(b)); } catch { /* optional */ } P.land = Math.min(1, -preVy / 14); P.stepD = 0; } if (!held.slide) P.slide = 0; }
-    P.eye += ((P.slide > 0 ? 0.92 : b.h < 1.5 ? 1.05 : 1.62) - P.eye) * Math.min(1, dt * 16);
-    b.stepOff *= Math.exp(-13 * dt); if (Math.abs(b.stepOff) < 0.002) b.stepOff = 0;
-    P.land = Math.max(0, P.land - dt * 5);
-    if (b.grounded && P.slide <= 0) { P.bob += dt * sp * 1.25; P.stepD += sp * dt; if (P.stepD > (P.sprinting ? 2.5 : 2.15)) { P.stepD = 0; sndOwnStep.run = sp > 6; try { audio.step(surfaceOf(b), sndOwnStep); } catch { /* optional */ } } }
+    if (b.grounded && !was) { if (preVy < -6) { try { audio.land(surfaceOf(b)); } catch { /* optional */ } P.land = Math.min(1, -preVy / 14); P.bob = 0; } if (!held.slide) P.slide = 0; }
+    P.eye += ((P.slide > 0 ? 0.92 : b.h < 1.5 ? 1.05 : 1.62) - P.eye) * (1 - Math.exp(-16 * dt));
+    settleStep(b, dt);
+    P.land = Math.max(0, P.land - dt * 5); P.landS = (P.landS || 0) + (P.land - (P.landS || 0)) * (1 - Math.exp(-30 * dt));       // the landing dip eases in instead of jumping
+    { // one head dip per footfall, driven by the distance really covered: no bobbing or footsteps while pushing against a wall
+      const gs = Math.min(sp, Math.hypot(a.vx, a.vz)), on = b.grounded && P.slide <= 0 && gs > 0.5;
+      if (on) { if ((P.bobA || 0) < 0.02) P.bob = Math.PI; P.bob += gs * dt / (P.sprinting ? 2.5 : 2.15) * Math.PI * 2; if (P.bob >= Math.PI * 2) { P.bob -= Math.PI * 2; sndOwnStep.run = sp > 6; try { audio.step(surfaceOf(b), sndOwnStep); } catch { /* optional */ } } }
+      P.bobA = (P.bobA || 0) + ((on ? clamp(gs / 4.7, 0.35, 1) : 0) - (P.bobA || 0)) * (1 - Math.exp(-10 * dt));
+    }
     if (rules.regen && !online && a.hp < a.maxHp) { a.regenT -= dt; if (a.regenT <= 0) a.hp = Math.min(a.maxHp, a.hp + dt * (P.cls.regen ? 34 : 17)); }
   }
   function updateWeapons(dt) {
@@ -483,7 +499,7 @@ export function createEngine(opts) {
     const w = wNow(), D = w.def, now = E.time;
     if (P.reload > 0) {
       if (D.id === 'sg') { if (!vm.reloading) { if (w.ammo < D.mag) vm.reload(1.45, false); else P.reload = 0; } }
-      else { P.reload -= dt; if (P.reload <= 0) { P.reload = 0; if (w.res >= 0) { const n = Math.min(D.mag - w.ammo, w.res); w.ammo += n; w.res -= n; } else w.ammo = D.mag; } }
+      else { P.reload -= dt; if (P.reload <= 0) { P.reload = 0; invDirty = true; if (w.res >= 0) { const n = Math.min(D.mag - w.ammo, w.res); w.ammo += n; w.res -= n; } else w.ammo = D.mag; } }
     }
     const fire = held.fire && !rules.frozen;
     if (vm.setAmmo && P.reload <= 0) vm.setAmmo(w.ammo);       // rocket / bolt shown to match the magazine (respawn or resupply right after a shot)
@@ -504,9 +520,10 @@ export function createEngine(opts) {
   function updateCamera(dt) {
     const a = player, b = a.body, p = a.pos, D = wNow().def, sp = Math.hypot(P.v.x, P.v.z);
     if (!a.alive && !rules.autoRespawn && a.respawnT < 0) { spectateCam(dt); return; }
-    const bob = reduced ? 0 : Math.sin(P.bob) * 0.035 * (1 - P.ads);
-    camera.position.set(p.x, p.y + P.eye - b.stepOff + bob - (reduced ? 0 : P.land * 0.09), p.z);
-    camera.rotation.set(a.pitch, a.yaw, P.slide > 0 && !reduced ? 0.055 : 0, 'YXZ');
+    const bob = reduced ? 0 : -Math.cos(P.bob) * 0.016 * (P.bobA || 0) * (1 - P.ads);       // lowest on the footfall
+    P.rollS = (P.rollS || 0) + ((P.slide > 0 && !reduced ? 0.055 : 0) - (P.rollS || 0)) * (1 - Math.exp(-12 * dt));
+    camera.position.set(p.x, p.y + P.eye - b.stepOff + bob - (reduced ? 0 : (P.landS || 0) * 0.09), p.z);
+    camera.rotation.set(a.pitch, a.yaw, P.rollS, 'YXZ');
     if (P.shake > 0.003) { if (!reduced) { const s = P.shake; camera.rotation.x += rnd(-0.028, 0.028) * s; camera.rotation.y += rnd(-0.028, 0.028) * s; camera.rotation.z += rnd(-0.05, 0.05) * s; camera.position.y += rnd(-0.04, 0.04) * s; } P.shake *= Math.exp(-6.5 * dt); } else P.shake = 0;
     const fov = baseFov + (D.fov / 84 * baseFov - baseFov) * P.ads + (reduced ? 0 : clamp(sp - 8, 0, 7) * 0.9 * (1 - P.ads)), fit = fitFov(fov);
     if (Math.abs(camera.fov - fit) > 0.05) { camera.fov = fit; camera.updateProjectionMatrix(); }
@@ -538,7 +555,15 @@ export function createEngine(opts) {
   }
 
   /* ---------- AI / actor simulation ---------- */
-  const solSt = { vx: 0, vz: 0, yaw: 0, aimPitch: 0, grounded: true, crouch: 0 };
+  const solSt = { vx: 0, vz: 0, yaw: 0, aimPitch: 0, grounded: true, crouch: 0, y: NaN };       // y: physical height, only set for the walking update
+  function groundAt(x, y, z) { return grid.floorAt(x, y, z, 0.4); }
+  /** A remote player has no physics here: airborne when clearly above the floor under its body, or leaving a low height fast. */
+  function remoteGrounded(a, dt) {
+    const p = a.pos, r = a.body.r; let f = grid.floorAt(p.x, p.y, p.z, 0.06);
+    for (let i = 0; i < 4; i++) { const h = grid.floorAt(p.x + (i & 1 ? r : -r), p.y, p.z + (i & 2 ? r : -r), 0.06); if (h > f) f = h; }
+    const up = p.y - f, vy = dt > 0 && a.ry !== undefined ? (p.y - a.ry) / dt : 0; a.ry = p.y;
+    return up < 0.12 || (up < 0.42 && Math.abs(vy) < 3.6);
+  }
   /** Bots swap between their primary and their sidearm (the soldier model is rebuilt with the new weapon) and throw grenades. */
   function botWeapon(a, id) { if (a.weaponId === id || !byId(WEAPONS, id)) return; setWeapon(a, id); a.speed = 4.7 * a.wdef.mob; }
   function botThrow(a, def, dx, dy, dz, mul) {
@@ -547,6 +572,15 @@ export function createEngine(opts) {
     try { if (audio.throw) audio.throw(impactAt(ox, oy, oz)); } catch { /* optional */ }
   }
   const ai = createAI({ E: null, grid, nav, budget, stats, botFire, weapons: WEAPONS, gear: WEAPONS.find(w => w.slot === 2 && w.proj) || null, fullLoadout: WEAPONS.some(w => w.slot === 2), setWeapon: botWeapon, botThrow, threat: a => proj.threat(a), botReload: (a, d) => { if (a.sol) a.sol.reload(d); }, zombieSwing: a => { if (a.sol) a.sol.fire(); }, melee: (z, tg, dmg) => { dmgOpt.by = z; dmgOpt.head = false; dmgOpt.weaponId = 'zombie'; dirV.x = tg.pos.x - z.pos.x; dirV.z = tg.pos.z - z.pos.z; damage(tg, dmg, dmgOpt); } });
+  /* ---------- loot (engine-loot.js): drops on death, walk-over pickups, the interact key ---------- */
+  let invDirty = false, invT = 0;
+  function sendInv() {
+    if (!online || !net || !net.sendInv || !player.alive || !P.ws.length) return;
+    invDirty = false; invT = 0;
+    try { net.sendInv(P.ws.map(w => ({ id: w.def.id, a: Math.max(0, w.ammo | 0), r: w.res })), P.gear ? { id: P.gear.def.id, n: P.gear.n } : null); } catch (e) { console.warn('[engine] net send', e); }
+  }
+  const loot = createLoot({ scene, grid, mover, camera, player, P, rules, hud, t, settings, audio, vm, i18n, defOf: id => byId(WEAPONS, id) || null, now: () => E.time, online: () => online, sendInv,
+    sendTake(id, swap) { if (net) { try { net.sendTake(id, swap); } catch (e) { console.warn('[engine] net send', e); } } }, invChanged() { invDirty = true; } });
   function updateActors(dt) {
     budget.path = 1; budget.cover = 1;
     const cp = camera.position, fxv = -Math.sin(camera.rotation.y), fzv = -Math.cos(camera.rotation.y), far2 = camera.far * camera.far, now = performance.now();
@@ -564,7 +598,7 @@ export function createEngine(opts) {
       const b = a.body, ox = a.pos.x, oz = a.pos.z;
       if (a.isRemote && a.kind !== 'zombie') {
         const s = net ? net.remote(a.id, now) : null;
-        if (s) { a.ghost = false; a.pos.set(s.x, s.y, s.z); a.yaw = s.yaw; a.pitch = s.pitch || 0; a.vx = s.vx || 0; a.vz = s.vz || 0; a.crouch = s.crouch ? 1 : 0; if (s.weapon && s.weapon !== a.weaponId) setWeapon(a, s.weapon); }
+        if (s) { a.ghost = false; a.pos.set(s.x, s.y, s.z); a.yaw = s.yaw; a.pitch = s.pitch || 0; a.vx = s.vx || 0; a.vz = s.vz || 0; a.crouch = s.crouch ? 1 : 0; b.grounded = remoteGrounded(a, dt); if (s.weapon && s.weapon !== a.weaponId) setWeapon(a, s.weapon); }
       } else if (a.isRemote || (a.ai && a.ai.puppet) || !a.ai) {
         if (dt > 0) { a.vx = (a.pos.x - a.px) / dt; a.vz = (a.pos.z - a.pz) / dt; }
       } else {
@@ -576,20 +610,21 @@ export function createEngine(opts) {
         if (dt > 0) { const mx = (a.pos.x - ox) / dt, mz = (a.pos.z - oz) / dt; if (Math.abs(mx) < Math.abs(wvx) * 0.5) a.kx = 0; if (Math.abs(mz) < Math.abs(wvz) * 0.5) a.kz = 0; a.vx = mx - a.kx; a.vz = mz - a.kz; }
         a.yaw += wrap(a.yawT - a.yaw) * Math.min(1, dt * (a.ai.diff ? a.ai.diff.turn : 6));
         a.crouch += (a.crouchT - a.crouch) * Math.min(1, dt * 8);
-        b.stepOff *= Math.exp(-12 * dt);
+        settleStep(b, dt, 15);
         if (!(a.pos.x === a.pos.x && a.pos.y === a.pos.y) || a.pos.y < -20) { const q = nav.nearest(0, 0); a.pos.set(q[0], 0, q[1]); b.vy = 0; a.vx = a.vz = 0; }
         if (rules.regen && a.kind !== 'zombie' && a.hp < a.maxHp) { a.regenT -= dt; if (a.regenT <= 0) a.hp = Math.min(a.maxHp, a.hp + dt * 10); }
       }
       a.px = a.pos.x; a.pz = a.pos.z;
       const dx = a.pos.x - cp.x, dz = a.pos.z - cp.z, d2 = dx * dx + dz * dz, sp = Math.hypot(a.vx, a.vz);
-      if (d2 < 900 && b.grounded && sp > 1.5) { a.stepD += sp * dt; if (a.stepD > 2.3) { a.stepD = 0; sndStep.x = a.pos.x; sndStep.y = a.pos.y; sndStep.z = a.pos.z; sndStep.run = sp > 3.5; try { audio.step(surfaceOf(b), sndStep); } catch { /* optional */ } } }
+      if (!a.sol && d2 < 900 && b.grounded && sp > 1.5) { a.stepD += sp * dt; if (a.stepD > 2.3) { a.stepD = 0; sndStep.x = a.pos.x; sndStep.y = a.pos.y; sndStep.z = a.pos.z; sndStep.run = sp > 3.5; try { audio.step(surfaceOf(b), sndStep); } catch { /* optional */ } } }
       if (a.tag) { a.tag.x = a.pos.x; a.tag.y = a.pos.y + 2.05 * a.hScale; a.tag.z = a.pos.z; }
       const s = a.sol; if (!s) continue;
       s.root.position.set(a.pos.x, a.pos.y - b.stepOff, a.pos.z);
       const vis = d2 < far2 && !a.ghost; if (s.root.visible !== vis) s.setVisible(vis);
       const sh = d2 < 55 * 55; if (a.shadow !== sh) { a.shadow = sh; s.mesh.castShadow = sh; }
       const front = dx * fxv + dz * fzv > -3, lod = d2 > 60 * 60 ? 3 : d2 > 30 * 30 || !front ? 2 : 1;
-      a.lodAcc += dt; if (++a.lodN >= lod) { solSt.vx = a.vx; solSt.vz = a.vz; solSt.yaw = a.yaw; solSt.aimPitch = a.pitch; solSt.grounded = b.grounded; solSt.crouch = a.crouch; s.update(a.lodAcc, solSt); a.lodAcc = 0; a.lodN = 0; }
+      a.lodAcc += dt; if (++a.lodN >= lod) { solSt.vx = a.vx; solSt.vz = a.vz; solSt.yaw = a.yaw; solSt.aimPitch = a.pitch; solSt.grounded = b.grounded; solSt.crouch = a.crouch; solSt.y = a.pos.y; s.update(a.lodAcc, solSt); solSt.y = NaN; a.lodAcc = 0; a.lodN = 0;
+        if (s.contacts !== a.ctN) { a.ctN = s.contacts; if (d2 < 900 && b.grounded && sp > 0.8) { sndStep.x = a.pos.x; sndStep.y = a.pos.y; sndStep.z = a.pos.z; sndStep.run = sp > 3.5; try { audio.step(surfaceOf(b), sndStep); } catch { /* optional */ } } } }       // the footstep plays when the foot touches down
     }
     // soft separation between living bodies (bots yield to the player)
     for (let i = 0; i < actors.length; i++) {
@@ -689,6 +724,7 @@ export function createEngine(opts) {
       case 'nextWeapon': switchW(P.cur ? 0 : 1); break;
       case 'grenade': throwGear(); break;
       case 'flashlight': toggleTorch(); break;
+      case 'interact': loot.press(); break;       // the modes read the same key as held (plant, defuse, revive) and keep priority: no pickup while their prompt shows
       case 'sprint': P.sprint = !P.sprint; break;
       case 'fire': if (!player.alive && !rules.autoRespawn) nextSpectate(); break;
     }
@@ -776,6 +812,8 @@ export function createEngine(opts) {
       if (typeof m.hp === 'number') tg.hp = m.hp; if (typeof m.armor === 'number') tg.armor = m.armor;
       feedback(tg, from, m.amount, !!m.head); emitDamage(from, tg, m.amount, !!m.head);
     });
+    on('loot', m => { if (running) loot.onNet(m); });
+    if (net.lootNow) loot.onNet({ op: 'sync', items: net.lootNow() });       // what fell while this client was loading (late joiners too)
     on('death', m => { if (!running) return; const v = actorById(m.id); if (v && v.alive) kill(v, { by: m.by ? actorById(m.by) : null, head: !!m.head, weaponId: m.weapon || null }); });
     on('respawn', m => {
       if (!running) return; const a = actorById(m.id); if (!a) return;
@@ -785,6 +823,7 @@ export function createEngine(opts) {
   }
   function netStop() { for (const f of netOff) { try { f(); } catch { /* ignore */ } } netOff.length = 0; net = null; online = false; myId = 'player'; player.id = 'player'; }
   function netTick(dt) {
+    invT += dt; if (invDirty && invT >= 0.1 && player.alive) sendInv();
     netT += dt; if (netT < 0.05 || !player.alive) return; netT = 0;
     const s = netState; s.x = player.pos.x; s.y = player.pos.y; s.z = player.pos.z; s.yaw = wrap(player.yaw); s.pitch = player.pitch; s.vx = player.vx; s.vz = player.vz; s.weapon = player.weaponId; s.crouch = player.crouch > 0.5;
     try { net.sendState(s); } catch { /* connection lost */ }
@@ -929,6 +968,10 @@ export function createEngine(opts) {
       }
       fx.clear(); proj.clear(); proj.resetIds(); P.torch = world.env === 'bunker'; P.torchK = 0; torch.intensity = 0;      // the weapon light starts on in the dark map only
       loadProgress(0.58, 'units'); await brk();
+      await loot.prepare(ALL_WEAPONS.filter(d => byId(WEAPONS, d.id)), brk); gate();       // every ground model now: the first death builds nothing
+      loot.begin(cfg.mode !== 'zombie' && (!online || !!cfg.net.lootOk)); invDirty = true;
+      // Any weapon can end up in hand mid-match: build its viewmodel now, so warmGpu links its shader program (the revolver has its own) behind the loading screen.
+      if (loot.enabled) { for (const d of WEAPONS) { if (d.slot > 1) continue; await brk(); vm.equip(d, P.outfit); } await brk(); vm.equip(wNow().def, P.outfit); }
       if (online) netStart();
       running = true; E.running = true;
       mode = null; solQ = [];                               // soldiers asked for while the mode starts are built below, one per slice
@@ -1009,7 +1052,7 @@ export function createEngine(opts) {
     if (online || netOff.length) netStop();
     for (const k in held) held[k] = false; P.aim = false;
     if (document.pointerLockElement === canvas) document.exitPointerLock();
-    hud.pause(false); hud.show(false); vm.group.visible = false; rules.frozen = false; setPlayClass(false); for (const l of vmLights) l.intensity = 0; torch.intensity = 0; P.torchK = 0; proj.clear();
+    hud.pause(false); hud.show(false); vm.cancelGrenade(); vm.group.visible = false; rules.frozen = false; setPlayClass(false); for (const l of vmLights) l.intensity = 0; torch.intensity = 0; P.torchK = 0; proj.clear(); loot.end();
     applyAudio();
   }
   function endMatch(result) {
@@ -1054,7 +1097,7 @@ export function createEngine(opts) {
       if (running) {
         emit('tick', dt);
         if (online && net) netTick(dt);
-        fx.update(dt); proj.update(dt);
+        fx.update(dt); proj.update(dt); loot.update(dt);
         const sp = Math.hypot(P.v.x, P.v.z), D = wNow().def;
         hud.cross(3 + D.spread * 210 * (1 - P.ads) + sp * 0.45 * (1 - P.ads) + P.kick * 7, !(P.ads > 0.7 || !player.alive || vm.scoped));
         hud.frame(dt); hud.markersFrame(camera, vw, vh, player.pos.x, player.pos.y, player.pos.z);
@@ -1120,7 +1163,7 @@ export function createEngine(opts) {
     /** Blast at a point: radial falloff, cover attenuation, knockback, FX and sound. o = {radius, damage, by, weaponId, self (factor on `by` itself, default 1)}. */
     explode(x, y, z, o) { const q = o || {}; proj.explode(x, y, z, { radius: q.radius, damage: q.damage, by: q.by || null, weaponId: q.weaponId || null, self: q.self, mul: 1 }); },
     /** Remove every live projectile and blast effect (modes call it between rounds). */
-    clearProjectiles() { proj.clear(); },
+    clearProjectiles() { proj.clear(); if (!online) loot.clear(); },       // the modes call it between rounds; online the server clears the drops
     projectiles: proj,
     /** Extra (not in the contract): full magazines for an actor. */
     refill(a) {
@@ -1138,7 +1181,7 @@ export function createEngine(opts) {
     debugFrame(ms = 1000 / 60, finish, noRender) { manual = true; vclock += ms; skipRender = !!noRender; const t0 = performance.now(); frame(vclock, ms / 1000); skipRender = false; if (finish) renderer.getContext().finish(); return performance.now() - t0; },
     get perf() { return { sim: simMs, render: renderMs, qLevel, pixelRatio: renderer.getPixelRatio(), calls: renderer.info.render.calls, tris: renderer.info.render.triangles, navNodes: nav.nodes, solids: grid.size, unstuck: stats.unstuck, pathSearches: nav.searches }; },
     setQuality: setQ, loadMap, lock,
-    internals: { P, grid, nav, mover, vm, renderer, scene, camera, hud, switchW, startReload, wNow, get mode() { return mode; } },
+    internals: { P, grid, nav, mover, vm, renderer, scene, camera, hud, loot, switchW, startReload, wNow, get mode() { return mode; } },
   };
   ai.setEngine(E);
   applyGraphics(); applyAudio(); applyMouse();
