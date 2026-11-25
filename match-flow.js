@@ -185,7 +185,8 @@ export function installMatchFlow({ net, engine, menu, i18n, profile, audio, MAPS
       h('section', { class: 'fzf-verdict' }, h('h1', { class: 'fzf-title', text: title }),
         stats.length ? h('div', { class: 'fzf-stats' }, stats.map(s => h('div', { class: 'fzf-stat' }, h('b', { text: String(s.value ?? '') }), h('span', { text: String(s.label ?? '') })))) : null,
         rewards,
-        r ? (() => { try { return globalThis.FZPass && globalThis.FZPass.endBlock ? globalThis.FZPass.endBlock('flow') : null; } catch { return null; } })() : null),       // season pass (pass.js)
+        r ? (() => { try { return globalThis.FZPass && globalThis.FZPass.endBlock ? globalThis.FZPass.endBlock('flow') : null; } catch { return null; } })() : null,       // season pass (pass.js)
+        (() => { try { return globalThis.FZReplay && globalThis.FZReplay.endBlock ? globalThis.FZReplay.endBlock('flow') : null; } catch { return null; } })()),       // best moment (replay-rec.js)
       board);
   }
   const cards = new Map();
@@ -208,7 +209,8 @@ export function installMatchFlow({ net, engine, menu, i18n, profile, audio, MAPS
   }
   function viewVote() {
     cards.clear();
-    return h('div', { class: 'fzf-vote' }, h('h2', { class: 'fzf-vtitle', text: T('flow.voteTitle') }), h('p', { class: 'fzf-vhint', text: T('flow.voteHint') }),
+    return h('div', { class: 'fzf-vote' }, (() => { try { return globalThis.FZReplay && globalThis.FZReplay.endBlock ? globalThis.FZReplay.endBlock('vote') : null; } catch { return null; } })(),       // best moment (replay-rec.js)
+      h('h2', { class: 'fzf-vtitle', text: T('flow.voteTitle') }), h('p', { class: 'fzf-vhint', text: T('flow.voteHint') }),
       h('div', { class: 'fzf-cards' }, S.maps.map(card), card('random')));
   }
   function paintVotes() {

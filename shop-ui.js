@@ -233,7 +233,7 @@ export async function openShop(deps) {
   const outfitShots = await loadOutfitShots();
   const allOutfits = () => [...OUTFITS, ...specials], sets = buildSets(OUTFITS, specials);
   const outfitById = id => allOutfits().find(o => o.id === id) || null;
-  const outLabel = o => (o.colorway ? `${o.name} ${o.colorway}` : outfitName(o));
+  const outLabel = o => (o.colorway ? (T('outfit.' + o.id) !== 'outfit.' + o.id ? T('outfit.' + o.id) : `${o.name} ${o.colorway}`) : outfitName(o));       // a colourway with its own i18n label uses it
   const gearIds = GX ? SLOT_ORDER.flatMap(s => GX.listFor(s)) : [];
   // weekly rotation: everything sold for credits, the same for everyone; "new" = not in last week's selection
   const pool = [...FINISHES.filter(f => !notSold(f)).map(f => ({ key: 'finish:' + f.id, kind: 'finish', rarity: f.rarity, family: f.family || f.pattern })),
@@ -268,7 +268,7 @@ export async function openShop(deps) {
     const s = it.set; return { type: 'soldier', outfit: s.outfit, weaponId: profile.data.primary, fin: s.finishes[0] };
   }
   // the simple static stage: lowest graphics preset, or reduced motion (game setting or system)
-  const lowFx = () => { try { return !!(deps.settings && deps.settings.get('graphics.preset') === 'bas'); } catch { return false; } };
+  const lowFx = () => { try { return !!(deps.settings && /^(bas|mobile)$/.test(deps.settings.get('graphics.preset'))); } catch { return false; } };
   const stillFx = () => { try { return !!(deps.settings && deps.settings.get('gameplay.reducedMotion')) || !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches); } catch { return false; } };
   const paletteOf = o => { if (!o) return undefined; if (Array.isArray(o.c)) return o.c; const p = o.palette || {}; return [p.cloth ?? 0x4c5238, p.cloth2 ?? 0x2a2e22, p.plate ?? 0x7c7a5c]; };
   function syncPreview(now) { clearTimeout(previewTimer); previewTimer = setTimeout(applyPreview, now ? 0 : 110); }

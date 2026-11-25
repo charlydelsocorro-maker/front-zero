@@ -26,7 +26,17 @@ const LOCAL_T = {
   'action.medical': ['Soin / médical', 'Medical item', 'Objeto médico', 'Sanitätsobjekt', 'Item médico', 'Oggetto medico'],
   'action.flashlight': ['Lampe torche', 'Flashlight', 'Linterna', 'Taschenlampe', 'Lanterna', 'Torcia'],
   'action.inspect': ['Inspecter l’arme', 'Inspect weapon', 'Inspeccionar arma', 'Waffe prüfen', 'Inspecionar arma', 'Ispeziona arma'],
+  'preset.mobile': ['Mobile', 'Mobile', 'Móvil', 'Mobil', 'Telemóvel', 'Mobile'],
+  /* meilleur moment (replay-rec.js) */
+  'group.replay': ['Meilleur moment', 'Best moment', 'Mejor momento', 'Bester Moment', 'Melhor momento', 'Momento migliore'],
+  'set.replay': ['Enregistrer le meilleur moment', 'Record the best moment', 'Grabar el mejor momento', 'Besten Moment aufnehmen', 'Gravar o melhor momento', 'Registra il momento migliore'],
+  'set.replayHint': ['Rejouable et partageable en vidéo à la fin de la partie', 'Replay it and share it as a video at the end of the match', 'Repítelo y compártelo en vídeo al final de la partida', 'Am Spielende ansehen und als Video teilen', 'Revê-o e partilha-o em vídeo no fim da partida', 'Rivedilo e condividilo in video a fine partita'],
+  'set.replayFormat': ['Format vidéo préféré', 'Preferred video format', 'Formato de vídeo preferido', 'Bevorzugtes Videoformat', 'Formato de vídeo preferido', 'Formato video preferito'],
+  'opt.portrait': ['Vertical 9:16 (TikTok, Shorts)', 'Vertical 9:16 (TikTok, Shorts)', 'Vertical 9:16 (TikTok, Shorts)', 'Hochformat 9:16 (TikTok, Shorts)', 'Vertical 9:16 (TikTok, Shorts)', 'Verticale 9:16 (TikTok, Shorts)'],
+  'opt.landscape': ['Horizontal 16:9 (YouTube, Discord)', 'Landscape 16:9 (YouTube, Discord)', 'Horizontal 16:9 (YouTube, Discord)', 'Querformat 16:9 (YouTube, Discord)', 'Horizontal 16:9 (YouTube, Discord)', 'Orizzontale 16:9 (YouTube, Discord)'],
 };
+/* Extra settings rows from other modules (input-hub.js: touch and gamepad), added with settings.addPart(section, fn). */
+const EXT_PARTS = [];
 const KEY_GROUPS = [
   ['group.movement', ['forward', 'back', 'left', 'right', 'jump', 'slide', 'crouch', 'sprint']],
   ['group.combat', ['fire', 'aim', 'reload', ...(HAS_GEAR ? ['grenade'] : []), 'tactical', 'medical', 'interact', 'flashlight', 'inspect']],
@@ -38,9 +48,10 @@ const CODE_RE = /^(Key[A-Z]|Digit[0-9]|F([1-9]|1[0-9]|2[0-4])|Numpad(\d|Add|Subt
 const validCode = c => typeof c === 'string' && CODE_RE.test(c) && !RESERVED.has(c);
 const RIGHT_ALIAS = { ShiftRight: 'ShiftLeft', ControlRight: 'ControlLeft', AltRight: 'AltLeft' };
 
-const PRESET_IDS = ['bas', 'moyen', 'eleve', 'ultra'];
+const PRESET_IDS = ['mobile', 'bas', 'moyen', 'eleve', 'ultra'];
 const CUSTOM = 'personnalise';
 const PRESETS = {
+  mobile: { renderScale: 0.6, shadows: 'off', antialiasing: 'off', postProcessing: false, filmGrain: false, vignette: false, particles: 0.25, viewDistance: 90 },       // phones and tablets (picked once on a touch device, input-hub.js)
   bas: { renderScale: 0.7, shadows: 'off', antialiasing: 'off', postProcessing: false, filmGrain: false, vignette: false, particles: 0.35, viewDistance: 90 },
   moyen: { renderScale: 0.85, shadows: 'low', antialiasing: 'fxaa', postProcessing: true, filmGrain: false, vignette: true, particles: 0.65, viewDistance: 140 },
   eleve: { renderScale: 1, shadows: 'medium', antialiasing: 'fxaa', postProcessing: true, filmGrain: true, vignette: true, particles: 1, viewDistance: 200 },
@@ -88,6 +99,8 @@ const SPEC = {
   'gameplay.minimapRotate': bool(true),
   'gameplay.compass': bool(true),
   'gameplay.reducedMotion': bool(false),
+  'gameplay.replay': bool(true),
+  'gameplay.replayFormat': en('portrait', ['portrait', 'landscape']),
   language: en('fr', LANGS),
 };
 const SECTIONS = ['keys', 'mouse', 'graphics', 'audio', 'gameplay', 'language'];
@@ -367,6 +380,8 @@ export function createSettings() {
       return other && other !== actionName ? other : null;
     },
     isPauseSafe: name => PAUSE_SAFE.has(name),
+    /** Extra rows from another module: fn({ t, lang, h }) returns nodes, drawn in `section` ('keys:top', 'keys') each time the screen draws it. */
+    addPart(section, fn) { const p = { section, fn }; EXT_PARTS.push(p); return () => { const i = EXT_PARTS.indexOf(p); if (i >= 0) EXT_PARTS.splice(i, 1); }; },
     get keyboardLayout() { return layoutKind; },
     mount(container) { return mountScreen(s, container, i18n(), layoutListeners); },
   };
@@ -782,9 +797,10 @@ function mountScreen(s, container, i18n, layoutListeners) {
 
   const group = (titleKey, ...rows) => [h('h3', { class: 'fzs-h', text: t(titleKey) }), h('div', { class: 'fzs-group' }, rows)];
   const quality = [['off', t('opt.off')], ['low', t('opt.low')], ['medium', t('opt.medium')], ['high', t('opt.high')]];
+  const extParts = section => EXT_PARTS.filter(p => p.section === section).flatMap(p => { try { return [].concat(p.fn({ t, lang: i18n.lang, h }) || []); } catch (e) { console.warn('[settings] extra rows', e); return []; } });
 
   const builders = {
-    keys: () => KEY_GROUPS.flatMap(([title, list]) => group(title, list.map(bindRow))),
+    keys: () => [...extParts('keys:top'), ...KEY_GROUPS.flatMap(([title, list]) => group(title, list.map(bindRow))), ...extParts('keys')],
     mouse: () => group('section.mouse',
       row('set.sensitivity', slider('mouse.sensitivity', v => v.toFixed(2))),
       row('set.adsMultiplier', slider('mouse.adsMultiplier', multi)),
@@ -830,6 +846,9 @@ function mountScreen(s, container, i18n, layoutListeners) {
         row('set.compass', toggle('gameplay.compass'))),
       ...group('group.accessibility',
         row('set.reducedMotion', toggle('gameplay.reducedMotion'), { hint: 'set.reducedMotionHint' })),
+      ...group('group.replay',
+        row('set.replay', toggle('gameplay.replay'), { hint: 'set.replayHint' }),
+        row('set.replayFormat', select('gameplay.replayFormat', [['portrait', t('opt.portrait')], ['landscape', t('opt.landscape')]]))),
     ],
     language: () => group('section.language', h('div', { class: 'fzs-row', style: 'grid-template-columns:minmax(0,1fr)' },
       radios('language', LANGS.map(code => [code, t(`lang.${code}`)]), 'section.language'))),

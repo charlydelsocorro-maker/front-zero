@@ -146,6 +146,7 @@ const MIME = {
   '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
   '.glb': 'model/gltf-binary', '.gltf': 'model/gltf+json', '.bin': 'application/octet-stream', '.mp3': 'audio/mpeg',
   '.ogg': 'audio/ogg', '.wav': 'audio/wav', '.woff2': 'font/woff2', '.woff': 'font/woff', '.ktx2': 'image/ktx2', '.hdr': 'application/octet-stream',
+  '.webmanifest': 'application/manifest+json',
 };
 const isInside = (dir, p) => p === dir || p.startsWith(dir + path.sep);
 const samePath = (a, b) => process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
@@ -175,6 +176,8 @@ function resolveStatic(rawUrl) {
 }
 
 const server = http.createServer((req, res) => {
+  try { if (Online && Online.http(req, res)) return; } catch (e) { console.error('room list http', e); }       // /api/ping and /api/rooms (room-list.js)
+  try { if (Front && Front.http(req, res)) return; } catch (e) { console.error('front http', e); }       // /api/front and /api/front/me (front-war.js)
   const headers = { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' };
   const fail = (code, text) => { res.writeHead(code, { ...headers, 'Content-Type': 'text/plain; charset=utf-8' }); res.end(req.method === 'HEAD' ? undefined : text); };
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.setHeader('Allow', 'GET, HEAD'); return fail(405, 'Method not allowed'); }
@@ -256,11 +259,11 @@ function strike(p, code) {
 }
 
 /* ---------- room views ---------- */
-const publicPlayer = q => ({ id: q.id, name: q.name, ready: q.ready, team: q.team, status: q.status, cls: q.cls, ...(q.att ? { att: q.att } : null), ...(q.fin ? { fin: q.fin } : null), ...(q.fit ? { fit: q.fit } : null) });
+const publicPlayer = q => ({ id: q.id, name: q.name, ready: q.ready, team: q.team, status: q.status, cls: q.cls, ...(q.att ? { att: q.att } : null), ...(q.fin ? { fin: q.fin } : null), ...(q.fit ? { fit: q.fit } : null), ...(q.bot ? { bot: 1 } : null) });
 function roomView(room) {
   return {
     code: room.code, hostId: room.hostId, mode: room.mode, map: room.map, state: room.state, maxPlayers: MAX_PLAYERS,
-    players: [...room.players.values()].map(publicPlayer), domPoints: room.domPoints, sites: room.sites,
+    players: [...room.players.values()].map(publicPlayer), domPoints: room.domPoints, sites: room.sites, ...(Online ? Online.view(room) : null),
   };
 }
 function sendRoom(room) {
@@ -342,11 +345,12 @@ function applyDamage(room, target, amount, attacker, weapon, head) {
   const msg = { t: 'damage', target: target.id, from: attacker ? attacker.id : null, amount: r2(amount), hp: target.hp, armor: target.armor, head: !!head, weapon: weapon || null };
   send(target, msg);
   if (attacker && attacker !== target) send(attacker, msg);
+  if (target.bot && Online) Online.damaged(room, target, msg);       // an online bot: its simulating client mirrors the health (net-bots.js)
   return target.hp <= 0;
 }
 function killPlayer(room, victim, killer, weapon, head) {
   const m = room.match, now = Date.now();
-  victim.status = 'dead'; victim.hp = 0; victim.deaths++; victim.plantCancel = true;
+  victim.status = 'dead'; victim.hp = 0; victim.deaths++; victim.plantCancel = true; victim.diedAt = now;       // diedAt: the death grace of net-relay.js
   const assists = [];
   for (const [id, at] of victim.damageBy) {
     if (id !== killer.id && now - at < ASSIST_MS) {
@@ -361,7 +365,7 @@ function killPlayer(room, victim, killer, weapon, head) {
   dropLoot(room, victim); gearDeath(room, victim);
   if (m.mode === 'zone') { victim.respawnAt = 0; sendScore(room); if (Zone) Zone.onKilled(room, victim); return; }      // no respawn: the referee keeps the placement
   if (m.mode === 'bomb') { clearActs(m, victim); sendScore(room); checkBombElimination(room); return; }
-  victim.respawnAt = now + T(RESPAWN_MS);
+  victim.respawnAt = now + T(Front ? Front.respawnMs(room, RESPAWN_MS) : RESPAWN_MS);       // faster reinforcements on a front objective with that rule (front-war.js)
   if (m.mode === 'tdm' && !self) m.teamScore[killer.team]++;
   sendScore(room);
   if (self) return;
@@ -497,14 +501,15 @@ function onTake(p, m) {
 /* Weapon finishes: purely visual. Unknown ids are ignored (never a strike), so a newer client's catalogue cannot get anyone kicked. Ownership lives in the player's save.
    Only clients that sent 'fin' once receive it; the public rc4 client never does. Must stay in sync with FINISHES in cosmetics.js (a test compares them). */
 const FIN_IDS = new Set(('ecl_jaune ecl_rouge ecl_blanc ecl_arctique ecl_desert ecl_foret ecl_cyan ecl_or pix_foret pix_sable pix_neige sylve givre fauve eclats carbone acier obsidienne cuivre dorure'
-  + ' map_depot map_vieille_ville map_port map_bunker map_col_blanc map_sept_vents map_noirval map_val_cendre map_roqueseche').split(' '));
+  + ' map_depot map_vieille_ville map_port map_bunker map_col_blanc map_sept_vents map_noirval map_val_cendre map_roqueseche'
+  + ' map_barrage map_marais map_cite').split(' '));
 // Season-pass finishes ('s1_signal'...) are accepted by their pattern, so a new season needs no server change. Still purely visual; unknown to a client = factory look.
 const FIN_PASS = /^s\d+_[a-z0-9_]{1,24}$/;
 const finOk = id => typeof id === 'string' && (FIN_IDS.has(id) || FIN_PASS.test(id));
 function onFin(p, m) {
   const room = p.room; if (!room || !isObj(m.w)) return;
   const out = {}; let n = 0;
-  for (const id of Object.keys(m.w)) { if (++n > 80) break; if (Object.hasOwn(WEAPONS, id) && finOk(m.w[id])) out[id] = m.w[id]; }
+  for (const id of Object.keys(m.w)) { if (++n > 80) break; if (Object.hasOwn(WEAPONS, id) && finOk(m.w[id]) && (!Front || Front.finOk(p, m.w[id]))) out[id] = m.w[id]; }       // a front season finish only for who earned it
   const first = !p.finAware; p.finAware = true; p.fin = Object.keys(out).length ? out : null;
   const s = JSON.stringify({ t: 'fin', id: p.id, w: out });
   for (const q of room.players.values()) {
@@ -529,7 +534,10 @@ const FIT_IDS = new Set(('eclipse-noir-jaune eclipse-noir-rouge eclipse-noir-bla
   ' baliseur-sept-vents baliseur-piste baliseur-carburant baliseur-hangar' +
   ' torchere-noirval torchere-torchere torchere-bitume torchere-kaki' +
   ' brulis-val-cendre brulis-meleze brulis-tison brulis-lichen' +
-  ' serre-frein-valferrade serre-frein-wagonnet serre-frein-minerai serre-frein-houille').split(' '));       // map outfits (outfit-map-<map>.js)
+  ' serre-frein-valferrade serre-frein-wagonnet serre-frein-minerai serre-frein-houille' +
+  ' descendeur-aiguenoire descendeur-conduite descendeur-turbine descendeur-embrun' +
+  ' roselier-saulnes roselier-vasiere roselier-heron roselier-tourbe' +
+  ' ecarteur-verriere ecarteur-gravats ecarteur-suie ecarteur-signal').split(' '));       // map outfits (outfit-map-<map>.js)
 function onFit(p, m) {
   const room = p.room; if (!room) return;
   const first = !p.fitAware; p.fitAware = true; p.fit = typeof m.o === 'string' && (FIT_IDS.has(m.o) || FIT_EXTRA.test(m.o)) ? m.o : null;
@@ -626,7 +634,7 @@ function onProp(p, m) {
   const now = Date.now();
   if (m.a === 'use') {
     if (!Number.isInteger(m.id) || !(m.id >= 0 && m.id < ps.doors.length)) return strike(p, 'bad_prop');
-    const d = ps.doors[m.id], botDoor = m.z === 1 && ((room.mode === 'zombie' && room.hostId === p.id) || (room.mode === 'zone' && !!room.match.zone && room.match.zone.sim === p.id));       // the host moves the zombies, the zone's simulating client its bots
+    const d = ps.doors[m.id], botDoor = m.z === 1 && ((room.mode === 'zombie' && room.hostId === p.id) || (room.mode === 'zone' && !!room.match.zone && room.match.zone.sim === p.id) || (!!Online && Online.isBotSim(room, p)));       // the host moves the zombies, the zone's simulating client its bots, the bot simulator the online bots (net-bots.js)
     if (!botDoor && (p.status !== 'alive' || !p.hasPos || Math.hypot(p.x - d.x, p.z - d.z) > PROP.useR)) return;
     if (now - d.at < PROP.useMs) return;
     d.at = now; d.o = !d.o; if (d.o) d.s = m.s > 0 ? 1 : -1;
@@ -689,7 +697,7 @@ function startMatch(room) {
   for (const q of room.players.values()) { q.kills = q.deaths = q.assists = q.score = 0; resetLife(q); }
   const now = Date.now();
   const m = room.match = { mode: room.mode, startedAt: now, phase: 'live', phaseEnds: 0, endsAt: 0, teamScore: { A: 0, B: 0 }, lastScoreTick: now, drops: new Map(), lootId: 0 };
-  m.gx = makeGear(room);
+  m.gx = makeGear(room); m.bk = makeBreach(room);
   room.state = 'playing';
   if (MODE_RULES[m.mode]) m.endsAt = now + T(MODE_RULES[m.mode].time);
   if (m.mode === 'dom') m.points = room.domPoints ? buildPoints(room.domPoints) : null;
@@ -701,11 +709,13 @@ function startMatch(room) {
   if (m.mode === 'bomb') beginBombRound(room);
   else if (m.mode === 'zombie') sendRound(room);
   sendScore(room);
+  if (Front) Front.onStart(room);       // living front: this map's special rule and war damage, to the clients that know the front (front-war.js)
 }
 function endMatch(room, winner, reason) {
   if (!room.match) return;
   const final = scoreView(room), flow = !!Flow && Flow.check(room, reason);      // end-of-match vote (room-vote.js), only if every client in the room supports it
   all(room, { t: 'end', mode: room.mode, winner, reason, ...final, ...(flow ? { flow: 1 } : null) });
+  if (Front) Front.onEnd(room, winner, reason, final);       // living front: the match counts for each player's side (front-war.js, guarded inside)
   room.match = null; room.state = 'lobby';
   for (const q of room.players.values()) { q.ready = false; q.status = 'lobby'; q.respawnAt = 0; q.bleedAt = 0; q.revive = null; }
   if (flow) Flow.begin(room, final, winner, reason);
@@ -768,7 +778,7 @@ function beginBombRound(room) {
   const m = room.match;
   m.round++;
   if (m.round === BOMB.half + 1) { m.attackers = other(m.attackers); notify(room, 'side_swap', { attackers: m.attackers }); }
-  m.phase = 'freeze'; m.phaseEnds = Date.now() + T(BOMB.freeze); m.bomb = null; clearActs(m); clearLoot(room); resetProps(room); if (m.gx) m.gx.clear();
+  m.phase = 'freeze'; m.phaseEnds = Date.now() + T(BOMB.freeze); m.bomb = null; clearActs(m); clearLoot(room); resetProps(room); if (m.gx) m.gx.clear(); if (m.bk) m.bk.reset();
   for (const q of room.players.values()) if (q.team) respawn(room, q, { round: m.round });
   sendRound(room);
 }
@@ -960,25 +970,30 @@ function onCreate(p, m) {
   const mode = m.mode === undefined ? 'ffa' : m.mode, map = m.map === undefined ? 'default' : m.map;
   if (!MODES.has(mode)) return strike(p, 'bad_mode');
   if (!validMap(map)) return strike(p, 'bad_map');
+  if (Online && !Online.mayCreate(p, m)) return;       // per-address creation rate, public rooms per address (room-list.js)
   const code = makeCode();
   if (!code) return reject(p, 'server_full');
   p.zv = m.zv === 1; p.mf = m.mf === 1;
   if (mode === 'zone' && !p.zv) return reject(p, 'client_outdated');
   const room = { code, hostId: p.id, mode, map, state: 'lobby', players: new Map(), match: null, domPoints: null, sites: null };
   rooms.set(code, room);
+  if (Online) Online.setup(room, p, m);       // private or public, bots on or off (room-list.js)
   addToRoom(p, room, m.name);
+  if (Online) Online.created(room, p);       // the bots fill the room
 }
 function onJoin(p, m) {
   if (p.room) return reject(p, 'already_in_room');
   if (typeof m.code !== 'string' || !/^[A-Za-z]{6}$/.test(m.code)) return strike(p, 'bad_code');
   const room = rooms.get(m.code.toUpperCase());
   if (!room) return reject(p, 'room_not_found');
+  if (Online && !Online.beforeJoin(room, p, m)) return;       // a bot gives up its seat in a full room (room-list.js)
   if (room.players.size >= MAX_PLAYERS) return reject(p, 'room_full');
   p.zv = m.zv === 1; p.mf = m.mf === 1;
   if (room.mode === 'zone' && !p.zv) return reject(p, 'client_outdated');      // a client without this mode could not play it
   if (Flow) Flow.beforeJoin(room, p);
   addToRoom(p, room, m.name);
   if (Flow) Flow.afterJoin(room, p);
+  if (Online) Online.afterJoin(room, p);
 }
 function onReady(p, m) {
   const room = needRoom(p);
@@ -995,6 +1010,7 @@ function onTeam(p, m) {
   if (!TEAM_MODES.has(room.mode)) return reject(p, 'no_teams_in_mode');
   if (m.team === 'A' || m.team === 'B') p.team = m.team;
   else { p.team = null; p.team = smaller(room); }
+  if (Online) Online.onConfig(room);       // the bots even out the sides again
   sendRoom(room);
 }
 function onConfig(p, m) {
@@ -1007,6 +1023,7 @@ function onConfig(p, m) {
   if (m.map !== undefined && m.map !== room.map) { room.map = m.map; room.domPoints = null; room.sites = null; }
   for (const q of room.players.values()) if (q.id !== room.hostId) q.ready = false;
   normalizeTeams(room);
+  if (Online) Online.onConfig(room);       // a new mode may have bots or not (room-list.js)
   sendRoom(room);
 }
 function onStart(p) {
@@ -1033,6 +1050,7 @@ function onState(p, m) {
     if (d > max) { const k = max / d; x = p.x + dx * k; y = p.y + dy * k; z = p.z + dz * k; }
   }
   Object.assign(p, { x, y, z, yaw: m.yaw, pitch: m.pitch, vx: m.vx, vz: m.vz, weapon: m.weapon, crouch: m.crouch, hasPos: true, snap: false, stateAt: now, dirty: true });
+  if (Relay) Relay.track(p, now);       // sample time + lag-compensation history (net-relay.js); online bots come through here too
 }
 function canFight(room) {
   const m = room.match;
@@ -1044,7 +1062,7 @@ function onShot(p, m) {
   const room = needRoom(p);
   if (!room) return;
   if (!canFight(room)) return reject(p, 'not_live');
-  if (p.status !== 'alive') return reject(p, 'dead');
+  if (p.status !== 'alive' && !(Relay && Relay.grace(p, WEAPONS[m.weapon], Date.now()))) return reject(p, 'dead');       // grace: it left before the death (net-relay.js)
   const w = WEAPONS[m.weapon];
   if (!w || w.gx) return strike(p, 'bad_weapon');       // equipment charges never go through 'shot': the referee opens their blast itself
   for (const k of ['ox', 'oy', 'oz']) if (!num(m[k], -6000, 6000)) return strike(p, 'bad_shot');
@@ -1125,7 +1143,8 @@ function onSplash(p, m, room, w) {
     const q = p.booms[i];
     if (q.weapon !== m.weapon || q.hits >= SPLASH_CAP || q.seen.has(m.target)) continue;
     if (target && target.hasPos) {       // distance from the blast to the nearest point of the body (feet to head)
-      const cy = clamp(q.y, target.y, target.y + 1.8), d = Math.hypot(target.x - q.x, cy - q.y, target.z - q.z);
+      const tp = Relay ? Relay.seen(p, target, now) : target;       // lag compensation: the target where the shooter saw it, when that is closer
+      const cy = clamp(q.y, target.y, target.y + 1.8), d = Math.min(Math.hypot(target.x - q.x, cy - q.y, target.z - q.z), Math.hypot(tp.x - q.x, clamp(q.y, tp.y, tp.y + 1.8) - q.y, tp.z - q.z));
       if (d > pr.radius + SPLASH_SLACK) continue;
       dist = d;
     }
@@ -1155,7 +1174,7 @@ function onHit(p, m) {
   if (!w) return strike(p, 'bad_weapon');
   if (typeof m.target !== 'string' || m.target.length > 16 || !num(m.damage, 0.01, 1e6) || typeof m.head !== 'boolean') return strike(p, 'bad_hit');
   if (w.blast) { if (m.splash !== true) return reject(p, 'no_shot'); return onSplash(p, m, room, w); }       // a grenade can go off after its owner died
-  if (p.status !== 'alive') return reject(p, 'dead');
+  if (p.status !== 'alive' && !(Relay && Relay.grace(p, w, Date.now()))) return reject(p, 'dead');       // grace: it left before the death (net-relay.js)
   const zombie = isNpc(room, m.target);
   const target = zombie ? null : room.players.get(m.target);
   if (!zombie && (!target || target === p)) return reject(p, 'bad_target');
@@ -1169,7 +1188,8 @@ function onHit(p, m) {
   if (!credit) return reject(p, 'no_shot');
   let falloff = 1;
   if (target && p.hasPos && target.hasPos) {
-    const d = Math.hypot(p.x - target.x, p.y - target.y, p.z - target.z);
+    const tp = Relay ? Relay.seen(p, target, now) : target;       // lag compensation: where the shooter saw the target, when that is closer
+    const d = Math.min(Math.hypot(p.x - target.x, p.y - target.y, p.z - target.z), Math.hypot(p.x - tp.x, p.y - tp.y, p.z - tp.z));
     if (d > MAX_RAY) return reject(p, 'out_of_range');
     if (w.kind === 'melee') { if (d > w.range + MELEE_SLACK) return reject(p, 'out_of_range'); }
     else if (w.flame) { if (d > w.range + MELEE_SLACK) return reject(p, 'out_of_range'); }       // a flame does not carry past its reach
@@ -1359,7 +1379,22 @@ function makeGear(room) {
     blast(owner, id, x, y, z, oid) { owner.live.push({ weapon: id, pid: oid, at: Date.now(), x, y, z }); if (owner.live.length > 16) owner.live.shift(); },       // the owner's client then reports boom and splash hits as for a grenade
     hurt(q, amount, owner, id) { if (!(amount > 0) || !room.match || q.status !== 'alive') return; const by = owner || q; if (owner && q !== owner) q.damageBy.set(owner.id, Date.now()); if (applyDamage(room, q, amount, by, id, false)) killPlayer(room, q, by, id, false); },
     refill(p) { if (p.inv) for (const e of p.inv.w) { const w = WEAPONS[e.id]; if (w.reserve !== undefined) e.r = w.reserve; } },
+    placeCheck(p, m, it, now) { const b = room.match && room.match.bk; return b ? b.placeCheck(p, m, it, now) : 'off'; },       // breaching charge (breach-referee.js)
+    detonated(o, now) { const b = room.match && room.match.bk; if (b) b.detonated(o, now); },
   });
+}
+/* ---------- breachable walls (breach-referee.js + map-breach-data.js at the root, like the gear referee). Without them: no breach, as before.
+   The server has no map geometry: it holds which panels are blown and checks the charge (panel, distance, plant time), then tells every client. */
+let BreachRef = null;
+try { require('../map-breach-data.js'); BreachRef = require('../breach-referee.js'); } catch (e) { BreachRef = null; console.log('breach referee not available:', e.message); }
+function makeBreach(room) {
+  if (!BreachRef || !GearRef) return null;
+  try { return BreachRef.createBreachCore({ now: () => Date.now(), map: () => room.map, all: o => all(room, o), send }); } catch (e) { console.error('breach setup', e); return null; }
+}
+function onBreach(p, m) {
+  const b = p.room && p.room.match && p.room.match.bk; if (!b || typeof m.a !== 'string') return;
+  if (m.a === 'plant' && p.sgUntil && Guard) guardEnd(p.room, p, 'gear');       // starting a plant is an action: no more spawn protection
+  b.msg(p, m);
 }
 function onGear(p, m) { const g = p.room && p.room.match && p.room.match.gx; if (g && typeof m.a === 'string') { if (p.sgUntil && Guard && Guard.isGearAct(m.a)) guardEnd(p.room, p, 'gear'); g.msg(p, m); } }
 function gearDeath(room, v) {
@@ -1391,15 +1426,27 @@ const HANDLERS = {
   nc: ['lobby', (p, m) => { if (Relay) Relay.onCaps(p, m); }], ncw: ['loot', (p, m) => { if (Relay) Relay.onWeapon(p, m); }],
   create: ['join', onCreate], join: ['join', onJoin], ready: ['lobby', onReady], team: ['lobby', onTeam], config: ['lobby', onConfig],
   flow: ['flow', (p, m) => { if (Flow) Flow.onMessage(p, m); }], sg: ['flow', onGuard],
-  start: ['lobby', onStart], state: ['state', onState], shot: ['shot', onShot], hit: ['hit', onHit], boom: ['boom', onBoom], action: ['action', onAction], inv: ['loot', onInv], take: ['loot', onTake], att: ['loot', onAtt], fin: ['loot', onFin], fit: ['loot', onFit], prop: ['prop', onProp], gx: ['gx', onGear],
+  start: ['lobby', onStart], state: ['state', onState], shot: ['shot', onShot], hit: ['hit', onHit], boom: ['boom', onBoom], action: ['action', onAction], inv: ['loot', onInv], take: ['loot', onTake], att: ['loot', onAtt], fin: ['loot', onFin], fit: ['loot', onFit], prop: ['prop', onProp], gx: ['gx', onGear], bk: ['prop', onBreach],
   ping: ['ping', (p, m) => { if (num(m.c, 0, 1e15)) send(p, { t: 'pong', c: m.c, ts: Date.now() }); else strike(p, 'bad_ping'); }],
 };
+/* ---------- public rooms, quick play and online bots (room-list.js and net-bots.js at the root). Without them: private rooms only, no bots. ---------- */
+let Online = null;
+try {
+  Online = require('../room-list.js')({ rooms, MODES, TEAM_MODES, MAX_PLAYERS, LIMITS, ORIGINS, TRUST_PROXY, WEAPONS, send, reject, strike, notify, sendRoom, sendScore, onCreate, onJoin, startMatch,
+    guardStart, validMap, isObj, num, onState, onShot, onHit, onBoom, onAction, resetLife, checkBombElimination });
+  Object.assign(HANDLERS, Online.handlers);
+} catch (e) { Online = null; console.warn('public rooms and online bots unavailable:', e.message); }
+/* ---------- living front (front-war.js and front-store.js at the root): sides, territories, weekly offensive, seasons. Without them: no front. ---------- */
+let Front = null;
+try { Front = require('../front-war.js')({ rooms, T, ORIGINS, TRUST_PROXY, LIMITS, send }); Object.assign(HANDLERS, Front.handlers); }
+catch (e) { Front = null; console.warn('living front unavailable:', e.message); }
 
 /* ---------- connection lifecycle ---------- */
 function leaveRoom(p) {
   const room = p.room;
   if (!room) return;
   room.players.delete(p.id); p.room = null;
+  if (Online) { try { Online.onLeave(room, p); } catch (e) { console.error('room list leave', e); } }       // no human left: the bots go too; otherwise one takes the seat
   if (room.players.size === 0) { room.match = null; rooms.delete(room.code); return; }
   const m = room.match;
   if (m && m.gx) m.gx.onLeave(p);
@@ -1473,7 +1520,7 @@ function onConnection(ws, ip) {
     if (Relay && p.dq && Relay.hold(p, m)) return;
     try { fn(p, m); } catch (e) { console.error('handler error', m.t, e); reject(p, 'server_error'); }
   });
-  send(p, { t: 'welcome', nc: Relay ? Relay.version : 0, id: p.id, ts: Date.now(), loot: 1, att: 1, fin: 1, fit: 1, props: 1, zone: Zone ? 1 : 0, xw: Object.hasOwn(WEAPONS, 'bpc') ? 1 : 0, gx: GearRef ? 1 : 0, mf: Flow ? 1 : 0, sg: Guard ? 1 : 0 });
+  send(p, { t: 'welcome', nc: Relay ? Relay.version : 0, id: p.id, ts: Date.now(), loot: 1, att: 1, fin: 1, fit: 1, props: 1, zone: Zone ? 1 : 0, xw: Object.hasOwn(WEAPONS, 'bpc') ? 1 : 0, gx: GearRef ? 1 : 0, bk: BreachRef && GearRef ? 1 : 0, mf: Flow ? 1 : 0, sg: Guard ? 1 : 0, ...(Online ? Online.caps : null), ...(Front ? Front.caps : null) });
 }
 
 setInterval(() => {

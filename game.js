@@ -64,6 +64,7 @@ export function createEngine(opts) {
   /* ---------- state ---------- */
   const rules = { friendlyFire: false, autoRespawn: true, respawnDelay: 3, regen: true, playerLoadout: true, frozen: false, killFeed: true };
   const actors = [], held = Object.create(null), keyTurn = { l: false, r: false, u: false, d: false };
+  const inAxis = { f: 0, s: 0 };      // analog move (touch stick, gamepad: input-*.js), length <= 1; used only while no movement key is held
   const budget = { path: 1, cover: 1 }, stats = { unstuck: 0 };
   let cfg = null, mode = null, online = false, net = null, netOff = [], netT = 0, myId = 'player';
   let guard = null;       // spawn protection (engine-guard.js, loaded below): null = the match runs as before
@@ -93,8 +94,8 @@ export function createEngine(opts) {
   function loadMap(id) {
     if (world.id !== id) {
       for (const a of actors) if (a.sol) { a.sol.dispose(); a.sol = null; }
-      world.load(id); props.attach(id);
-      grid.build(world.solids); nav.setLevel(world.levelAt); nav.build(world.size, world.spawns, id); mapReady();
+      world.load(id); props.attach(id); bkCall('attach', id);
+      grid.build(world.solids); nav.setLevel(world.levelAt); bkCall('navFold', true); try { nav.build(world.size, world.spawns, id); } finally { bkCall('navFold', false); } mapReady();
     }
     fx.clear(); proj.clear();
   }
@@ -230,7 +231,7 @@ export function createEngine(opts) {
     const by = (o && o.by) || null, head = !!(o && o.head);
     if (by && by !== a && !rules.friendlyFire && !isEnemy(by, a)) return false;
     if (guard && guard.blocks(a)) return false;       // spawn protection: bullets, blasts, fire, melee, gear, zombies
-    if (online && (a.isPlayer || (a.isRemote && a.kind !== 'zombie'))) { emitDamage(by, a, amount, head); return false; }   // the server referees players
+    if (online && (a.isPlayer || (a.isRemote && a.kind !== 'zombie') || a.netRef)) { if (a.netRef && a.ai && by && by !== a) ai.alert(a, by); emitDamage(by, a, amount, head); return false; }   // the server referees players (and the online bots this client simulates, netRef: bots-sim.js)
     let dm = amount; if (a.armor > 0) { const ab = Math.min(a.armor, dm * 0.6); a.armor -= ab; dm -= ab; }
     a.hp -= dm; if (!a.isPlayer) a.regenT = 6;
     const dir = o && o.dir; feedback(a, by, amount, head, dir ? (dir.x ?? dir[0]) : undefined, dir ? (dir.z ?? dir[1]) : undefined);
@@ -250,7 +251,7 @@ export function createEngine(opts) {
     a.vx = a.vz = 0; a.kx = a.kz = 0; a.wishX = a.wishZ = 0;
     if (a.tag) { hud.api.marker('_t' + a.id, null); a.tag = null; }
     if (a.isPlayer) { P.slide = 0; P.reload = 0; vm.cancelReload(); vm.cancelGrenade(); P.hintS = -1; if (!rules.autoRespawn) hud.hint(null); }
-    if (rules.autoRespawn && !(online && (a.isPlayer || a.isRemote))) a.respawnT = rules.respawnDelay;
+    if (rules.autoRespawn && !(online && (a.isPlayer || a.isRemote || a.netRef))) a.respawnT = rules.respawnDelay;
     if (rules.killFeed !== false && a.kind !== 'zombie') hud.feedKill(by && by !== a ? (by === player ? t('hud.you') : by.name) : '', a === player ? t('hud.you') : a.name, head, by === player, a === player);
     if (by === player && a !== player) { try { audio.kill(); } catch { /* optional */ } hud.api.message(head ? t('hud.headshot') : t('hud.eliminated'), { kind: 'info', dur: 1.1 }); }
     loot.onDeath(a);       // before the event: a mode may end the round or the match from its listener
@@ -309,7 +310,7 @@ export function createEngine(opts) {
   const impactAt = (x, y, z) => { sndPos.x = x; sndPos.y = y; sndPos.z = z; return sndPos; };
   const v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), vR = new THREE.Vector3(), vU = new THREE.Vector3(), vF = new THREE.Vector3(), vO = new THREE.Vector3(), dirV = { x: 0, z: 0 };
   const dmgOpt = { by: null, head: false, weaponId: '', dir: dirV };
-  function applyShot(shooter, def, dx, dz) { if (!shotVictim) return; dmgOpt.by = shooter; dmgOpt.head = shotHead; dmgOpt.weaponId = def.id; dirV.x = dx; dirV.z = dz; if (def.kind !== 'melee') { hitInfo.on = true; hitInfo.v = shotVictim; hitInfo.power = shotPower(def); } const burnV = def.flame && !(guard && guard.blocks(shotVictim)) ? shotVictim : null; damage(shotVictim, shotDmg, dmgOpt); hitInfo.on = false; hitInfo.v = null; if (burnV) { try { fire.ignite(burnV, shooter, def, !(online && (burnV.isPlayer || burnV.isRemote))); } catch (e) { console.warn('[fire] ignite', e); } } }
+  function applyShot(shooter, def, dx, dz) { if (!shotVictim) return; dmgOpt.by = shooter; dmgOpt.head = shotHead; dmgOpt.weaponId = def.id; dirV.x = dx; dirV.z = dz; if (def.kind !== 'melee') { hitInfo.on = true; hitInfo.v = shotVictim; hitInfo.power = shotPower(def); } const burnV = def.flame && !(guard && guard.blocks(shotVictim)) ? shotVictim : null; damage(shotVictim, shotDmg, dmgOpt); hitInfo.on = false; hitInfo.v = null; if (burnV) { try { fire.ignite(burnV, shooter, def, !(online && (burnV.isPlayer || burnV.isRemote || burnV.netRef))); } catch (e) { console.warn('[fire] ignite', e); } } }
   function botFire(a, dx, dy, dz, mul) {
     const def = a.wdef, ox = a.pos.x, oy = a.pos.y + (a.crouch > 0.5 ? 1.05 : 1.5), oz = a.pos.z;
     if (a.sol) { a.sol.fire(); a.sol.muzzle(v1); } else v1.set(ox, oy, oz);
@@ -371,7 +372,7 @@ export function createEngine(opts) {
   const projHit = { t: 0, head: false }, pDir = { x: 0, z: 0 }, pOpt = { by: null, head: false, weaponId: '', dir: pDir, force: 0, blast: false }, evBoom = { x: 0, y: 0, z: 0, radius: 0, by: null, weaponId: null };
   let fxDensity = 1;
   function projDamage(v, amount, by, weaponId, dx, dz, force, head, splash) {
-    if (online && by === player && (v.isRemote || v === player)) {       // the server referees players (and the host its zombies): report, never apply
+    if (online && by === player && (v.isRemote || v.netRef || v === player)) {       // the server referees players (and the host its zombies): report, never apply
       if (v !== player && !rules.friendlyFire && !isEnemy(player, v)) return false;
       const sg = v !== player && guard ? guard.hitState(v) : 0; if (sg === 2) return false;       // spawn protection: 1 = the server refuses it (no marker), 2 = older server, not reported
       if (net) { try { net.sendHit({ target: v === player ? myId : v.id, damage: amount, head: !!head, weapon: weaponId, splash: !!splash }); } catch (e) { console.warn('[engine] net send', e); } }
@@ -430,7 +431,7 @@ export function createEngine(opts) {
       const dx = vF.x + vR.x * sx + vU.x * sy, dy = vF.y + vR.y * sx + vU.y * sy, dz = vF.z + vR.z * sx + vU.z * sy, l = Math.sqrt(dx * dx + dy * dy + dz * dz);
       shootRay(player, vO.x, vO.y, vO.z, dx / l, dy / l, dz / l, D, 1, v2.x, v2.y, v2.z, 0xffdf9e, 0.7);
       const v = shotVictim; if (!v) continue;
-      if (online && v.isRemote) {       // referee: send, show the marker, never apply locally
+      if (online && (v.isRemote || v.netRef)) {       // referee: send, show the marker, never apply locally
         if (!rules.friendlyFire && !isEnemy(player, v)) continue;
         const sg = guard ? guard.hitState(v) : 0; if (sg === 2) continue;       // spawn protection: 1 = reported, the server refuses it, no marker; 2 = older server, not reported
         let h = null; for (const q of netHits) if (q.target === v.id && q.head === shotHead) h = q; if (!h) { h = { target: v.id, damage: 0, head: shotHead, weapon: D.id }; netHits.push(h); } h.damage += shotDmg; if (!sg) any = true;
@@ -453,7 +454,7 @@ export function createEngine(opts) {
   function playerMelee(now, D) {
     P.next = now + 60 / D.rpm; P.sprint = false; vm.fire();
     camera.updateMatrixWorld(); vO.setFromMatrixPosition(camera.matrixWorld); camera.matrixWorld.extractBasis(vR, vU, vF); vF.negate();
-    const v = meleeHit(player, vO.x, vO.y, vO.z, vF.x, vF.y, vF.z, D, 1), remote = online && v && v.isRemote, sg = remote && guard ? guard.hitState(v) : 0;       // sg: spawn protection, see playerFire
+    const v = meleeHit(player, vO.x, vO.y, vO.z, vF.x, vF.y, vF.z, D, 1), remote = online && v && (v.isRemote || v.netRef), sg = remote && guard ? guard.hitState(v) : 0;       // sg: spawn protection, see playerFire
     if (online && net) { try { net.sendShot({ ox: vO.x, oy: vO.y, oz: vO.z, dx: vF.x, dy: vF.y, dz: vF.z, weapon: D.id, k: 'm' }); if (remote && sg !== 2 && (rules.friendlyFire || isEnemy(player, v))) { net.sendHit({ target: v.id, damage: shotDmg, head: false, weapon: D.id }); if (!sg) hud.hitMarker(false); } } catch (e) { console.warn('[engine] net send', e); } }
     if (v && !remote) applyShot(player, D, vF.x, vF.z);
     P.kick = Math.min(1, P.kick + 0.3); evShot.actor = player; evShot.weaponId = D.id; emit('shot', evShot);
@@ -520,8 +521,9 @@ export function createEngine(opts) {
     if (keyTurn.l) a.yaw += turn; if (keyTurn.r) a.yaw -= turn; if (keyTurn.u) a.pitch = clamp(a.pitch + turn * 0.7, -1.5, 1.5); if (keyTurn.d) a.pitch = clamp(a.pitch - turn * 0.7, -1.5, 1.5);
     if (!locked && mouseIn) { const ex = (mx0 / vw - 0.5) * 2, ey = (my0 / vh - 0.5) * 2; if (Math.abs(ex) > 0.82) a.yaw -= Math.sign(ex) * (Math.abs(ex) - 0.82) / 0.18 * dt * 2.6; if (Math.abs(ey) > 0.82) a.pitch = clamp(a.pitch - Math.sign(ey) * (Math.abs(ey) - 0.82) / 0.18 * dt * 1.5, -1.5, 1.5); }
     const frozen = rules.frozen, D = wNow().def;
-    const fw = frozen ? 0 : (held.forward ? 1 : 0) - (held.back ? 1 : 0), st = frozen ? 0 : (held.right ? 1 : 0) - (held.left ? 1 : 0), sn = Math.sin(a.yaw), cs = Math.cos(a.yaw);
-    let wx = -sn * fw + cs * st, wz = -cs * fw - sn * st; const wl = Math.hypot(wx, wz); if (wl) { wx /= wl; wz /= wl; }
+    const kf = (held.forward ? 1 : 0) - (held.back ? 1 : 0), ks = (held.right ? 1 : 0) - (held.left ? 1 : 0), stick = !kf && !ks && (inAxis.f !== 0 || inAxis.s !== 0);
+    const fw = frozen ? 0 : stick ? inAxis.f : kf, st = frozen ? 0 : stick ? inAxis.s : ks, sn = Math.sin(a.yaw), cs = Math.cos(a.yaw);
+    let wx = -sn * fw + cs * st, wz = -cs * fw - sn * st; const wl = Math.hypot(wx, wz); if (wl > (stick ? 1 : 0)) { wx /= wl; wz /= wl; }       // keys: unit direction as before; a stick keeps its tilt (never above full speed)
     const wantLow = P.slide > 0 || (held.crouch && !frozen);
     if (wantLow) b.h = H_LOW; else if (b.h < H_STAND && !mover.blocked(p.x, p.y, p.z, b.r, H_STAND)) b.h = H_STAND;
     P.crouched = b.h < 1.5 && P.slide <= 0; a.crouch = b.h < 1.5 ? 1 : 0;
@@ -687,7 +689,15 @@ export function createEngine(opts) {
   /* ---------- equipment (engine-gear.js): lethal, tactical and medical slots ---------- */
   const gxLoot = {}, gxLootDef = id => { const GD = globalThis.FZGearData; if (!GD || !GD.isLive(id) || GD.ITEMS[id].kind === 'weapon') return null; return gxLoot[id] || (gxLoot[id] = { id, name: GD.nameOf(id, i18n.lang), kind: 'thrown', slot: 2, mag: GD.ITEMS[id].carry, reserve: 0, gx: true }); };
   const gear = createGear({ scene, camera, grid, fx, audio, settings, i18n, profile, vm, actors, player, P, rules, hud, hudRoot, isEnemy, proj, getE: () => E, viewH: () => vh, invChanged() { invDirty = true; }, addLootModel: (id, g) => loot.addModel(id, g),
-    blastHit(a, amount, id, dx, dz) { projDamage(a, amount, player, id, dx, dz, 2.6, false, true); }, onAct(a) { if (guard) guard.act(a, 'gear'); } });
+    blastHit(a, amount, id, dx, dz) { projDamage(a, amount, player, id, dx, dz, 2.6, false, true); }, onAct(a) { if (guard) guard.act(a, 'gear'); },
+    wallPlace: (id, it) => bkCall('wallPlace', id, it), breachCheck: (p, m, it, now) => (breach ? bkCall('placeCheck', p, m, it, now) : 'off'), breachBlast: (o, now) => bkCall('detonated', o, now) });       // breaching charges (engine-breach.js)
+  /* ---------- breachable walls (engine-breach.js, loaded on the first match; a failure there never stops a match) ---------- */
+  let breach = null, bkTried = false, bkWarned = false;
+  const bkCall = (f, ...a) => { if (!breach) return undefined; try { return breach[f](...a); } catch (e) { console.warn('[breach] ' + f, e); return undefined; } };
+  async function bkLoad() {
+    if (breach || bkTried) return; bkTried = true;
+    try { const m = await import('./engine-breach.js'); breach = m.createBreach({ scene, camera, grid, nav, world, fx, audio, settings, i18n, player, P, rules, hud, hudRoot, vm, gear, proj, actors, getE: () => E, density: () => fxDensity }); } catch (e) { breach = null; console.warn('[breach] module', e); }
+  }
   const gxPress = s => { try { return gear.press(s); } catch (e) { console.warn('[gear] press', e); return false; } }, gxCancel = () => { try { return gear.cancelUse(); } catch { return false; } };
   let gxWarned = false;
   function updateActors(dt) {
@@ -956,6 +966,7 @@ export function createEngine(opts) {
     attSent = ''; syncAtt();
     on('loot', m => { if (running) loot.onNet(m); });
     on('prop', m => { if (running) { try { props.onNet(m); } catch (e) { console.warn('[props] net', e); } } });
+    on('bk', m => { if (running) bkCall('onNet', m); });       // breachable walls (engine-breach.js)
     if (net.lootNow) loot.onNet({ op: 'sync', items: net.lootNow() });       // what fell while this client was loading (late joiners too)
     on('death', m => { if (!running) return; const v = actorById(m.id); if (v && v.alive) kill(v, { by: m.by ? actorById(m.by) : null, head: !!m.head, weaponId: m.weapon || null }); });
     on('respawn', m => {
@@ -967,7 +978,7 @@ export function createEngine(opts) {
   function netStop() { for (const f of netOff) { try { f(); } catch { /* ignore */ } } netOff.length = 0; net = null; online = false; myId = 'player'; player.id = 'player'; }
   function netTick(dt) {
     invT += dt; if (invDirty && invT >= 0.1 && player.alive) sendInv();
-    netT += dt; if (netT < 0.05 || !player.alive) return; netT = 0;
+    netT += dt; if (netT < 0.049 || !player.alive) return; netT = 0;       // 0.049: three 60 Hz frames add up to 49.99 ms, so 0.05 made it 4 frames (15 Hz)
     const s = netState; s.x = player.pos.x; s.y = player.pos.y; s.z = player.pos.z; s.yaw = wrap(player.yaw); s.pitch = player.pitch; s.vx = player.vx; s.vz = player.vz; s.weapon = player.weaponId; s.crouch = player.crouch > 0.5;
     try { net.sendState(s); } catch { /* connection lost */ }
   }
@@ -1115,18 +1126,19 @@ export function createEngine(opts) {
       temps.push(createSoldier(scene, {}));                 // stands in for every soldier and ragdoll until the mode has created its own
       if (fitMod && (online || E.warmOutfits)) { try { await fitMod.prepareOutfits(brk); gate(); for (const wid of fitMod.WARM_IDS || [fitMod.OUTFIT_SETS[0].id]) for (let l = 0; l < 3; l++) { await brk(); temps.push(createSoldier(scene, { outfit: wid, outfitLod: l })); } } catch (e) { if (e === LOAD_ABORT) throw e; console.warn('[outfit] prepare', e); } }       // someone may wear one: geometry and shaders are ready before the first frame
       await finLoad(temps, brk);
+      await bkLoad(); gate();
       if (world.id !== cfg.map) {
         for (const a of actors) if (a.sol) { a.sol.dispose(); a.sol = null; }
         let kicked = false;
         await world.loadAsync(cfg.map, async lp => {
           if (lp.phase === 'scene' && !kicked) {            // scene graph complete, textures still blank: start the shader links now, paint while they run
-            kicked = true; props.attach(cfg.map); await brk(); grid.build(world.solids); await brk(); mapReady(); await brk(); await kickAll(slice);
+            kicked = true; props.attach(cfg.map); bkCall('attach', cfg.map); await brk(); grid.build(world.solids); await brk(); mapReady(); await brk(); await kickAll(slice);
           }
           loadProgress(lp.phase === 'tex' ? 0.14 + 0.34 * lp.done / Math.max(1, lp.total) : lp.phase === 'ground' ? 0.49 : lp.phase === 'scene' ? 0.13 : 0.08, lp.phase === 'tex' || lp.phase === 'ground' ? 'textures' : 'map');
           await slice();
         });
         gate(); loadProgress(0.5, 'nav');
-        nav.setLevel(world.levelAt); for (const f of nav.buildSteps(world.size, world.spawns, cfg.map)) { loadProgress(0.5 + 0.08 * f); await slice(); }
+        bkCall('navFold', true); try { nav.setLevel(world.levelAt); for (const f of nav.buildSteps(world.size, world.spawns, cfg.map)) { loadProgress(0.5 + 0.08 * f); await slice(); } } finally { bkCall('navFold', false); }       // wall panels away while the nav is built
       }
       fx.clear(); proj.clear(); proj.resetIds(); try { fire.clear(); } catch { /* optional */ } P.drawK = 0; P.torch = world.env === 'bunker'; P.torchK = 0; torch.intensity = 0;      // the weapon light starts on in the dark map only
       loadProgress(0.58, 'units'); await brk();
@@ -1141,7 +1153,8 @@ export function createEngine(opts) {
       if (loot.enabled) { for (const d of WEAPONS) { if (d.slot > 1) continue; if (vm.prebuild && !EAGER_VM.has(d.id)) { vmLater.push(d); continue; } await brk(); vm.equip(d, P.outfit); } await brk(); vm.equip(wNow().def, P.outfit); }
       if (online) netStart();
       try { gear.begin(online, cfg.net, myId); } catch (e) { console.warn('[gear] begin', e); }
-      try { props.begin(online); } catch (e) { console.warn('[props] begin', e); }       // after netStart: the answer to its sync request needs the listener
+      try { props.begin(online); } catch (e) { console.warn('[props] begin', e); }
+      bkCall('begin', online, cfg.net, myId);       // breachable panels whole, their nav strips cut; online it asks the server for the state       // after netStart: the answer to its sync request needs the listener
       running = true; E.running = true;
       mode = null; solQ = [];                               // soldiers asked for while the mode starts are built below, one per slice
       if (createMode) { try { mode = createMode(cfg.mode, E, cfg); mode.start(); } catch (e) { console.error('[engine] mode failed to start, using the built-in FFA', e); try { mode && mode.stop && mode.stop(); } catch { /* ignore */ } for (let i = actors.length - 1; i >= 0; i--) if (actors[i] !== player) removeActor(actors[i]); mode = null; } }
@@ -1223,7 +1236,7 @@ export function createEngine(opts) {
     if (online || netOff.length) netStop();
     for (const k in held) held[k] = false; P.aim = false;
     if (document.pointerLockElement === canvas) document.exitPointerLock();
-    hud.pause(false); hud.show(false); vm.cancelGrenade(); vm.group.visible = false; rules.frozen = false; setPlayClass(false); for (const l of vmLights) l.intensity = 0; torch.intensity = 0; P.torchK = 0; proj.clear(); loot.end(); try { gear.end(); } catch { /* optional */ } lasers.clear(); try { props.end(); } catch { /* optional */ }
+    hud.pause(false); hud.show(false); vm.cancelGrenade(); vm.group.visible = false; rules.frozen = false; setPlayClass(false); for (const l of vmLights) l.intensity = 0; torch.intensity = 0; P.torchK = 0; proj.clear(); loot.end(); try { gear.end(); } catch { /* optional */ } lasers.clear(); try { props.end(); } catch { /* optional */ } bkCall('end');
     applyAudio();
   }
   function endMatch(result) {
@@ -1260,6 +1273,7 @@ export function createEngine(opts) {
     const dt = clamp(dtRaw, 0, 0.08), t0 = performance.now(), time = ms / 1000;
     if (running && !paused && !loading) {
       E.time += dt;
+      emit('input', dt);      // polled inputs (gamepad: input-pad.js) land in this frame, before the player moves
       updatePlayer(dt);
       updateCamera(dt);
       updateWeapons(dt);
@@ -1268,7 +1282,7 @@ export function createEngine(opts) {
       if (running) {
         emit('tick', dt);
         if (online && net) netTick(dt);
-        fx.update(dt); proj.update(dt); try { fire.update(dt); } catch (e) { console.warn('[fire] update', e); } loot.update(dt); try { gear.update(dt); } catch (e) { if (!gxWarned) { gxWarned = true; console.warn('[gear] update', e); } } try { updateLasers(); } catch (e) { console.warn('[engine] laser', e); } try { props.update(dt); } catch (e) { console.warn('[props] update', e); }
+        fx.update(dt); proj.update(dt); try { fire.update(dt); } catch (e) { console.warn('[fire] update', e); } loot.update(dt); try { gear.update(dt); } catch (e) { if (!gxWarned) { gxWarned = true; console.warn('[gear] update', e); } } try { updateLasers(); } catch (e) { console.warn('[engine] laser', e); } try { props.update(dt); } catch (e) { console.warn('[props] update', e); } if (breach) { try { breach.update(dt); } catch (e) { if (!bkWarned) { bkWarned = true; console.warn('[breach] update', e); } } }
         const sp = Math.hypot(P.v.x, P.v.z), D = wNow().def;
         hud.cross(3 + D.spread * 210 * (1 - P.ads) + sp * 0.45 * (1 - P.ads) + P.kick * 7, !(P.ads > 0.7 || !player.alive || vm.scoped));
         hud.frame(dt); hud.markersFrame(camera, vw, vh, player.pos.x, player.pos.y, player.pos.z);
@@ -1303,6 +1317,7 @@ export function createEngine(opts) {
   /* ---------- public API ---------- */
   const E = {
     running: false, time: 0, cfg: null, rules, actors, player, world, nav, settings, i18n, profile, audio,
+    get breach() { return breach; },       // breachable walls (engine-breach.js), for tools and tests
     get paused() { return paused || menuOpen; }, set paused(v) { /* read-only: use the pause action */ },
     /** `loading`: true from startMatch until the match is playable. Progress: on('loading', {active, done, progress 0..1, phase, map, mode, online}). */
     get loadStats() { return loadStats; },
@@ -1338,7 +1353,7 @@ export function createEngine(opts) {
     /** Blast at a point: radial falloff, cover attenuation, knockback, FX and sound. o = {radius, damage, by, weaponId, self (factor on `by` itself, default 1)}. */
     explode(x, y, z, o) { const q = o || {}; proj.explode(x, y, z, { radius: q.radius, damage: q.damage, by: q.by || null, weaponId: q.weaponId || null, self: q.self, mul: 1 }); },
     /** Remove every live projectile and blast effect (modes call it between rounds). */
-    clearProjectiles() { proj.clear(); try { fire.clear(); } catch { /* optional */ } if (!online) { loot.clear(); try { gear.clearRound(); } catch { /* optional */ } try { props.roundReset(); } catch { /* optional */ } } },       // the modes call it between rounds; online the server clears the drops
+    clearProjectiles() { proj.clear(); try { fire.clear(); } catch { /* optional */ } if (!online) { loot.clear(); try { gear.clearRound(); } catch { /* optional */ } try { props.roundReset(); } catch { /* optional */ } bkCall('roundReset'); } },       // the modes call it between rounds; online the server clears the drops
     projectiles: proj,
     /** Extra (not in the contract): full magazines for an actor. */
     refill(a) {
@@ -1349,14 +1364,14 @@ export function createEngine(opts) {
     safeSpawn,
     los: (ax, ay, az, bx, by, bz) => grid.los(ax, ay, az, bx, by, bz),
     hud: hud.api,
-    input: { held: name => !!held[name], set(name, on) { if (on) { if (!held[name]) { held[name] = true; if (name === 'aim') P.aim = true; onPress(name); } } else { held[name] = false; if (name === 'aim') P.aim = false; } } },
+    input: { axis: inAxis, held: name => !!held[name], set(name, on) { if (on) { if (!held[name]) { held[name] = true; if (name === 'aim') P.aim = true; onPress(name); } } else { held[name] = false; if (name === 'aim') P.aim = false; } } },
     reward(credits, reason) { const n = Math.round(credits || 0); if (!(n > 0)) return; earned += n; hud.earn(earned, n, reason); },
     get earned() { return earned; },
     /** Dev/test: advance one frame by `ms` with a virtual clock (stops the rAF loop from stepping). Returns the frame cost in ms. */
     debugFrame(ms = 1000 / 60, finish, noRender) { manual = true; vclock += ms; skipRender = !!noRender; const t0 = performance.now(); frame(vclock, ms / 1000); skipRender = false; if (finish) renderer.getContext().finish(); return performance.now() - t0; },
     get perf() { return { sim: simMs, render: renderMs, qLevel, pixelRatio: renderer.getPixelRatio(), calls: renderer.info.render.calls, tris: renderer.info.render.triangles, navNodes: nav.nodes, solids: grid.size, unstuck: stats.unstuck, pathSearches: nav.searches }; },
     setQuality: setQ, loadMap, lock,
-    internals: { P, grid, nav, mover, vm, renderer, scene, camera, hud, loot, props, gear, switchW, startReload, wNow, get mode() { return mode; } },
+    internals: { P, grid, nav, mover, vm, renderer, scene, camera, hud, loot, props, gear, switchW, startReload, wNow, post, get mode() { return mode; } },       // post: the replay video renders at its own size (replay-export.js)
   };
   ai.setEngine(E);
   E.on('spawn', e => { if (e.actor === player) { try { gear.onSpawn(); } catch (x) { console.warn('[gear] spawn', x); } } });

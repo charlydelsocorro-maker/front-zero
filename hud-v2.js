@@ -580,7 +580,7 @@ export function install({ engine: E, settings, i18n, hudRoot, theme }) {
   /* ================= prompts and pickups: key caps ================= */
   const KEYED = /^\[([^\]]{1,14})\]\s*(.+)$/;
   function keyed(node) {
-    const s = node._t; if (!s || node._fz2k === s) return; node._fz2k = s;
+    const s = node._t; if (!s || (node._fz2k === s && node.textContent !== s)) return; node._fz2k = s;       // the same prompt shown again comes back as plain text from engine-hud: rebuild it
     let g = KEYED.exec(s), key = '', before = '', after = '';
     if (g) { key = g[1]; after = g[2]; }
     else if (keyE) { const i = (' ' + s + ' ').indexOf(' ' + keyE + ' '); if (i >= 0) { key = keyE; before = s.slice(0, i).trim(); after = s.slice(i + keyE.length).trim(); } }
@@ -658,6 +658,7 @@ export function install({ engine: E, settings, i18n, hudRoot, theme }) {
     remeasure();
   });
   settings.on('change', p => { if (typeof p === 'string' && p.startsWith('keys.')) { readKeys(); fmKey = ''; } });
+  addEventListener('fz-keys', () => { readKeys(); fmKey = ''; });      // gamepad / touch glyphs switched on or off (input-hub.js)
   if (i18n && i18n.on) i18n.on('change', () => { fmKey = ''; gK = ''; tK = ''; });
 
   theme.opts.v2 = true;

@@ -89,7 +89,7 @@ export function install({ engine: E, settings, hudRoot }) {
   const st = document.createElement('style'); st.id = 'fzh-style'; st.textContent = CSS; document.head.append(st);
   const html = document.documentElement, el = hud.el, mq = matchMedia('(prefers-reduced-motion: reduce)');
   let on = true, rm = false;
-  const refresh = () => { rm = !!settings.get('gameplay.reducedMotion') || mq.matches; let q = 0; try { q = E.perf.qLevel; } catch { /* keep */ } on = !rm && settings.get('graphics.preset') !== 'bas' && q < 4; html.classList.toggle('fzh-on', on); };
+  const refresh = () => { rm = !!settings.get('gameplay.reducedMotion') || mq.matches; let q = 0; try { q = E.perf.qLevel; } catch { /* keep */ } on = !rm && !/^(bas|mobile)$/.test(settings.get('graphics.preset')) && q < 4; html.classList.toggle('fzh-on', on); };
   refresh(); settings.on('change', p => { if (typeof p === 'string' && (p === 'gameplay.reducedMotion' || p.startsWith('graphics.'))) refresh(); });
   if (mq.addEventListener) mq.addEventListener('change', refresh);
 

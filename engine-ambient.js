@@ -183,7 +183,7 @@ export function install({ engine: E, settings }) {
   /* ---------- quality: all at the top levels, half at the middle, nothing at the lowest or with reduced motion ---------- */
   function applyLife() {
     let q = 0; try { q = E.perf.qLevel | 0; } catch { /* keep */ }
-    const off = !!settings.get('gameplay.reducedMotion') || mq.matches || settings.get('graphics.preset') === 'bas' || q >= 4, want = off ? 0 : q >= 2 ? .5 : 1;
+    const off = !!settings.get('gameplay.reducedMotion') || mq.matches || /^(bas|mobile)$/.test(settings.get('graphics.preset')) || q >= 4, want = off ? 0 : q >= 2 ? .5 : 1;
     if (want === life && q === lastQ) return; life = want; lastQ = q;
     group.visible = want > 0 && !!built;
     for (const k of ['quad', 'hang', 'cable']) { const p = P[k]; p.m.count = Math.ceil(p.full * (want || 0)); }

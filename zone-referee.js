@@ -39,7 +39,7 @@ module.exports = function createZoneReferee(api) {
     const now = Date.now();
     return { t: 'zone', op: 'sync', plan: z.plan, el: z.t0 ? now - z.t0 : null, live: z.live, sim: z.sim, total: z.total, alive: aliveList(room, z).length,
       crates: z.crates.map(crateView), bots: [...z.bots.values()].map(b => ({ id: b.id, name: b.name, alive: b.status === 'alive', weapon: b.weapon, x: b.x, y: b.y, z: b.z, hp: b.hp })),
-      board: board(room, z), spawn: q ? z.spawns.get(q.id) || null : null };
+      board: board(room, z), spawn: q ? z.spawns.get(q.id) || null : null, bu: 1 };       // bu: the simulating client may use crate supplies for its bots
   }
   const syncAll = (room, z) => { for (const q of room.players.values()) send(q, syncMsg(room, z, q)); };
   const counts = (room, z) => all(room, { t: 'zone', op: 'board', alive: aliveList(room, z).length, total: z.total, board: board(room, z) });
@@ -172,6 +172,14 @@ module.exports = function createZoneReferee(api) {
     const c = Number.isInteger(d.id) ? z.crates[d.id] : null;
     if (!c) return strike(p, 'bad_crate');
     const fail = () => send(p, { t: 'zone', op: 'fail', id: d.id });
+    if (d.bot !== undefined) {           // the simulating client takes a supply for one of its bots: its health here, then on that client
+      const b = p.id === z.sim && isBotId(d.bot) ? z.bots.get(d.bot) : null;
+      if (!b || b.status !== 'alive' || !c.open || !c.c.s || !canFight(room) || Math.hypot(b.x - c.x, b.z - c.z) > BOT_OPEN_R) return fail();
+      if (c.c.s === 'med') { if (b.hp >= 100) return fail(); b.hp = Math.min(100, b.hp + R.MED); }
+      else { const cap = R.armorCap(0); if ((b.armor || 0) >= cap) return fail(); b.armor = Math.min(cap, (b.armor || 0) + R.ARMOR); }
+      const s = c.c.s; c.c.s = null; b.hpHold = Date.now() + 1500;       // its reports still carry the old health for a moment
+      return all(room, { t: 'zone', op: 'used', id: c.id, by: b.id, s });
+    }
     if (!c.open || !c.c.s || p.status !== 'alive' || !p.hasPos || !canFight(room) || Math.hypot(p.x - c.x, p.z - c.z) > USE_R || Math.abs(p.y - c.y) > OPEN_Y) return fail();
     if (c.c.s === 'med') { if (p.hp >= p.maxHp) return fail(); p.hp = Math.min(p.maxHp, p.hp + R.MED); }
     else { const cap = R.armorCap(CLASSES[p.cls] && CLASSES[p.cls].armor); if (p.armor >= cap) return fail(); p.armor = Math.min(cap, p.armor + R.ARMOR); }
@@ -190,7 +198,7 @@ module.exports = function createZoneReferee(api) {
       if (!b || b.status !== 'alive') continue;
       if (!num(e[1], -5000, 5000) || !num(e[2], -200, 1000) || !num(e[3], -5000, 5000) || !num(e[4], -1e4, 1e4) || !num(e[5], -2, 2) || !num(e[6], -60, 60) || !num(e[7], -60, 60) || !WEAPONS[e[8]]) return strike(p, 'bad_zone');
       b.x = e[1]; b.y = e[2]; b.z = e[3]; b.yaw = e[4]; b.pitch = e[5]; b.vx = e[6]; b.vz = e[7]; b.weapon = e[8]; b.crouch = e[9] === 1;
-      if (num(e[10], 0, 1000)) b.hp = Math.min(b.hp, r2(e[10]));
+      if (num(e[10], 0, 1000) && !(b.hpHold > now)) b.hp = Math.min(b.hp, r2(e[10]));
       b.dirty = true;
     }
     if (!canFight(room)) return;

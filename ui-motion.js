@@ -96,7 +96,7 @@ export function install({ engine: E, settings, i18n, profile, menuRoot }) {
   const html = document.documentElement, mq = matchMedia('(prefers-reduced-motion: reduce)');
   const reduced = () => !!settings.get('gameplay.reducedMotion') || mq.matches;
   const qLevel = () => { try { return E.perf.qLevel | 0; } catch { return 4; } };
-  const lowest = () => settings.get('graphics.preset') === 'bas' || qLevel() >= 4;
+  const lowest = () => /^(bas|mobile)$/.test(settings.get('graphics.preset')) || qLevel() >= 4;
   const root = () => menuRoot.querySelector('.fzm');
   const shown = () => { const r = root(); return !!r && !r.hidden && menuRoot.style.display !== 'none' && !E.running && !E.loading; };
   function flags() {

@@ -141,6 +141,19 @@ const TABLE = {
   'outfit.arctique': ['Arctique', 'Arctic', 'Ártico', 'Arktis', 'Ártico', 'Artico'],
   'outfit.nuit': ['Opération Nuit', 'Night Operation', 'Operación Noche', 'Operation Nacht', 'Operação Noite', 'Operazione Notte'],
   'outfit.braise': ['Braise', 'Ember', 'Brasa', 'Glut', 'Brasa', 'Brace'],
+  // map outfits of the three new maps (outfit-map-barrage/marais/cite.js): the set name stays a proper noun, the colourway is translated
+  'outfit.descendeur-aiguenoire': ['DESCENDEUR Aiguenoire', 'DESCENDEUR Aiguenoire', 'DESCENDEUR Aiguenoire', 'DESCENDEUR Aiguenoire', 'DESCENDEUR Aiguenoire', 'DESCENDEUR Aiguenoire'],
+  'outfit.descendeur-conduite': ['DESCENDEUR Conduite', 'DESCENDEUR Penstock', 'DESCENDEUR Tubería', 'DESCENDEUR Druckrohr', 'DESCENDEUR Conduta', 'DESCENDEUR Condotta'],
+  'outfit.descendeur-turbine': ['DESCENDEUR Turbine', 'DESCENDEUR Turbine', 'DESCENDEUR Turbina', 'DESCENDEUR Turbine', 'DESCENDEUR Turbina', 'DESCENDEUR Turbina'],
+  'outfit.descendeur-embrun': ['DESCENDEUR Embrun', 'DESCENDEUR Spray', 'DESCENDEUR Rocío', 'DESCENDEUR Gischt', 'DESCENDEUR Borrifo', 'DESCENDEUR Spruzzo'],
+  'outfit.roselier-saulnes': ['ROSELIER Saulnes', 'ROSELIER Saulnes', 'ROSELIER Saulnes', 'ROSELIER Saulnes', 'ROSELIER Saulnes', 'ROSELIER Saulnes'],
+  'outfit.roselier-vasiere': ['ROSELIER Vasière', 'ROSELIER Mudflat', 'ROSELIER Marisma', 'ROSELIER Watt', 'ROSELIER Lodaçal', 'ROSELIER Barena'],
+  'outfit.roselier-heron': ['ROSELIER Héron', 'ROSELIER Heron', 'ROSELIER Garza', 'ROSELIER Reiher', 'ROSELIER Garça', 'ROSELIER Airone'],
+  'outfit.roselier-tourbe': ['ROSELIER Tourbe', 'ROSELIER Peat', 'ROSELIER Turba', 'ROSELIER Torf', 'ROSELIER Turfa', 'ROSELIER Torba'],
+  'outfit.ecarteur-verriere': ['ÉCARTEUR Verrière', 'ÉCARTEUR Verrière', 'ÉCARTEUR Verrière', 'ÉCARTEUR Verrière', 'ÉCARTEUR Verrière', 'ÉCARTEUR Verrière'],
+  'outfit.ecarteur-gravats': ['ÉCARTEUR Gravats', 'ÉCARTEUR Rubble', 'ÉCARTEUR Escombros', 'ÉCARTEUR Schutt', 'ÉCARTEUR Entulho', 'ÉCARTEUR Macerie'],
+  'outfit.ecarteur-suie': ['ÉCARTEUR Suie', 'ÉCARTEUR Soot', 'ÉCARTEUR Hollín', 'ÉCARTEUR Ruß', 'ÉCARTEUR Fuligem', 'ÉCARTEUR Fuliggine'],
+  'outfit.ecarteur-signal': ['ÉCARTEUR Signal', 'ÉCARTEUR Signal', 'ÉCARTEUR Señal', 'ÉCARTEUR Signal', 'ÉCARTEUR Sinal', 'ÉCARTEUR Segnale'],
   'rarity.standard': ['Standard', 'Standard', 'Estándar', 'Standard', 'Padrão', 'Standard'],
   'rarity.special': ['Spécial', 'Special', 'Especial', 'Spezial', 'Especial', 'Speciale'],
   'rarity.elite': ['Élite', 'Elite', 'Élite', 'Elite', 'Elite', 'Élite'],
@@ -280,7 +293,7 @@ const TABLE = {
   'map.col-blanc': ['Col Blanc', 'White Pass', 'Paso Blanco', 'Weißer Pass', 'Passo Branco', 'Passo Bianco'],
   'map.sept-vents': ['Piste Sept-Vents', 'Seven Winds Airfield', 'Pista Siete Vientos', 'Flugfeld Sieben Winde', 'Pista Sete Ventos', 'Pista Sette Venti'],
   'map.noirval': ['Raffinerie Noirval', 'Noirval Refinery', 'Refinería Noirval', 'Raffinerie Noirval', 'Refinaria Noirval', 'Raffineria Noirval'],
-  'map.roqueseche': ['Roquesèche', 'Roquesèche', 'Roquesèche', 'Roquesèche', 'Roquesèche', 'Roquesèche'], 'map.valferrade': ['Valferrade', 'Valferrade', 'Valferrade', 'Valferrade', 'Valferrade', 'Valferrade'],'map.val-cendre': ['Val de Cendre', 'Ash Valley', 'Valle de Ceniza', 'Aschental', 'Vale de Cinza', 'Val di Cenere'],
+  'map.roqueseche': ['Roquesèche', 'Roquesèche', 'Roquesèche', 'Roquesèche', 'Roquesèche', 'Roquesèche'], 'map.valferrade': ['Valferrade', 'Valferrade', 'Valferrade', 'Valferrade', 'Valferrade', 'Valferrade'], 'map.barrage': ['Barrage d’Aiguenoire', 'Aiguenoire Dam', 'Presa de Aiguenoire', 'Aiguenoire-Staudamm', 'Barragem de Aiguenoire', 'Diga di Aiguenoire'], 'map.marais': ['Marais de Saulnes', 'Saulnes Marsh', 'Marisma de Saulnes', 'Saulnes-Marsch', 'Pântano de Saulnes', 'Palude di Saulnes'],'map.cite': ['Cité Verrière', 'Cité Verrière', 'Cité Verrière', 'Cité Verrière', 'Cité Verrière', 'Cité Verrière'],'map.val-cendre': ['Val de Cendre', 'Ash Valley', 'Valle de Ceniza', 'Aschental', 'Vale de Cinza', 'Val di Cenere'],
 
   /* Paramètres : structure */
   'settings.title': ['PARAMÈTRES', 'SETTINGS', 'AJUSTES', 'EINSTELLUNGEN', 'DEFINIÇÕES', 'IMPOSTAZIONI'],

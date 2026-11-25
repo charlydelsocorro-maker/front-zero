@@ -1,17 +1,19 @@
 // FRONT ZÉRO — compact binary frames for high-frequency traffic (positions, bullets, bots). Rare events stay in JSON.
 // No import/export on purpose: the server loads it with require(), the browser with `import './net-codec.js'` (globalThis.FZNetCodec).
 // Every frame is absolute (no delta against a previous frame), so a frame dropped under congestion never corrupts the next one.
+// Version 2 (additive, a version-1 peer never sees it): the client stamps its own state with its clock, its ping and its view delay;
+// STATES_T frames give each record its sample time (frame time minus an age), so a position is drawn at the moment it was true.
 (function (root) {
   'use strict';
-  const VERSION = 1;
-  const FRAME = { STATES: 1, ZOMBIES: 2, VOLATILE: 3, SHOTS: 4, UP_STATE: 16, UP_ZOMBIES: 17, UP_BOTS: 18 };
+  const VERSION = 2;
+  const FRAME = { STATES: 1, ZOMBIES: 2, VOLATILE: 3, SHOTS: 4, STATES_T: 5, UP_STATE: 16, UP_ZOMBIES: 17, UP_BOTS: 18 };
   const STATUS = ['alive', 'dead', 'downed', 'lobby'];
   const ZTYPES = ['walker', 'runner', 'brute'];
   const TAU = Math.PI * 2;
-  const WIDE = 0x80, CROUCH = 1;
+  const WIDE = 0x80, CROUCH = 1, TIMED = 0x40;       // TIMED: an up-state that carries the v2 tail (older servers ignore the bit and the tail)
   const POS = 50, HGT = 100, PITCH = 80, VEL = 4, DIR = 32767;       // 2 cm, 1 cm, 0.7 degree, 0.25 m/s
   const POS_MAX = 32767 / POS, HGT_MAX = 32767 / HGT;
-  const ACTOR = 14, ACTOR_WIDE = 20, SHOT = 14, UP_STATE = 14, UP_STATE_WIDE = 20, UP_BOT = 16;
+  const ACTOR = 14, ACTOR_WIDE = 20, SHOT = 14, UP_STATE = 14, UP_STATE_WIDE = 20, UP_BOT = 16, TAIL = 6, AGE = 2, UP_STATE_MAX = UP_STATE_WIDE + TAIL;
 
   const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
   const i16 = (b, o, v) => { b[o] = v & 255; b[o + 1] = (v >> 8) & 255; };
@@ -30,6 +32,8 @@
 
   /* ---------- positions, server to clients ---------- */
   const actorSize = s => (small(s) ? ACTOR : ACTOR_WIDE);
+  /** STATES_T: each record is followed by its age in ms (frame time minus sample time). */
+  const writeAge = (b, o, age) => { i16(b, o, clamp(Math.round(age), 0, 65535)); return o + AGE; };
   function writeActor(b, o, slot, weapon, s) {
     const wide = !small(s);
     b[o] = slot; b[o + 1] = (s.crouch ? CROUCH : 0) | (statusCode(s.status) << 1) | (wide ? WIDE : 0);
@@ -40,22 +44,23 @@
     b[p + 3] = clamp(q(s.vx || 0, VEL), -127, 127) & 255; b[p + 4] = clamp(q(s.vz || 0, VEL), -127, 127) & 255; b[p + 5] = weapon;
     return p + 6;
   }
-  /** Header of a STATES frame: type, u32 time since the connection's epoch, record count. */
-  function writeStatesHead(b, tsRel, count) { b[0] = FRAME.STATES; w32(b, 1, tsRel); b[5] = count; return 6; }
-  /** Calls fn(slot, record) for each actor; `out` is reused, copy what you keep. Returns the frame's relative time. */
+  /** Header of a STATES (or STATES_T) frame: type, u32 time since the connection's epoch, record count. */
+  function writeStatesHead(b, tsRel, count, type) { b[0] = type || FRAME.STATES; w32(b, 1, tsRel); b[5] = count; return 6; }
+  /** Calls fn(slot, record) for each actor; `out` is reused, copy what you keep (out.age: ms before the frame time, 0 in STATES). Returns the frame's relative time. */
   function readStates(b, out, fn) {
-    const tsRel = u32(b, 1), n = b[5];
+    const tsRel = u32(b, 1), n = b[5], aged = b[0] === FRAME.STATES_T;
     let o = 6;
     for (let i = 0; i < n; i++) {
-      if (o + ACTOR > b.length) break;
+      if (o + ACTOR + (aged ? AGE : 0) > b.length) break;
       const slot = b[o], fl = b[o + 1];
       let p = o + 2;
-      if (fl & WIDE) { if (o + ACTOR_WIDE > b.length) break; out.x = rf(b, p); out.y = rf(b, p + 4); out.z = rf(b, p + 8); p += 12; }
+      if (fl & WIDE) { if (o + ACTOR_WIDE + (aged ? AGE : 0) > b.length) break; out.x = rf(b, p); out.y = rf(b, p + 4); out.z = rf(b, p + 8); p += 12; }
       else { out.x = r16(b, p) / POS; out.y = r16(b, p + 2) / HGT; out.z = r16(b, p + 4) / POS; p += 6; }
       out.yaw = yawIn(u16(b, p)); out.pitch = ((b[p + 2] << 24) >> 24) / PITCH;
       out.vx = ((b[p + 3] << 24) >> 24) / VEL; out.vz = ((b[p + 4] << 24) >> 24) / VEL;
       out.w = b[p + 5]; out.crouch = !!(fl & CROUCH); out.status = STATUS[(fl >> 1) & 3];
       o = p + 6;
+      if (aged) { out.age = u16(b, o); o += AGE; } else out.age = 0;
       fn(slot, out);
     }
     return tsRel;
@@ -109,18 +114,21 @@
     return list;
   }
 
-  /* ---------- the player's own state, client to server ---------- */
-  function encodeUpState(b, weapon, s) {
+  /* ---------- the player's own state, client to server ----------
+     t (version 2 servers only): { ct: client clock ms, rtt: ms, dly: view delay ms } appended as u32 + u8 (2 ms) + u8 (2 ms). */
+  function encodeUpState(b, weapon, s, t) {
     const wide = !small(s);
-    b[0] = FRAME.UP_STATE; b[1] = (s.crouch ? CROUCH : 0) | (wide ? WIDE : 0); b[2] = weapon;
+    b[0] = FRAME.UP_STATE; b[1] = (s.crouch ? CROUCH : 0) | (wide ? WIDE : 0) | (t ? TIMED : 0); b[2] = weapon;
     let p = 3;
     if (wide) { wf(b, p, s.x); wf(b, p + 4, s.y); wf(b, p + 8, s.z); p += 12; }
     else { i16(b, p, q(s.x, POS)); i16(b, p + 2, q(s.y, HGT)); i16(b, p + 4, q(s.z, POS)); p += 6; }
     i16(b, p, yawOut(s.yaw)); b[p + 2] = clamp(q(s.pitch || 0, PITCH), -127, 127) & 255;
     b[p + 3] = clamp(q(s.vx || 0, VEL), -127, 127) & 255; b[p + 4] = clamp(q(s.vz || 0, VEL), -127, 127) & 255;
-    return p + 5;
+    p += 5;
+    if (t) { w32(b, p, Math.floor(t.ct) >>> 0); b[p + 4] = clamp(Math.round((t.rtt || 0) / 2), 0, 255); b[p + 5] = clamp(Math.round((t.dly || 0) / 2), 0, 255); p += TAIL; }
+    return p;
   }
-  /** Fills `m` and returns the weapon index, or -1 when the frame is malformed. */
+  /** Fills `m` and returns the weapon index, or -1 when the frame is malformed. m.ct is -1 when the state carries no time (version 1). */
   function decodeUpState(b, m) {
     if (b.length < UP_STATE) return -1;
     const fl = b[1];
@@ -129,6 +137,8 @@
     else { m.x = r16(b, p) / POS; m.y = r16(b, p + 2) / HGT; m.z = r16(b, p + 4) / POS; p += 6; }
     m.yaw = yawIn(u16(b, p)); m.pitch = ((b[p + 2] << 24) >> 24) / PITCH;
     m.vx = ((b[p + 3] << 24) >> 24) / VEL; m.vz = ((b[p + 4] << 24) >> 24) / VEL; m.crouch = !!(fl & CROUCH);
+    p += 5;
+    if ((fl & TIMED) && b.length >= p + TAIL) { m.ct = u32(b, p); m.rtt = b[p + 4] * 2; m.dly = b[p + 5] * 2; } else { m.ct = -1; m.rtt = 0; m.dly = 0; }
     return b[2];
   }
 
@@ -160,6 +170,6 @@
   }
 
   const statesTime = b => u32(b, 1);
-  const api = { VERSION, FRAME, ACTOR, ACTOR_WIDE, SHOT, UP_STATE_WIDE, statesTime, actorSize, writeActor, writeStatesHead, readStates, writeShot, shotFits, readShots, encodeZombies, decodeZombies, encodeUpState, decodeUpState, encodeBots, decodeBots };
+  const api = { VERSION, FRAME, ACTOR, ACTOR_WIDE, SHOT, AGE, UP_STATE_WIDE, UP_STATE_MAX, statesTime, actorSize, writeAge, writeActor, writeStatesHead, readStates, writeShot, shotFits, readShots, encodeZombies, decodeZombies, encodeUpState, decodeUpState, encodeBots, decodeBots };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.FZNetCodec = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

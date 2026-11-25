@@ -26,6 +26,13 @@ function boxes(list) {
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3));
   return g;
 }
+/** Gas bottle (MAP QA: a plain banded cylinder read as a bollard): body, rounded shoulder, collar and valve, same radius and height as the collision. */
+function gasCyl(r0, h, seg, hexBody, hexBand) {
+  const P = [[0, 0], [r0, 0], [r0, h * .299], [r0, h * .301], [r0, h * .359], [r0, h * .361], [r0, h * .76], [r0 * .9, h * .84], [r0 * .62, h * .89], [r0 * .3, h * .91], [r0 * .3, h * .94], [r0 * .42, h * .95], [r0 * .42, h * .985], [r0 * .2, h], [0, h]].map(([x, y]) => new THREE.Vector2(x, y));
+  const g = new THREE.LatheGeometry(P, seg).toNonIndexed(), p = g.attributes.position, c = new Float32Array(p.count * 3), A = new THREE.Color(hexBody), B = new THREE.Color(hexBand);
+  for (let i = 0; i < p.count; i++) { const y = p.getY(i) / h, band = (y > 0.3 && y < 0.36) || y > 0.905, q = band ? B : A; c[i * 3] = q.r; c[i * 3 + 1] = q.g; c[i * 3 + 2] = q.b; }
+  g.setAttribute('color', new THREE.BufferAttribute(c, 3)); return g;
+}
 function paintCyl(r0, h, seg, hexBody, hexBand) {
   const g = new THREE.CylinderGeometry(r0, r0, h, seg, 4).translate(0, h / 2, 0).toNonIndexed(), p = g.attributes.position, c = new Float32Array(p.count * 3), A = new THREE.Color(hexBody), B = new THREE.Color(hexBand);
   for (let i = 0; i < p.count; i++) { const y = p.getY(i) / h, band = (y > 0.3 && y < 0.36) || (y > 0.64 && y < 0.7) || y > 0.97, q = band ? B : A; c[i * 3] = q.r; c[i * 3 + 1] = q.g; c[i * 3 + 2] = q.b; }
@@ -52,7 +59,7 @@ export function createProps(ctx) {
   const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), S = new THREE.Vector3(1, 1, 1), YAX = new THREE.Vector3(0, 1, 0), ZERO = new THREE.Matrix4().makeScale(0, 0, 0), fw = new THREE.Vector3();
   const leafGeo = boxes([[0, 1, 0, 1, -0.5, 0.5, 0x64503a], [0.87, 0.94, 0.44, 0.48, -1.5, 1.5, 0xb9b09a]]);       // 24 triangles: there can be 112 leaves on a map
   const steelGeo = boxes([[0, 1, 0, 1, -0.5, 0.5, 0x87938c], [0.05, 0.95, 0.12, 0.2, -0.72, 0.72, 0xa3afa7], [0.05, 0.95, 0.8, 0.88, -0.72, 0.72, 0xa3afa7], [0.8, 0.92, 0.43, 0.5, -1.7, 1.7, 0x6f6a5c]]), holeGeo = holeGeometry();
-  const paneGeo = new THREE.PlaneGeometry(1, 1), drumGeo = paintCyl(BARREL.drum.r, BARREL.drum.h, 10, 0x8a2f1e, 0x3a3128), gasGeo = paintCyl(BARREL.gas.r, BARREL.gas.h, 8, 0xc9a227, 0x4a4438);
+  const paneGeo = new THREE.PlaneGeometry(1, 1), drumGeo = paintCyl(BARREL.drum.r, BARREL.drum.h, 10, 0x8a2f1e, 0x3a3128), gasGeo = gasCyl(BARREL.gas.r, BARREL.gas.h, 10, 0xc9a227, 0x4a4438);
   const shardGeo = new THREE.BufferGeometry(); shardGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-0.05, -0.03, 0, 0.05, -0.04, 0, 0.01, 0.06, 0, 0.05, -0.04, 0, -0.05, -0.03, 0, 0.01, 0.06, 0]), 3)); shardGeo.setAttribute('normal', new THREE.BufferAttribute(new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, -1, 0, 0, -1, 0, 0, -1]), 3)); shardGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(18).fill(0.82), 3));
   const inst = (g, m, n) => { const q = new THREE.InstancedMesh(g, m, Math.max(1, n)); q.count = 0; q.frustumCulled = false; q.instanceMatrix.setUsage(THREE.DynamicDrawUsage); scene.add(q); return q; };
   const shards = inst(shardGeo, lam, MAX_SHARDS); shards.castShadow = false;
@@ -163,6 +170,8 @@ export function createProps(ctx) {
       let nd = 0, ng = 0; for (const b of barrels) b.slot = b.kind === 'drum' ? nd++ : ng++;
       if (nd) { drumMesh = inst(drumGeo, lam, nd); drumMesh.castShadow = true; drumMesh.count = nd; }
       if (ng) { gasMesh = inst(gasGeo, lam, ng); gasMesh.castShadow = true; gasMesh.count = ng; }
+      /* MAP QA: Lambert gets no environment light while the map's standard materials do (envMapIntensity = envI of the map): without it the leaves and drums read almost black. Uniform only, same program. */
+      try { let hemi = -1; scene.traverse(o => { if (hemi < 0 && o.isHemisphereLight) hemi = o.intensity; }); lam.color.setScalar(hemi > 0 ? Math.max(1.3, Math.min(2.3, 1.55 / hemi)) : 1.6); } catch { /* keep the default */ }       // dimmer sky light (snow, airbase, valley): stronger lift
       resetAll(true); for (const d of doors) { d.open = true; d.ang = SWING; hide(d.s); drawDoor(d); } for (const p of panes) hide(p.s);       // away until begin(): the nav grid is built without them
       ready = true;
     } catch (e) { console.warn('[props] disabled on this map:', e && e.message); ready = false; }

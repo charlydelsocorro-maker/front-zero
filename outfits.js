@@ -20,6 +20,9 @@ const MODULES = ['./outfit-eclipse.js', './outfit-colosse.js', './outfit-fantome
   './outfit-map-noirval.js',
   './outfit-map-val-cendre.js',
   './outfit-map-valferrade.js',
+  './outfit-map-barrage.js',
+  './outfit-map-marais.js',
+  './outfit-map-cite.js',
 ];
 const mods = [];
 for (const r of await Promise.allSettled(MODULES.map(p => import(p)))) {

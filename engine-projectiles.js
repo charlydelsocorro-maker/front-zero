@@ -461,6 +461,8 @@ void main(){float r=length(vUv);if(r>1.)discard;float n=fract(sin(dot(floor(vUv*
       return p.pid;
     },
     explode,
+    /** Soot on a surface (the same pooled decals as a blast's): a breached wall's edges (engine-breach.js). */
+    scorch(x, y, z, nx, ny, nz, size) { scorch(x, y, z, nx, ny, nz, size); },
     /** A remote client reported its detonation: drop the mirror projectile and play the blast (no damage; the server referees). */
     remoteBoom(owner, pid, x, y, z, def) {
       for (let i = 0; i < MAXP; i++) { const p = pool[i]; if (p.live && p.visual && p.owner === owner && (p.pid === pid || !pid)) { release(p); if (pid) break; } }

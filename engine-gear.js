@@ -150,6 +150,8 @@ export function createGear(c) {
       blast() { /* the owner's client explodes it on the 'det' message */ },
       hurt(q, amount, owner, id) { const v = q === pl ? player : q.actor, by = owner ? (owner === pl ? player : owner.actor) : null; if (v) E().damage(v, amount, { by: by === v ? null : by, weaponId: id }); },
       refill() { /* the launchers' reserve is refilled on the 'ammo' answer */ },
+      placeCheck(p, m, it, now) { return c.breachCheck ? c.breachCheck(p, m, it, now) : 'off'; },       // breaching charge rules (engine-breach.js, local breach referee)
+      detonated(o, now) { if (c.breachBlast) c.breachBlast(o, now); },
     });
   }
 
@@ -328,7 +330,7 @@ export function createGear(c) {
     if (s === 'L' && sl.n <= 0 && P.gear && P.gear.n > 0) return false;       // a frag picked up with another lethal item spent
     if (!canAct()) return true;
     if (sl.n <= 0) { if (E().time - P.dryT > 0.45) { P.dryT = E().time; play('dry'); say(tx('none'), 'bad'); } return true; }
-    if (it.kind === 'med') startMed(sl, it); else if (it.kind === 'throw') startThrow(sl, it); else startPlace(sl, it);
+    if (it.kind === 'med') startMed(sl, it); else if (it.kind === 'throw') startThrow(sl, it); else if (it.wall) { if (c.wallPlace) { try { c.wallPlace(sl.id, it); } catch (e) { console.warn('[gear] wall', e); } } } else startPlace(sl, it);       // a breaching charge goes on a panel (engine-breach.js)
     return true;
   }
   /** Weapon change, interact, fire: a medical gesture in progress stops, nothing is spent. */
@@ -542,5 +544,15 @@ export function createGear(c) {
     onNet(m) { if (enabled) { try { onMsg(m); } catch (e) { console.warn('[gear] net', e); } } },
     clearRound() { if (!online && core) core.clear(); },
     press, cancelUse, smokeBlocks, threat, botTick,
+    /** A charge set by engine-breach.js at a spot it chose (on a panel): spends one, shows it at once, asks the referee. */
+    placeAt(id, x, y, z, yaw, extra) {
+      const it = ITEMS[id], s = it && slots[it.slot]; if (!enabled || !s || s.id !== id || s.n <= 0 || !player.alive) return false;
+      s.n--; paintSlots(); stage('magIn'); const tk = ++tokenSeq;
+      const o = mk({ oid: -tk, id, by: me, team: player.team, x, y, z, yaw, st: it.wall ? 'trig' : 'placed', arm: it.armMs || 0 }); byToken.set(tk, o);
+      send({ a: 'place', id, c: tk, x, y, z, yaw, ...(extra || null) });
+      return true;
+    },
+    handProp(id) { return prop(id); },
+    canAct() { return enabled && canAct(); },
   };
 }

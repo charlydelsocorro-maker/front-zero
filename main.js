@@ -41,7 +41,7 @@ function fallbackMenu(root) {
   api.show(); return api;
 }
 
-try { const q = await import('./maps-relief.js'); q.install(await import('./maps.js')); } catch (e) { console.warn('[boot] maps-relief', e); } try { const q2 = await import('./maps-mine.js'); q2.install(await import('./maps.js')); } catch (e) { console.warn('[boot] maps-mine', e); } let menu = null;
+try { const q = await import('./maps-relief.js'); q.install(await import('./maps.js')); } catch (e) { console.warn('[boot] maps-relief', e); } try { const q2 = await import('./maps-mine.js'); q2.install(await import('./maps.js')); } catch (e) { console.warn('[boot] maps-mine', e); } try { const qc = await import('./maps-cite.js'); qc.install(await import('./maps.js')); } catch (e) { console.warn('[boot] maps-cite', e); } try { const qm = await import('./maps-marais.js'); qm.install(await import('./maps.js')); } catch (e) { console.warn('[boot] maps-marais', e); } try { const qb = await import('./maps-barrage.js'); qb.install(await import('./maps.js')); } catch (e) { console.warn('[boot] maps-barrage', e); } let menu = null;
 if (!forceFallback) {
   try {
     const m = await import('./menu.js');
@@ -64,8 +64,16 @@ if (params.get('hud') !== 'classic') import('./hud-theme.js').then(m => m.instal
 if (params.get('ui') !== 'v1') import('./ui-theme.js').then(m => m.install({ engine, settings, i18n, profile, menuRoot })).catch(e => console.warn('[boot] menu theme unavailable', e));
 // End-of-match flow (results, map vote, next match). If it fails to load, this client simply does not announce it and keeps the old end screen.
 import('./match-flow.js').then(f => { const flow = f.installMatchFlow({ net, engine, menu, i18n, profile, audio, MAPS }); if (dev && window.__fz) window.__fz.flow = flow; }).catch(e => console.warn('[boot] match-flow unavailable', e));
+// Public rooms, quick play, server wake-up and online bots (online-ui.js, bots-sim.js). If it fails to load, the menu keeps private rooms by code.
+import('./online-ui.js').then(o => { const ol = o.install({ net, engine, menu, i18n }); if (dev && window.__fz) window.__fz.online = ol; }).catch(e => console.warn('[boot] public rooms unavailable', e));
 // Season pass (pass.js): engine events only, nothing per frame. If it fails to load, the menu tab does nothing and matches are unchanged.
 import('./pass.js').then(p => { const pass = p.install({ engine, profile, i18n, net, audio, menu }); if (dev && window.__fz) window.__fz.pass = pass; }).catch(e => console.warn('[boot] season pass unavailable', e));
+// Living front (front-ui.js): home band, war room, side choice, contribution after online matches. If it fails to load, nothing else changes.
+import('./front-ui.js').then(f => { const front = f.install({ net, engine, menu, i18n, profile, settings, menuRoot, MAPS }); if (dev && window.__fz) window.__fz.front = front; }).catch(e => console.warn('[boot] living front unavailable', e));
+// Best moment (replay-rec.js): 20 Hz record of the match, the best moment's card on the end screens, replay and video on demand. If it fails to load, matches and end screens are unchanged.
+import('./replay-rec.js').then(r => { const rp = r.install({ engine, settings, i18n, profile, audio, menu, net, MAPS }); if (dev && window.__fz) window.__fz.replay = rp; }).catch(e => console.warn('[boot] best moment unavailable', e));
+// Phones, tablets and gamepads (input-hub.js: touch controls, controller, phone menus, Mobile preset). If it fails to load, mouse and keyboard are unchanged.
+import('./input-hub.js').then(m => { const inp = m.install({ engine, settings, i18n, profile, menu, menuRoot, hudRoot }); if (dev && window.__fz) window.__fz.input = inp; }).catch(e => console.warn('[boot] touch and gamepad input unavailable', e));
 
 /* ---------- failure surface: a broken match, a lost WebGL context or a dead screen always ends on a visible panel ---------- */
 const FT = {       // fr, en, es, de, pt, it

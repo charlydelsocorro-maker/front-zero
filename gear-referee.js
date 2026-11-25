@@ -11,7 +11,7 @@
   /** h = { now(), all(msg, except), send(p, msg), players() -> iterable, isEnemy(owner, q), canFight(), blast(owner, id, x, y, z, oid), hurt(q, amount, owner, id), refill(p), npcs() -> bool } */
   function createGearCore(h) {
     const objs = new Map(); let seq = 0;
-    const view = o => ({ oid: o.oid, id: o.id, by: o.by, team: o.team, x: o.x, y: o.y, z: o.z, yaw: o.yaw, st: o.st, age: Math.max(0, h.now() - o.t0), arm: Math.max(0, o.armAt - h.now()), left: o.until ? Math.max(0, o.until - h.now()) : 0, ...(o.polar ? { polar: o.polar } : null), ...(o.c ? { c: o.c } : null) });
+    const view = o => ({ oid: o.oid, id: o.id, by: o.by, team: o.team, x: o.x, y: o.y, z: o.z, yaw: o.yaw, st: o.st, age: Math.max(0, h.now() - o.t0), arm: Math.max(0, o.armAt - h.now()), left: o.until ? Math.max(0, o.until - h.now()) : 0, ...(o.polar ? { polar: o.polar } : null), ...(o.c ? { c: o.c } : null), ...(o.pan !== undefined ? { pan: o.pan } : null) });
     const counts = g => ({ L: { id: g.s.L.id, n: g.s.L.n }, T: { id: g.s.T.id, n: g.s.T.n }, M: { id: g.s.M.id, n: g.s.M.n } });
     const ownerOf = o => { for (const q of h.players()) if (q.id === o.by) return q; return null; };
     const live = (p, id) => { let n = 0; for (const o of objs.values()) if (o.by === p.id && o.id === id && o.st !== 'gone') n++; return n; };
@@ -86,8 +86,10 @@
       if (!num(m.x, -6000, 6000) || !num(m.y, -200, 1000) || !num(m.z, -6000, 6000) || !num(m.yaw, -20, 20)) return bad();
       if (p.hasPos !== false && Math.hypot(m.x - p.x, m.y - p.y, m.z - p.z) > REACH) return bad();
       if (it.maxOut && live(p, m.id) >= it.maxOut) return bad('limit');
+      if (it.wall) { const why = h.placeCheck ? h.placeCheck(p, m, it, now) : 'off'; if (why) return bad(why); }       // breaching charge: on an intact panel, after the plant time (breach-referee.js)
       s.n--; g.next[m.id] = now + PLACE_GAP;
       const o = add(p, it, m.id, m.x, m.y, m.z, m.yaw, 'placed', now);
+      if (it.wall) { o.pan = m.pan; o.st = 'trig'; o.fuseAt = now + (it.fuseMs || 2500); }       // its fuse runs on this clock
       if (it.ms) o.until = now + it.ms;
       if (it.charges) o.c = it.charges;
       h.send(p, { t: 'gx', op: 'placed', c: m.c | 0, oid: o.oid, id: m.id, n: s.n });
@@ -96,6 +98,7 @@
     /** Fuse or trigger reached. Blast items go through the owner's client (cover, credit) with the existing boom and splash checks. */
     function detonate(o, now) {
       const it = ITEMS[o.id], owner = ownerOf(o);
+      if (h.detonated && it.dmg && it.radius) { try { h.detonated(o, now); } catch { /* breaching is optional */ } }       // a panel is blown first, so the blast already goes through the hole
       if (it.dmg && it.radius) {
         h.all({ t: 'gx', op: 'det', oid: o.oid, id: o.id, by: o.by, x: o.x, y: o.y, z: o.z, yaw: o.yaw });
         objs.delete(o.oid); o.st = 'gone';

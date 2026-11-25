@@ -4,10 +4,11 @@ const rnd = (a, b) => a + Math.random() * (b - a);
 const TAU = Math.PI * 2;
 const wrap = a => { a = (a + Math.PI) % TAU; if (a < 0) a += TAU; return a - Math.PI; };
 
+// yaw: the fastest the body turns, rad/s (no instant about-face)
 export const DIFFICULTY = {
-  easy: { react: [0.6, 1.0], spread: 0.075, dmg: 0.4, burst: [2, 4], pause: [0.6, 1.3], turn: 5, sense: 0.24, fov: 0.25, range: 46 },
-  normal: { react: [0.32, 0.55], spread: 0.045, dmg: 0.55, burst: [3, 5], pause: [0.35, 0.9], turn: 7.5, sense: 0.17, fov: 0.05, range: 60 },
-  hard: { react: [0.16, 0.3], spread: 0.026, dmg: 0.75, burst: [3, 7], pause: [0.2, 0.55], turn: 11, sense: 0.11, fov: -0.2, range: 75 },
+  easy: { react: [0.6, 1.0], spread: 0.075, dmg: 0.4, burst: [2, 4], pause: [0.6, 1.3], turn: 5, sense: 0.24, fov: 0.25, range: 46, yaw: 4.5 },
+  normal: { react: [0.32, 0.55], spread: 0.045, dmg: 0.55, burst: [3, 5], pause: [0.35, 0.9], turn: 7.5, sense: 0.17, fov: 0.05, range: 60, yaw: 6.5 },
+  hard: { react: [0.16, 0.3], spread: 0.026, dmg: 0.75, burst: [3, 7], pause: [0.2, 0.55], turn: 11, sense: 0.11, fov: -0.2, range: 75, yaw: 9 },
 };
 const RANGE = { p9: 12, ar: 20, smg: 12, sg: 7, lmg: 24, sr: 42, flame: 5, sawn: 4.5 };
 const CAT_RANGE = { assault: 20, smg: 12, shotgun: 7, lmg: 24, sniper: 42, launcher: 24, special: 28, pistol: 12, melee: 1.1 };
@@ -25,7 +26,9 @@ export function newBotAI(difficulty, index) {
     path: null, pi: 0, gx: 1e9, gz: 1e9, repath: 0, senseT: (index % 7) * 0.03 + Math.random() * 0.1, alert: 0, arrived: false,
     sx: 0, sz: 0, stT: 0, stuck: 0, dodgeT: 0, dodgeA: 0, cover: null, coverT: 0, coverCd: 0, huntT: 0, hx: 0, hz: 0, hy: 0, idleT: 0, idleYaw: 0, holdT: 0, wx: 0, wz: 0, wOn: false, puppet: false,
     // loadout: primary + sidearm + grenades (filled on the first update), spare rounds, spin-up, grenade avoidance
-    prim: null, sec: null, ammo1: 0, ammo2: 0, res: -1, gearN: 0, swapT: 0, spin: 0, refill: false, fleeT: 0, fleeX: 0, fleeZ: 0, threatT: Math.random() * 0.2, nadeCd: rnd(3, 9) };
+    prim: null, sec: null, ammo1: 0, ammo2: 0, res: -1, gearN: 0, swapT: 0, spin: 0, refill: false, fleeT: 0, fleeX: 0, fleeZ: 0, threatT: Math.random() * 0.2, nadeCd: rnd(3, 9),
+    // engageR: farthest enemy it picks a fight with (a mode may shorten it: Zone pacing); hitBy/hitT: who shot it last, for how long that still counts
+    engageR: Infinity, hitBy: null, hitT: 0 };
 }
 export function newZombieAI(type, o, index) {
   const z = ZOMBIES[type] || ZOMBIES.walker;
@@ -115,13 +118,22 @@ export function createAI(ctx) {
     if (ctx.smoke && ctx.smoke(ex, ey, ez, b.pos.x, b.pos.y + 1.2 * hs, b.pos.z)) return false;       // a smoke cloud hides whoever is behind it
     return grid.los(ex, ey, ez, b.pos.x, b.pos.y + 1.15 * hs * (b.crouch > 0.5 ? 0.7 : 1), b.pos.z) || grid.los(ex, ey, ez, b.pos.x, b.pos.y + 1.6 * hs * (b.crouch > 0.5 ? 0.7 : 1), b.pos.z);
   }
+  /**
+   * Target choice, one rule for every soldier (the local player is never singled out): the nearest enemy first, then whoever shot me
+   * last, a wounded enemy (an easy finish), the current target (no flicking between two). Only the three best are ray-tested.
+   */
   function sense(a) {
-    const ai = a.ai, diff = ai.diff, fx = -Math.sin(a.yaw), fz = -Math.cos(a.yaw), list = E.actors;
+    const ai = a.ai, diff = ai.diff, fx = -Math.sin(a.yaw), fz = -Math.cos(a.yaw), list = E.actors, by = ai.hitT > 0 ? ai.hitBy : null, er = ai.engageR;
     c3[0] = c3[1] = c3[2] = null; d3[0] = d3[1] = d3[2] = Infinity;
     for (let i = 0; i < list.length; i++) {
       const b = list[i]; if (b === a || !b.alive || !E.isEnemy(a, b)) continue;
-      const dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z; let d = Math.sqrt(dx * dx + dz * dz); if (d > diff.range) continue;
-      if (b !== ai.target) { if (d > 9 && ai.alert <= 0 && (dx * fx + dz * fz) / d < diff.fov) continue; } else d *= 0.75;
+      const dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z, raw = Math.sqrt(dx * dx + dz * dz); if (raw > diff.range) continue;
+      let d = raw;
+      if (b === by) d *= 0.55;       // it shoots at me: answer it, even beyond the reach the mode allows
+      else if (raw > er) continue;
+      else if (b !== ai.target && raw > 9 && ai.alert <= 0 && (dx * fx + dz * fz) / raw < diff.fov) continue;
+      if (b === ai.target) d *= 0.75;
+      const mh = b.maxHp || 100; if (b.hp < mh) d *= 0.7 + 0.3 * Math.max(0, b.hp) / mh;       // a wounded enemy is the easier kill
       if (E.spawnGuard) d += E.spawnGuard.penalty(b);       // a spawn-protected enemy comes after an exposed one (engine-guard.js)
       if (d < d3[0]) { c3[2] = c3[1]; d3[2] = d3[1]; c3[1] = c3[0]; d3[1] = d3[0]; c3[0] = b; d3[0] = d; }
       else if (d < d3[1]) { c3[2] = c3[1]; d3[2] = d3[1]; c3[1] = b; d3[1] = d; }
@@ -217,6 +229,7 @@ export function createAI(ctx) {
     if (ai.burst <= 0) { if (ai.burstCd > 0) return; ai.burst = def.burst ? def.burst : Math.round(rnd(diff.burst[0], diff.burst[1])) * (def.auto ? 1 : 0) + (def.auto ? 0 : 1 + (Math.random() < 0.5 ? 1 : 0)); ai.first = true; }
     if (ai.fireCd > 0) return;
     if (Math.abs(wrap(a.yawT - a.yaw)) > 0.2) return;
+    if (!visible(a, t)) { ai.fireCd = 0.1; return; }       // never through a wall: the sight line is checked before every round, not only at the last look
     if (def.kind === 'projectile') {       // lead + arc; explosives never at point-blank or near a teammate
       const blast = def.proj.radius > 0, perr = diff.spread * (0.6 + Math.hypot(t.vx || 0, t.vz || 0) * 0.04);
       if (!aimProjectile(a, t.pos.x, blast ? t.pos.y + (def.proj.bounce > 0 ? 0.95 : 0.15) : ty, t.pos.z, t.vx || 0, t.vz || 0, def, perr, t)) { ai.strafeT = 0; ai.fireCd = 0.25; return; }      // rockets at the feet, bouncing grenades at the body (they go off on contact)
@@ -263,6 +276,10 @@ export function createAI(ctx) {
     }
     if (ai.gearN > 0 && ai.fleeT <= 0) { ai.nadeCd -= dt; if (ai.nadeCd <= 0) { ai.nadeCd = 1; tryThrow(a); } }
     if (ctx.botGear) ctx.botGear(a, dt);
+    if (ai.hitT > 0) ai.hitT -= dt;
+    // no instant about-face: the engine eases yaw toward yawT by min(1, dt * turn) each frame; cap that step at diff.yaw rad/s
+    const k = Math.min(1, dt * ai.diff.turn), yd = wrap(a.yawT - a.yaw), lim = k > 0 ? (ai.diff.yaw || 6.5) * dt / k : 0;
+    if (yd > lim) a.yawT = a.yaw + lim; else if (yd < -lim) a.yawT = a.yaw - lim;
   }
   // map lanes (world.lanes, [x, z, y]): once per order or life, a bot may detour through the underground or the heights; no effect on maps without lanes
   function laneGo(a, o, dt) {
@@ -298,7 +315,7 @@ export function createAI(ctx) {
       if (o.type === 'goto' && !ai.arrived && Math.hypot(t.pos.x - a.pos.x, t.pos.z - a.pos.z) > 12) {
         // objective first: keep running the path, shoot on the move
         fight(a, dt, 0, 0, 0, true);
-        if (!laneGo(a, o, dt)) goTo(a, o.x, nav.levelY(o.x, o.z), o.z, dt, Math.min(1.2, o.radius || 2)); a.wishSpeed = a.speed * 0.85;
+        if (!laneGo(a, o, dt)) goTo(a, o.x, o.y !== undefined ? o.y : nav.levelY(o.x, o.z), o.z, dt, Math.min(1.2, o.radius || 2)); a.wishSpeed = a.speed * 0.85;
       } else if (o.type === 'hold' || (o.type === 'goto' && ai.arrived)) fight(a, dt, o.x, o.z, Math.max(2, o.radius || 4));
       else if (o.type === 'follow' && o.actor && o.actor.alive && Math.hypot(o.actor.pos.x - a.pos.x, o.actor.pos.z - a.pos.z) > 18) { fight(a, dt, 0, 0, 0, true); goTo(a, o.actor.pos.x, o.actor.pos.y, o.actor.pos.z, dt, 4); }
       else fight(a, dt, 0, 0, 0);
@@ -318,14 +335,14 @@ export function createAI(ctx) {
     if (ai.lostT >= 5) ai.target = null;
     if (o.type === 'goto' || o.type === 'hold') {
       const r = Math.max(0.8, o.radius || 2), d = Math.hypot(o.x - a.pos.x, o.z - a.pos.z);
-      if (d <= r) {
+      if (d <= r && (o.y === undefined || Math.abs(o.y - a.pos.y) < 1.6)) {       // an order may carry its floor (o.y): a crate upstairs is not reached from below
         ai.arrived = true;
         if (o.type === 'hold') {       // patrol inside the zone
           ai.holdT -= dt;
           if (ai.holdT <= 0) { ai.holdT = rnd(3.5, 8); const i = nav.randomNear(o.x, o.z, r * 0.8); if (i >= 0) { nav.nodePos(i, P); ai.wx = P.x; ai.wz = P.z; ai.wOn = true; } }
           if (ai.wOn) { a.wishSpeed = a.speed * 0.5; if (goTo(a, ai.wx, a.pos.y, ai.wz, dt, 0.6)) ai.wOn = false; faceMove(a); } else idle(a, dt);
         } else idle(a, dt);
-      } else { ai.arrived = false; if (!laneGo(a, o, dt)) goTo(a, o.x, nav.levelY(o.x, o.z), o.z, dt, Math.min(r, 1.2)); faceMove(a); }
+      } else { ai.arrived = false; if (!laneGo(a, o, dt)) goTo(a, o.x, o.y !== undefined ? o.y : nav.levelY(o.x, o.z), o.z, dt, Math.min(r, 1.2)); faceMove(a); }
     } else if (o.type === 'follow' && o.actor) {
       const f = o.actor, d = Math.hypot(f.pos.x - a.pos.x, f.pos.z - a.pos.z);
       if (d > 5 || Math.abs(f.pos.y - a.pos.y) > 2) { goTo(a, f.pos.x, f.pos.y, f.pos.z, dt, 3); faceMove(a); ai.arrived = false; } else { ai.arrived = true; ai.path = null; idle(a, dt); }
@@ -340,6 +357,7 @@ export function createAI(ctx) {
       if (goTo(a, ai.hx, ai.hy, ai.hz, dt, 1.5)) ai.huntT = Math.min(ai.huntT, 0.4);
       faceMove(a);
     }
+    if (ai.hitT > 0 && t && t === ai.hitBy) a.yawT = Math.atan2(-(ai.lkx - a.pos.x), -(ai.lkz - a.pos.z));       // shot from out of sight: keep watching where it came from
     unstick(a, dt);
   }
 
@@ -370,6 +388,13 @@ export function createAI(ctx) {
     setEngine(e) { E = e; },
     update(a, dt) { if (a.ai.zombie) zombie(a, dt); else bot(a, dt); },
     /** Being shot wakes a bot up and turns it toward the shooter. */
-    alert(a, by) { const ai = a.ai; if (!ai || ai.zombie) return; ai.alert = 3; if (by && by.alive && !ai.visible && E.isEnemy(a, by)) { ai.lkx = by.pos.x; ai.lky = by.pos.y; ai.lkz = by.pos.z; if (!ai.target) { ai.target = by; ai.lostT = 0.5; } a.yawT = Math.atan2(-(by.pos.x - a.pos.x), -(by.pos.z - a.pos.z)); ai.senseT = 0; } },
+    alert(a, by) {
+      const ai = a.ai; if (!ai || ai.zombie) return; ai.alert = 3;
+      if (!by || by === a || !by.alive || !E.isEnemy(a, by)) return;
+      ai.hitBy = by; ai.hitT = 3;       // who shot me last: weighed in by the next look (sense)
+      if (ai.visible) { if (ai.target !== by) ai.senseT = Math.min(ai.senseT, 0.12); return; }       // busy with someone else: the next look decides
+      ai.lkx = by.pos.x; ai.lky = by.pos.y; ai.lkz = by.pos.z; ai.target = by; ai.lostT = Math.min(ai.lostT, 0.5);
+      a.yawT = Math.atan2(-(by.pos.x - a.pos.x), -(by.pos.z - a.pos.z)); ai.senseT = 0;
+    },
   };
 }

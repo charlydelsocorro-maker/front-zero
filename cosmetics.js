@@ -81,6 +81,9 @@ export const FINISHES = [
   MAPF('map_noirval', 'noirval', 'Raffinerie Noirval', 'crackle', 'epic', [0x17181a, 0x3a3735, 0x5c5450, 0xc9742e], 0xd98a3a, ['Brut', 'Crude', 'Crudo', 'Rohöl', 'Bruto', 'Greggio'], 10),
   MAPF('map_val_cendre', 'val-cendre', 'Val de Cendre', 'woodland', 'rare', [0x2e3329, 0x5d6450, 0x8a8b83, 0x9c5f30], 0xa8622c, ['Feuilles d’octobre', 'October Leaves', 'Hojas de octubre', 'Oktoberlaub', 'Folhas de outubro', 'Foglie d’ottobre'], 6),
   MAPF('map_roqueseche', 'roqueseche', 'Roquesèche', 'topo', 'legendary', [0x7a4a33, 0xb08e62, 0xcfb487, 0xe6d3a8], 0xa6553a, ['Relevé de crête', 'Ridge Survey', 'Plano de cresta', 'Kammvermessung', 'Levantamento de crista', 'Rilievo di cresta'], 14),
+  MAPF('map_barrage', 'barrage', 'Barrage d’Aiguenoire', 'spillway', 'epic', [0x24282b, 0x4a4f53, 0x6f7477, 0x9c9e98], 0x9a4a2a, ['Déversoir', 'Spillway', 'Aliviadero', 'Überlauf', 'Vertedouro', 'Sfioratore'], 10),
+  MAPF('map_marais', 'marais', 'Marais de Saulnes', 'reeds', 'rare', [0x1a1e16, 0x3c3e28, 0x6a6140, 0x958659], 0xc0522c, ['Roselière', 'Reed Bed', 'Carrizal', 'Schilfgürtel', 'Caniçal', 'Canneto'], 6),
+  MAPF('map_cite', 'cite', 'Cité Verrière', 'shatter', 'legendary', [0x464d54, 0x4c5a60, 0x24585e, 0xd8e8ec], 0xa9cdd4, ['Verre brisé', 'Shattered Glass', 'Cristal roto', 'Splitterglas', 'Vidro estilhaçado', 'Vetro infranto'], 14),
 ];
 const FIN_MAP = new Map(FINISHES.map(f => [f.id, f]));       // shop finishes, then those registered by the season pass (see registerFinishes)
 export const finishById = id => FIN_MAP.get(id) || null;
@@ -91,7 +94,7 @@ export const FINISH_IDS = FINISHES.map(f => f.id);       // grows with registerF
 /** The shop's own ids, fixed: server/server.js copies exactly these into FIN_IDS (a test compares them); season ids pass there by PASS_ID. */
 export const SHOP_FINISH_IDS = Object.freeze(FINISH_IDS.slice());
 /** Every pattern weapon-skins.js can draw. */
-export const FINISH_PATTERNS = ['digital', 'woodland', 'tiger', 'splinter', 'carbon', 'brushed', 'gilded', 'heat', 'veined', 'eclipse', 'mottle', 'cobble', 'patchwork', 'concrete', 'facet', 'asphalt', 'crackle', 'topo'];
+export const FINISH_PATTERNS = ['digital', 'woodland', 'tiger', 'splinter', 'carbon', 'brushed', 'gilded', 'heat', 'veined', 'eclipse', 'mottle', 'cobble', 'patchwork', 'concrete', 'facet', 'asphalt', 'crackle', 'topo', 'spillway', 'reeds', 'shatter'];
 
 /* filter groups shown in the shop */
 export const FINISH_GROUPS = [

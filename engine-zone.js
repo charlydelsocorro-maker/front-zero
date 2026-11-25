@@ -95,6 +95,8 @@ export function surveyMap(E, H) {
     let ok = true; for (let j = 0; j < anchors.length && ok; j++) if (Math.hypot(anchors[j][0] - x, anchors[j][1] - z) < asep) ok = false;
     if (ok) anchors.push([Math.round(x * 100) / 100, Math.round(z * 100) / 100]);
   }
+  // per-map override (optional): objectives.zoneEnds = [[x, z], ...] final-circle centres, for maps whose level 0 is underground (cite)
+  try { const fe = E.world.objectives && E.world.objectives.zoneEnds; if (Array.isArray(fe) && fe.length) { const keep = fe.filter(p => Array.isArray(p) && isFinite(p[0]) && isFinite(p[1]) && offCrates(p[0], p[1], 2)).slice(0, 48).map(p => [+p[0], +p[1]]); if (keep.length) { anchors.length = 0; anchors.push(...keep); } } } catch { /* keep the surveyed anchors */ }
   if (!anchors.length) { const q = nav.nearest(0, 0); anchors.push([q[0], q[1]]); }
   // spawns: spread by farthest-point selection
   const pool = [];
@@ -252,11 +254,10 @@ function createCore(c, H, net) {
   const { E } = c, I = E.internals, P = E.player, L = makeL(E), hud = E.hud, grid = I.grid, nav = I.nav, camera = I.camera;
   const view = createWorldView(E), panel = createPanel(E);
   const C = { i: 1, last: 1, st: 0, x: 0, z: 0, r: 1000, nx: 0, nz: 0, nr: 1000, left: 0, dps: 0 };
-  const S = { plan: null, clock: -DEPLOY, crates: [], alive: 0, total: 0, phase: -1, st: -1, focus: null, wasDown: false, hudT: 0, promptT: 0, botT: 0, botI: 0, ended: false, leaving: false, useT: 0, lastPrompt: null, opening: [], grace: 62, endT: 300, pace: 0.8 + Math.random() * 0.2 };
+  const S = { plan: null, clock: -DEPLOY, crates: [], alive: 0, total: 0, phase: -1, st: -1, focus: null, wasDown: false, hudT: 0, promptT: 0, botT: 0, botI: 0, ended: false, leaving: false, useT: 0, lastPrompt: null, opening: [], grace: 62, endT: 300, pace: 0.8 + Math.random() * 0.2, lag: 0 };
   const camDir = new THREE.Vector3();
   const key = interactKey(E);
   const openText = L('open', { key }), leaveText = L('leave', { key });
-  c.on('damage', e => { const v = e.victim, f = e.attacker; if (v && v.ai && v.data && f) { v.data.hitT = S.clock; if (!f.ai) v.data.hitH = S.clock; } });       // a bot that was shot at fights back, even during the opening
 
   hud.mapOverlay = (m, X, k) => {
     if (!S.plan) return;
@@ -357,63 +358,108 @@ function createCore(c, H, net) {
     const dat = a.data;
     if (dat.zp === C.i && dat.zx !== undefined) return;
     dat.zp = C.i;
-    const nr = Math.max(0.5, C.nr), ang = Math.random() * 6.283, rad = Math.sqrt(Math.random()) * nr * 0.55;
-    const q = nav.nearest(C.nx + Math.cos(ang) * rad, C.nz + Math.sin(ang) * rad);
-    if (Math.hypot(q[0] - C.nx, q[1] - C.nz) <= nr - 0.4) { dat.zx = q[0]; dat.zz = q[1]; }
+    // spread out: of a few random spots, the one farthest from the other bots' spots (a crowd in the middle of the circle would fight all at once)
+    const nr = Math.max(0.5, C.nr); let best = null, bs = -1;
+    for (let k = 0; k < 5 && bs < 12; k++) {
+      const ang = Math.random() * 6.283, rad = Math.sqrt(Math.random()) * nr * 0.65, q = nav.nearest(C.nx + Math.cos(ang) * rad, C.nz + Math.sin(ang) * rad);
+      if (Math.hypot(q[0] - C.nx, q[1] - C.nz) > nr - 0.4) continue;
+      let m = 1e9; for (let i = 0; i < E.actors.length; i++) { const b = E.actors[i], d = b.data; if (b !== a && b.alive && b.ai && d && d.zp === C.i && d.zx !== undefined) m = Math.min(m, Math.hypot(d.zx - q[0], d.zz - q[1])); }
+      if (m > bs) { bs = m; best = q; }
+    }
+    if (best) { dat.zx = best[0]; dat.zz = best[1]; }
     else { const f = nav.nearest(S.plan.fx, S.plan.fz); dat.zx = f[0]; dat.zz = f[1]; }
   }
   function nearestCrate(a) {
     let best = null, bd = 42 * 42; const p = a.pos;
     for (let i = 0; i < S.crates.length; i++) {
-      const cr = S.crates[i]; if (cr.open || cr.y > 0.5 || (cr.claim && cr.claim !== a && cr.claim.alive)) continue;       // bot orders are ground-level
+      const cr = S.crates[i]; if (cr.open || cr === a.data.badCrate || (cr.claim && cr.claim !== a && cr.claim.alive)) continue;
       if (S.clock > 8 && !inNext(cr.x, cr.z, 0.5)) continue;
-      const dx = cr.x - p.x, dz = cr.z - p.z, d = dx * dx + dz * dz; if (d < bd) { bd = d; best = cr; }
+      const dx = cr.x - p.x, dz = cr.z - p.z, dy = (cr.y - p.y) * 3, d = dx * dx + dz * dz + dy * dy; if (d < bd) { bd = d; best = cr; }       // another floor counts as farther
     }
     return best;
   }
   function decide(a) {
-    const dat = a.data, px = a.pos.x, pz = a.pos.z, dc = Math.hypot(px - C.x, pz - C.z), dn = Math.hypot(px - C.nx, pz - C.nz), speed = Math.max(3, a.speed || 4.7);
-    // pacing: a bot only picks a fight within a radius that grows with the match (none in the opening), or when it was shot at
-    // and while the field is already as thin as this moment of the match allows, bots leave each other alone (a human can always be fought)
-    if (a.ai) {
-      const ai = a.ai, calm = calmBots(), byHuman = S.clock - (dat.hitH === undefined ? -99 : dat.hitH) <= 4, byAny = S.clock - (dat.hitT === undefined ? -99 : dat.hitT) <= 4;
-      if (!byHuman && (calm || !byAny)) {
-        const R2 = engageRadius(); let near = false;
-        if (R2 > 0) for (let i = 0; i < E.actors.length && !near; i++) { const b = E.actors[i]; if (b === a || !b.alive || b.ghost || (calm && b.ai)) continue; const ex = b.pos.x - px, ez = b.pos.z - pz; if (ex * ex + ez * ez <= R2) near = true; }
-        if (!near || (calm && ai.target && ai.target.ai)) { ai.target = null; ai.visible = false; if (!near) ai.senseT = Math.max(ai.senseT, 0.6); }
-      }
-    }
-    const urgent = dc > C.r - 0.8 || (dn > C.nr - 1 && (C.st === 1 || C.left / 1000 < (dn - C.nr) / speed + 9));
+    const dat = a.data, ai = a.ai, px = a.pos.x, pz = a.pos.z, dc = Math.hypot(px - C.x, pz - C.z), dn = Math.hypot(px - C.nx, pz - C.nz), speed = Math.max(3, a.speed || 4.7);
+    // pacing, one rule for every soldier (a human is fought exactly like a bot): the AI picks fights only within a reach that grows with
+    // the match, and always answers whoever shoots at it (engine-ai.js: engageR, hitBy)
+    const lag = S.lag, bold = !!dat.bold;
+    if (ai) ai.engageR = reach(bold, lag);
+    const urgent = dc > C.r - 0.8 || (dn > C.nr - 1 && (C.st === 1 || C.left / 1000 < (dn - C.nr) * 1.5 / speed + 12));
     if (urgent) {
       // already in the gas: run first. The AI stops to fight anything closer than 12 m, which would keep it outside until it dies
-      if (dc > C.r + 0.5 && a.ai) { a.ai.target = null; a.ai.visible = false; a.ai.senseT = Math.max(a.ai.senseT, 0.5); a.ai.arrived = false; }
+      if (dc > C.r + 0.5 && ai) { ai.target = null; ai.visible = false; ai.hitT = 0; ai.engageR = 0; ai.senseT = Math.max(ai.senseT, 0.5); ai.arrived = false; }
       if (dat.crate) { dat.crate.claim = null; dat.crate = null; }
-      pointInside(a); H.setOrder(a, 'goto', dat.zx, dat.zz, Math.min(2.2, Math.max(0.8, C.nr * 0.3)));
+      pointInside(a); H.setOrder(a, 'goto', dat.zx, dat.zz, Math.min(1.4, Math.max(0.8, C.nr * 0.3)));       // under 1.5 m: no detour through the map's lanes (engine-ai.js laneGo)
       return;
     }
+    // hurt or bare: health or armour left in an open crate nearby
+    const sup = a.hp < a.maxHp * 0.6 || !(a.armor >= 25) ? supplyFor(a) : null;
+    if (sup && !(ai && ai.visible)) {
+      if (Math.hypot(sup.x - px, sup.z - pz) < 2.3 && Math.abs(sup.y - a.pos.y) < 2.2) { if (c.time >= sup.wait) { sup.wait = c.time + 1; net.botUse(a, sup); } return; }
+      goAt(a, sup.x, sup.y, sup.z, 1.7); return;
+    }
     let cr = dat.crate;
-    if (cr && cr.open) { dat.crate = null; cr = null; }
-    if (!cr && (dat.loots | 0) < 3) { cr = nearestCrate(a); if (cr) { cr.claim = a; dat.crate = cr; } }
+    if (cr && (cr.open || S.clock > dat.crateT)) { if (!cr.open) { cr.claim = null; dat.badCrate = cr; } dat.crate = null; cr = null; }       // out of reach for too long: another one
+    if (!cr && ((dat.loots | 0) < 3 || ((dat.loots | 0) < 5 && R.tierOf(ai ? ai.prim || a.weaponId : a.weaponId) < 2))) { cr = nearestCrate(a); if (cr) { cr.claim = a; dat.crate = cr; dat.crateT = S.clock + 35; } }       // a weak weapon keeps it searching
     if (cr) {
       const d = Math.hypot(cr.x - px, cr.z - pz);
       if (d < 2.3 && Math.abs(cr.y - a.pos.y) < 2.2) { dat.crate = null; dat.loots = (dat.loots | 0) + 1; net.botOpen(a, cr); return; }
-      H.setOrder(a, 'goto', cr.x, cr.z, 1.7);       // the nav stops at the crate's side, its centre is solid
+      goAt(a, cr.x, cr.y, cr.z, 1.7);       // the nav stops at the crate's side, its centre is solid
       return;
     }
-    if (S.clock > S.endT * 0.6 && !calmBots()) { H.setOrder(a, 'hunt'); return; }
-    pointInside(a); H.setOrder(a, 'hold', dat.zx, dat.zz, Math.max(3, C.nr * 0.5));
+    // a fight within earshot: move in and take on whoever is left, from range (third party); only for a bold one
+    if (ai && bold && !ai.visible && S.clock >= S.grace && a.hp > 45) { const f = fightNear(a); if (f) { H.setOrder(a, 'goto', f.x, f.z, 3); return; } }
+    if (S.clock > S.endT * 0.6 && bold && lag > 1) { H.setOrder(a, 'hunt'); return; }
+    pointInside(a); H.setOrder(a, 'hold', dat.zx, dat.zz, Math.max(3, Math.min(6, C.nr * 0.3)));
   }
-  /** True while as few soldiers are left as this point of the timeline should have. The curve reaches one survivor at `pace` of the timeline, drawn per match. */
-  function calmBots() { const q = S.clock / (S.endT * S.pace); return q < 1 && S.alive <= Math.ceil(S.total * (1 - q * q)); }
-  /** Squared distance at which a bot may start a fight. */
-  function engageRadius() {
+  /** A 'goto' order that carries its floor (a crate upstairs, in a car park, on a street above the ground level of the map). */
+  function goAt(a, x, y, z, r) { const ai = a.ai; if (!ai) return; const o = ai.order; if (o && o.type === 'goto' && o.x === x && o.z === z && o.y === y && o.radius === r) return; ai.order = { type: 'goto', x, z, radius: r, y }; }
+  /** Soldiers still standing minus those this moment of the timeline planned (a curve that reaches one survivor at `pace` of it, drawn per match). */
+  function behind() { const q = Math.min(1, Math.max(0, S.clock) / (S.endT * S.pace)); return S.alive - Math.max(1, S.total * (1 - q * q)); }
+  /** Distance at which a bot starts a fight: none in the opening (it only answers), then growing with the match for the bold ones; the others only when they bump into someone. */
+  function reach(bold, lag) {
     if (S.clock < S.grace) return 0;
-    const k = S.clock / S.endT, r = k < 0.45 ? 11 : k < 0.6 ? 17 : k < 0.72 ? 26 : k < 0.82 ? 38 : 200;
-    return r * r;
+    const k = S.clock / S.endT, r = k < 0.45 ? 18 : k < 0.7 ? 28 : k < 0.85 ? 45 : 1e4;
+    return !bold ? 4 : lag > 1 ? r * 1.5 : r;
+  }
+  /** Who may start a fight at range (or join one it hears) right now: one bot per soldier the timeline is behind by, none while it is ahead; they take turns every 20 s. */
+  function markBold(list) {
+    S.lag = behind();
+    const len = list.length, off = Math.floor(Math.max(0, S.clock) / 20) % len; let n = S.clock < S.grace ? 0 : Math.ceil(S.lag + 0.5);
+    for (let k = 0; k < len; k++) { const a = list[(k + off) % len]; if (!a || !a.data) continue; a.data.bold = !!a.alive && !!a.ai && n > 0; if (a.data.bold) n--; }
+  }
+  /** A fight within earshot (someone fired in the last 1.5 s) inside the zone: a spot short of it, kept 5 s. */
+  function fightNear(a) {
+    const dat = a.data, hear = S.clock < S.endT * 0.45 ? 40 : 55, list = E.actors;
+    let best = null, bd = hear * hear;
+    for (let i = 0; i < list.length; i++) {
+      const b = list[i]; if (b === a || !b.alive || b.ghost || !(b.shotT > 0) || !E.isEnemy(a, b)) continue;
+      const dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z, d2 = dx * dx + dz * dz;
+      if (d2 < 100 || d2 >= bd || !inNext(b.pos.x, b.pos.z, 1)) continue;
+      bd = d2; best = b;
+    }
+    if (best) {
+      const d = Math.sqrt(bd), k = Math.max(0, (d - 16) / d), q = nav.nearest(a.pos.x + (best.pos.x - a.pos.x) * k, a.pos.z + (best.pos.z - a.pos.z) * k);
+      if (!dat.noise) dat.noise = { x: 0, z: 0, t: 0 };
+      dat.noise.x = q[0]; dat.noise.z = q[1]; dat.noise.t = S.clock + 5;
+    }
+    return dat.noise && dat.noise.t > S.clock ? dat.noise : null;
+  }
+  /** The nearest open crate (any floor, inside the next circle) still holding what this bot needs. */
+  function supplyFor(a) {
+    const needH = a.hp < a.maxHp * 0.6, needA = !(a.armor >= 25);
+    let best = null, bd = 1e9;
+    for (let i = 0; i < S.crates.length; i++) {
+      const cr = S.crates[i]; if (!cr.open || !cr.s || cr === a.data.badCrate || (cr.s === 'med' ? !needH : !needA)) continue;
+      if (S.clock > 8 && !inNext(cr.x, cr.z, 0.5)) continue;
+      const dx = cr.x - a.pos.x, dz = cr.z - a.pos.z, dy = (cr.y - a.pos.y) * 3, d = dx * dx + dz * dz + dy * dy, far = cr.s === 'med' ? 26 : 14;       // health is worth a longer walk than armour
+      if (d < far * far && d < bd) { bd = d; best = cr; }
+    }
+    return best;
   }
   function driveBots(list, dt) {
     S.botT -= dt; if (S.botT > 0 || !list.length) return;
-    S.botT = 0.12;
+    S.botT = 0.12; markBold(list);
     for (let n = Math.ceil(list.length / 3); n > 0; n--) { S.botI = (S.botI + 1) % list.length; const a = list[S.botI]; if (a && a.alive && a.ai) decide(a); }
   }
   /** Gives a bot a looted weapon: same fields the AI keeps for a loadout. */
@@ -429,9 +475,11 @@ function createCore(c, H, net) {
     if (prev && !ai.sec && def.slot === 0) { ai.sec = prev; const sd = H.WEAPONS.find(w => w.id === prev); ai.ammo2 = sd ? sd.mag : 14; }
     a.speed = 4.7 * def.mob;
   }
+  /** A bot takes the health or armour of a crate (same amounts as a player). */
+  function supply(a, s) { if (s === 'med') E.heal(a, R.MED); else if (s === 'arm') a.armor = Math.min(R.armorCap(0), (a.armor || 0) + R.ARMOR); }
 
   return {
-    S, C, L, view, panel, setCrates, crateById, markOpen, markUsed, driveBots, arm, key,
+    S, C, L, view, panel, setCrates, crateById, markOpen, markUsed, driveBots, arm, supply, key,
     setPlan(plan) { S.plan = plan; S.grace = (plan.grace || 62000) / 1000; S.endT = Math.max(30, (plan.end || 300000) / 1000); R.circleAt(plan, Math.max(0, S.clock * 1000), C); view.setWall(C, 0); },
     /** Every frame. */
     update(dt) {
@@ -485,6 +533,7 @@ export function zoneOffline(c, H) {
       dropItems(cr, list);
     },
     botOpen(a, cr) { if (cr.open) return; const k = cr.content; core.markOpen(cr, k.s); core.arm(a, k.w, k.g); },
+    botUse(a, cr) { if (cr.s) { core.supply(a, cr.s); core.markUsed(cr); } },
     useSupply(cr) {
       if (!cr.s) return;
       if (cr.s === 'med') { E.heal(P, R.MED); c.msg(core.L('med', { n: R.MED }), 'good'); }
@@ -572,7 +621,7 @@ export function zoneOffline(c, H) {
 export function zoneOnline(c, H) {
   const { E, cfg } = c, P = E.player, B = H.onlineBase(c), net = cfg.net;
   const bots = new Map(), botList = [], outShots = [], outHits = [], outBooms = [], sbuf = [], proj = E.projectiles, rawSpawn = proj.spawn;
-  let core, sim = false, tickT = 0, spawned = false, finalMsg = null, lastBoard = null, finished = false, setupSent = false;
+  let core, sim = false, tickT = 0, spawned = false, finalMsg = null, lastBoard = null, finished = false, setupSent = false, botUse = false;
   const idOf = a => (a === P ? B.me : a ? a.id : null);
   const isBot = id => typeof id === 'string' && /^b\d{1,3}$/.test(id);
   function refreshList() { botList.length = 0; for (const a of bots.values()) botList.push(a); }
@@ -623,6 +672,7 @@ export function zoneOnline(c, H) {
   const link = {
     openCrate(cr) { B.send('zone_open', { id: cr.id }); },
     botOpen(a, cr) { if (!cr.open && sim) { cr.claim = a; B.send('zone_open', { id: cr.id, bot: a.id }); } },
+    botUse(a, cr) { if (cr.s && sim && botUse) B.send('zone_use', { id: cr.id, bot: a.id }); },       // a server without bot supplies (no 'bu') never gets it
     useSupply(cr) { B.send('zone_use', { id: cr.id }); },
     leave() {
       B.send('zone_leave', {});
@@ -637,7 +687,7 @@ export function zoneOnline(c, H) {
         if (m.plan && !S.plan) core.setPlan(m.plan);
         if (Array.isArray(m.crates) && (!S.crates.length || m.crates.length !== S.crates.length)) core.setCrates(m.crates);
         else if (Array.isArray(m.crates)) for (const q of m.crates) { const cr = core.crateById(q.i); if (cr && q.o && !cr.open) core.markOpen(cr, q.s); else if (cr && cr.open && cr.s && !q.s) core.markUsed(cr); }
-        sim = m.sim === B.me; syncBots(m.bots);
+        sim = m.sim === B.me; syncBots(m.bots); botUse = m.bu === 1;
         if (m.spawn && !spawned && P.alive) { spawned = true; E.respawn(P, { at: m.spawn, delay: 0 }); P.armor = 0; }
         E.rules.frozen = !m.live;
         showBoard(m);
@@ -651,7 +701,7 @@ export function zoneOnline(c, H) {
         if (sim && m.w) { const a = bots.get(m.by); if (a && a.alive) core.arm(a, m.w, m.g | 0); }
         break;
       }
-      case 'used': { const cr = core.crateById(m.id); if (cr) core.markUsed(cr); if (m.by === B.me) c.msg(core.L(m.s === 'med' ? 'med' : 'arm', { n: m.s === 'med' ? R.MED : R.ARMOR }), 'good'); break; }
+      case 'used': { const cr = core.crateById(m.id); if (cr) core.markUsed(cr); if (m.by === B.me) c.msg(core.L(m.s === 'med' ? 'med' : 'arm', { n: m.s === 'med' ? R.MED : R.ARMOR }), 'good'); else if (sim && isBot(m.by)) { const a = bots.get(m.by); if (a && a.alive) core.supply(a, m.s); } break; }
       case 'fail': { const cr = core.crateById(m.id); if (cr) { cr.wait = c.time + 0.3; if (cr.claim) cr.claim = null; } break; }
       case 'sim': if (m.sim === B.me && !sim) takeOver(m.bots); else if (m.sim !== B.me) sim = false; break;
       case 'bhp': if (sim && Array.isArray(m.l)) for (let i = 0; i + 1 < m.l.length; i += 2) { const a = bots.get(m.l[i]); if (a && a.alive && m.l[i + 1] < a.hp) a.hp = Math.max(1, m.l[i + 1]); } break;

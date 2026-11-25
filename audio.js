@@ -1325,6 +1325,15 @@ export function createAudio() {
       if (!ctx || !alive) return;
       try { glide(buses.master.gain, masterVolume, ctx.currentTime, .06); } catch (e) { report(e); }
     },
+    // Replay video (replay-export.js): stream(true) taps the final mix into a MediaStream (null if unavailable); stream(false) disconnects the tap.
+    stream(on) {
+      if (!ctx || !alive || !buses.master || !ctx.createMediaStreamDestination) return null;
+      try {
+        if (on) { if (!a._tap) a._tap = ctx.createMediaStreamDestination(); if (!a._tapOn) { buses.master.connect(a._tap); a._tapOn = true; } return a._tap.stream; }
+        if (a._tap && a._tapOn) { a._tapOn = false; buses.master.disconnect(a._tap); }
+      } catch (e) { report(e); }
+      return null;
+    },
     setEnvironment(name) {
       if (!ENVS[name] || name === envName) return;
       envName = name;

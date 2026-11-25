@@ -3,7 +3,7 @@
 // Nothing is built at import time: gearModel() builds an id on first call and caches it.
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-export const GEAR_MODEL_IDS = ['syringe', 'bandage', 'medkit', 'adren', 'plate', 'frag', 'sticky', 'molotov', 'mine', 'c4', 'c4remote', 'tknife', 'claymore', 'flash', 'smoke', 'stun', 'decoy', 'sensor', 'shield', 'ammobox', 'wire'];
+export const GEAR_MODEL_IDS = ['syringe', 'bandage', 'medkit', 'adren', 'plate', 'frag', 'sticky', 'molotov', 'mine', 'c4', 'c4remote', 'tknife', 'claymore', 'flash', 'smoke', 'stun', 'decoy', 'sensor', 'shield', 'ammobox', 'wire', 'breach'];
 
 const PI = Math.PI, TAU = PI * 2;
 const P = {
@@ -493,6 +493,18 @@ const B = {
     k.rbox(.054, .023, .04, .0055, { color: P.gun, wear: .9 }).move(.026, .1, -.034);
     k.rbox(.012, .006, .016, .0015, { color: P.steelD }).move(.058, .106, -.036);
     k.part('led', [.012, .1115, -.046], () => { k.dome(.0036, .0028, { seg: 8, rows: 2, color: P.led, wear: 0 }).move(.012, .1115, -.046); });
+  },
+  // Ram charge (breaching): an upright frame charge, back plate at z < 0 against the wall, bottom at y = 0 (engine-breach.js sets it on a panel).
+  breach(k) {
+    k.rbox(.36, .46, .022, .005, { color: P.oliveD, wear: .6 }).move(0, .23, -.024);
+    for (const [x, y, w, h] of [[0, .045, .31, .042], [0, .415, .31, .042], [-.145, .23, .042, .33], [.145, .23, .042, .33]]) k.soft(w, h, .032, .012, { color: P.putty, crease: 75, wear: .35 }).move(x, y, .0);
+    for (const [x, y, w, h] of [[-.08, .045, .012, .05], [.08, .045, .012, .05], [-.08, .415, .012, .05], [.08, .415, .012, .05], [-.145, .14, .05, .012], [.145, .32, .05, .012]]) k.rbox(w, h, .038, .002, { color: P.black, wear: 0 }).move(x, y, .002);
+    k.rbox(.085, .058, .036, .006, { color: P.gun, wear: .9 }).move(0, .23, .012);
+    k.rbox(.07, .03, .004, .001, { color: P.yellow, wear: 0 }).move(-.075, .33, -.011);
+    k.rbox(.022, .01, .012, .002, { color: P.steelD }).move(-.022, .265, .02);
+    k.tube(k.spline([[.03, .23, .03], [.07, .25, .035], [.11, .3, .025], [.14, .36, .02]], 8), .0022, { rad: 3, color: P.red, wear: 0 });
+    k.tube(k.spline([[.03, .215, .03], [.075, .18, .035], [.115, .12, .025], [.142, .075, .02]], 8), .0022, { rad: 3, color: P.black, wear: 0 });
+    k.part('led', [.022, .262, .032], () => { k.dome(.006, .004, { seg: 8, rows: 2, color: P.led, wear: 0 }).rx(PI / 2).move(.022, .262, .032); });
   },
   c4remote(k) {
     k.slab(roundPoly([[-.0215, -.073, .012], [.0185, -.073, .012], [.0235, -.03, .012], [.0205, .0285, .01], [.0265, .0485, .006], [.0185, .0655, .009], [-.0205, .0675, .012], [-.0255, .0365, .012], [-.0225, -.02, .012]], 3), .037, { b: .0052, color: P.gun, cap: 0x373a3d, wear: .9 });

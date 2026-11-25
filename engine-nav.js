@@ -38,6 +38,7 @@ export function createNav(grid) {
   function build(size, spawns, key) { const g = buildSteps(size, spawns, key); while (!g.next().done); }
   /** Same as build() as a generator: every `yield` is a point where a chunked loader may give the frame back (value = progress 0..1). */
   function* buildSteps(size, spawns, key) {
+    openZones();       // breach panels (engine-breach.js): the graph being left gets back every edge they had cut, so a cached graph stays whole
     const hit = key != null ? cache.get(key) : null;
     if (hit && hit.size === size) { ({ N, half, n, cellFirst, cellCnt, nCell, nH, nei, ground } = hit); scratch(); return; }
     half = size + 1; N = Math.ceil(2 * half / CS);
@@ -126,7 +127,7 @@ export function createNav(grid) {
           const x2 = cx + dx; if (x2 < 0 || x2 >= N) continue; const c = z2 * N + x2;
           for (let i = cellFirst[c], e = i + cellCnt[c]; i < e && i >= 0; i++) {
             if (groundOnly && !isG(i)) continue;
-            if (off && off[i]) continue;
+            if ((off && off[i]) || (bkOff && bkOff[i])) continue;
             const ex = nodeX(i) - x, ez = nodeZ(i) - z, ey = (nH[i] - y) * 2.5, d = ex * ex + ez * ez + ey * ey;
             if (d < bd) { bd = d; best = i; }
           }
@@ -154,6 +155,32 @@ export function createNav(grid) {
   const tmpPath = [];
   // Temporary obstacles (a mode's crates): the nodes under them are cut out of the graph, and restored by clearBlocks().
   let off = null; const cutEdges = [], win = [];
+  // Breach panels (engine-breach.js): the graph is built with every wall panel away, then each intact panel cuts its strip out (exact edges
+  // kept per panel); blowing it restores them in O(nodes of the strip). bkOff: nodes under a panel, never a start, goal or random point.
+  let bkOff = null; const bkCuts = new Map();
+  function cutZone(key, x0, x1, z0, z1, y0, y1) {
+    if (bkCuts.has(key) || !n) return 0;
+    if (!bkOff || bkOff.length !== n) bkOff = new Uint8Array(n);
+    const rec = [], nodes = [];
+    eachCell(x0, x1, z0, z1, i => {
+      if (nH[i] < y0 - 0.4 || nH[i] > y1 + 0.1 || !inRect(i, x0, x1, z0, z1)) return;
+      nodes.push(i); if (bkOff[i] < 255) bkOff[i]++;
+      for (let d = 0; d < 8; d++) {
+        const j = nei[i * 8 + d]; if (j < 0) continue;
+        rec.push(i * 8 + d, j); nei[i * 8 + d] = -1;
+        for (let k = 0; k < 8; k++) if (nei[j * 8 + k] === i) { rec.push(j * 8 + k, i); nei[j * 8 + k] = -1; }
+      }
+    });
+    bkCuts.set(key, { rec, nodes, nei }); return nodes.length;
+  }
+  function openZone(key) {
+    const c = bkCuts.get(key); if (!c) return 0; bkCuts.delete(key);
+    const a = c.nei, r = c.rec;
+    for (let k = r.length - 2; k >= 0; k -= 2) if (a[r[k]] === -1) a[r[k]] = r[k + 1];
+    if (a === nei && bkOff) for (const i of c.nodes) if (bkOff[i] > 0) bkOff[i]--;
+    return c.nodes.length;
+  }
+  function openZones() { for (const key of [...bkCuts.keys()]) openZone(key); bkOff = null; }
   const eachCell = (x0, x1, z0, z1, fn) => {
     const a = Math.max(0, Math.floor((x0 + half) / CS)), b = Math.min(N - 1, Math.floor((x1 + half) / CS)), c = Math.max(0, Math.floor((z0 + half) / CS)), d = Math.min(N - 1, Math.floor((z1 + half) / CS));
     for (let z = c; z <= d; z++) for (let x = a; x <= b; x++) { const q = z * N + x; for (let i = cellFirst[q], e = i + cellCnt[q]; i < e && i >= 0; i++) fn(i); }
@@ -176,6 +203,7 @@ export function createNav(grid) {
       });
     },
     clearBlocks() { for (let k = cutEdges.length - 2; k >= 0; k -= 2) nei[cutEdges[k]] = cutEdges[k + 1]; cutEdges.length = 0; off = null; },
+    cutZone, openZone, openZones,
     /** Would blocking this rectangle separate walkable ground around it (a corridor, a doorway)? Compares the local connected pieces with and without it. */
     splits(x0, x1, z0, z1, y, R = 2.4) {
       const wx0 = x0 - R, wx1 = x1 + R, wz0 = z0 - R, wz1 = z1 + R; win.length = 0;
@@ -203,7 +231,7 @@ export function createNav(grid) {
     far(points, minDist = 10) {
       if (!ground.length) return [0, 0]; let best = ground[0], bs = -1;
       for (let k = 0; k < 80; k++) {
-        const i = ground[Math.floor(Math.random() * ground.length)], x = nodeX(i), z = nodeZ(i); let d = Infinity;
+        const i = ground[Math.floor(Math.random() * ground.length)], x = nodeX(i), z = nodeZ(i); let d = Infinity; if (bkOff && bkOff[i]) continue;
         for (const p of points || []) { const px = Array.isArray(p) ? p[0] : p.x, pz = Array.isArray(p) ? p[1] : p.z; const q = Math.hypot(px - x, pz - z); if (q < d) d = q; }
         if (d > bs) { bs = d; best = i; if (d >= minDist * 1.5) break; }
       }

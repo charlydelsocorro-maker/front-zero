@@ -417,7 +417,7 @@ export function* softenBuild(L, UVS, opt = {}) {
     if (o.t === 'b') b = { lo: [o.x0, o.y0, o.z0], hi: [o.x1, o.y1, o.z1], m: o.m, o, fit: !!o.fit, i };
     else if (o.t === 'r') {
       const q = ((o.ry % (PI / 2)) + PI / 2) % (PI / 2);
-      if (q < 1e-4 || PI / 2 - q < 1e-4) { const odd = Math.round(o.ry / (PI / 2)) & 1, w = odd ? o.d : o.w, d = odd ? o.w : o.d; b = { lo: [o.x - w / 2, o.y, o.z - d / 2], hi: [o.x + w / 2, o.y + o.h, o.z + d / 2], m: o.m, o, fit: false, i } }
+      if (q < 1e-4 || PI / 2 - q < 1e-4) { const odd = Math.round(o.ry / (PI / 2)) & 1, w = odd ? o.d : o.w, d = odd ? o.w : o.d; b = { lo: [o.x - w / 2, o.y, o.z - d / 2], hi: [o.x + w / 2, o.y + o.h, o.z + d / 2], m: o.m, o, fit: /^cont\d/.test(o.m), i } }   /* MAP QA : marquage des conteneurs du décor dans le bon sens */
       else if (PROF[o.m] && Math.min(o.w, o.h, o.d) >= .1 && !/^far/.test(o.m)) rot.push(o);
     }
     if (!b || /^far/.test(o.m)) continue;
@@ -489,7 +489,7 @@ export function* softenBuild(L, UVS, opt = {}) {
     if (P.pillow && lod) meshBox(S, b, R, { r: 0 }, { lod, noBevel: true, noAO: true, grid });
     else if (P.pillow) {
       const Rp = P.rigid && b.lo[1] < .01 ? R.map((l, f) => f === 2 ? [] : l) : R;
-      for (let f = 0; f < 6; f++) for (const r of R[f]) { if (f === 2) continue; pillowFace(S, b, f, r, P.pillow, P, { R: Rp }, lod, !!o.bq) }
+      for (let f = 0; f < 6; f++) for (const r of R[f]) { if (f === 2 && b.lo[1] < .05) continue; pillowFace(S, b, f, r, P.pillow, P, { R: Rp }, lod, !!o.bq) }   /* MAP QA : dessous visible d'un gabion ou d'un sac surélevé (toit des casemates : on voyait le ciel au plafond) */
       if (P.rigid) meshBox(S, b, Rp, { r: FLAT_BEVEL, wear: .08, wob: 0, seg: 9 }, { lod: 0, noFaces: true });
     } else if (/^cont/.test(b.m) && !lod && b.lo[1] < 5) container(S, sink, b, R, lod, o);
     else {
@@ -505,7 +505,7 @@ export function* softenBuild(L, UVS, opt = {}) {
   for (const o of rot) {
     if (skip.has(o)) continue; if (!(++n & 63)) yield;
     shadowRot(shP, shI, o); const P = PROF[o.m], S = sink(o.m, o, o.x, o.z); S.xf = { c: Math.cos(o.ry), s: Math.sin(o.ry), x: o.x, z: o.z };
-    const b = { lo: [-o.w / 2, o.y, -o.d / 2], hi: [o.w / 2, o.y + o.h, o.d / 2], rot: 1 }; meshBox(S, b, fullRects(b), P, { lod, noAO: true }); S.xf = null; skip.add(o);
+    const b = { lo: [-o.w / 2, o.y, -o.d / 2], hi: [o.w / 2, o.y + o.h, o.d / 2], rot: 1 }; S.fit = /^cont\d/.test(o.m) ? b : null; meshBox(S, b, fullRects(b), P, { lod, noAO: true }); S.xf = null; S.fit = null; skip.add(o);   /* MAP QA : conteneurs tournés en UV de boîte (la projection monde inversait et répétait le marquage) */
   }
   for (const b of boxes) if (!skip.has(b.o)) skip.add(b.o);
   /* 6. encadrements */
@@ -569,7 +569,7 @@ function organicRock(S, o, lod, nk = 0, env = null) {
   const W = (p) => { const X = p[0] * o.sx, Z = p[2] * o.sz; return [o.x + X * c + Z * s, o.y + p[1] * o.sy, o.z - X * s + Z * c] };
   const SWF = swellFn(o, env, lod ? -.06 : .2), Wv = p => SWF(W(p));
   for (let f = 0; f < 60; f += 3) {
-    const A = V[I[f]], B = V[I[f + 1]], C = V[I[f + 2]], idx = [], PC = Wv(shape((A[0] + B[0] + C[0]) / 3, (A[1] + B[1] + C[1]) / 3, (A[2] + B[2] + C[2]) / 3)), qx = Math.abs(PC[0] - o.x), qy = Math.abs(PC[1] - o.y), qz = Math.abs(PC[2] - o.z), PAX = qx >= qy && qx >= qz ? 0 : qy >= qz ? 1 : 2, US = S.uvS;
+    const A = V[I[f]], B = V[I[f + 1]], C = V[I[f + 2]], idx = [], /* axe de projection pris sur la normale de la facette déformée (l'écart au centre, mis à l'échelle sx/sy/sz, choisissait l'axe le long de la face sur les rochers allongés : texture étirée en stries, MAP QA) */FA = Wv(shape(A[0], A[1], A[2])), FB = Wv(shape(B[0], B[1], B[2])), FC = Wv(shape(C[0], C[1], C[2])), e1x = FB[0] - FA[0], e1y = FB[1] - FA[1], e1z = FB[2] - FA[2], e2x = FC[0] - FA[0], e2y = FC[1] - FA[1], e2z = FC[2] - FA[2], qx = Math.abs(e1y * e2z - e1z * e2y), qy = Math.abs(e1z * e2x - e1x * e2z), qz = Math.abs(e1x * e2y - e1y * e2x), PAX = qx >= qy && qx >= qz ? 0 : qy >= qz ? 1 : 2, US = S.uvS;
     for (let i = 0; i <= D; i++) for (let j = 0; j <= D - i; j++) {
       const a = 1 - (i + j) / D, b = i / D, e = j / D, x = A[0] * a + B[0] * b + C[0] * e, y = A[1] * a + B[1] * b + C[1] * e, z = A[2] * a + B[2] * b + C[2] * e, P = Wv(shape(x, y, z)), h = .012;
       const l0 = Math.hypot(x, y, z), rx = x / l0, ry = y / l0, rz = z / l0, ux = ry, uy = -rx, uz = 0, ul = Math.hypot(ux, uy) || 1, tx = Math.abs(rz) > .9 ? 1 : ux / ul, ty = Math.abs(rz) > .9 ? 0 : uy / ul, tz = 0, bx = ry * tz - rz * ty, by = rz * tx - rx * tz, bz = rx * ty - ry * tx;
@@ -590,11 +590,13 @@ function container(S, sink, b, R, lod, o) {
   for (const f of [0, 1, 4, 5]) {
     if (!R[f].length) continue;
     const A = f >> 1, U = A === 0 ? 2 : 0, sg = f & 1 ? 1 : -1, pl = sg > 0 ? hi[A] : lo[A], u0 = lo[U] + post, u1 = hi[U] - post, y0 = lo[1] + .12, y1 = hi[1] - .1, nn = Math.max(4, Math.round((u1 - u0) / P)), step = (u1 - u0) / nn;
+    /* bout de 2,44 m : la partie sans marquage de la texture à l'échelle du flanc (le texte entier y était écrasé et coupé, MAP QA) */
+    const F0 = S.fit; if (F0 && hi[U] - lo[U] < 3) { const W = 6.1, a = (f === 0 || f === 5) ? lo[U] - .58 * W : hi[U] - .42 * W, l2 = F0.lo.slice(), h2 = F0.hi.slice(); l2[U] = a; h2[U] = a + W; S.fit = { lo: l2, hi: h2 } }
     /* profil trapézoïdal : crête au plan du conteneur, creux à -D */
     let pv = null; const put = (u, d, nu, nA) => { const x = A === 0 ? pl - sg * d : u, z = A === 0 ? u : pl - sg * d, nx = A === 0 ? sg * nA : nu, nz = A === 0 ? nu : sg * nA, a = S.v(x, y0, z, nx, 0, nz, d > .01 ? .2 : -.06, f), c = S.v(x, y1, z, nx, 0, nz, d > .01 ? .2 : -.06, f); return [a, c] };
     const seq = []; for (let i = 0; i <= nn; i++) { const u = u0 + i * step; seq.push([u, 0, 0, 1]); if (i < nn) { seq.push([u + step * .18, 0, 0, 1], [u + step * .3, D, .7, .7], [u + step * .7, D, -.7, .7], [u + step * .82, 0, 0, 1]) } }
     for (const q of seq) { const v = put(q[0], q[1], q[2], q[3]); if (pv) { const flip = (A === 0) === (sg > 0); flip ? S.quad(pv[0], pv[1], v[1], v[0]) : S.quad(pv[0], v[0], v[1], pv[1]) } pv = v }
-    const face = 1 << f;
+    S.fit = F0; const face = 1 << f;
     for (const u of [lo[U], hi[U] - post]) { const ux0 = u, ux1 = u + post; if (A === 0) rbox(st, sg > 0 ? pl - .05 : pl - .004, sg > 0 ? pl + .004 : pl + .05, lo[1], hi[1], ux0, ux1, .012, face | 12 | 16 | 32); else rbox(st, ux0, ux1, lo[1], hi[1], sg > 0 ? pl - .05 : pl - .004, sg > 0 ? pl + .004 : pl + .05, .012, face | 12 | 1 | 2) }
     for (const[v0, v1] of [[lo[1], lo[1] + .12], [hi[1] - .1, hi[1]]]) { if (A === 0) rbox(st, sg > 0 ? pl - .05 : pl - .004, sg > 0 ? pl + .004 : pl + .05, v0, v1, u0, u1, .01, face | 12); else rbox(st, u0, u1, v0, v1, sg > 0 ? pl - .05 : pl - .004, sg > 0 ? pl + .004 : pl + .05, .01, face | 12) }
     if (hi[U] - lo[U] < 3) { /* extrémité : barres de porte */

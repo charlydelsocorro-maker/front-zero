@@ -264,8 +264,73 @@ function* genTopo(f, n, d) {
     put(d, i * 4, T, .96 + K.vn(x * .5, y * .5, n >> 1) * .07);
   }
 }
+/* Barrage d'Aiguenoire: the dam's downstream face, wet concrete in lifts, dark water runs, pale calcite drips, rust bleeding from the tie holes */
+function* genSpillway(f, n, d) {
+  const C = f.c.map(rgb), RUST = rgb(f.accent), K = noiseKit(1616), T = [0, 0, 0], px = 1 / n, runs = new Float32Array(n), drip = new Float32Array(n);
+  for (let x = 0; x < n; x++) { const u = x / n; runs[x] = K.fbm(u, .3, 24, 3); drip[x] = K.fbm(u + .5, .7, 40, 2); }
+  for (let y = 0; y < n; y++) for (let x = 0, _p = (y & 31) || (yield 0); x < n; x++) {
+    const u = x / n, v = y / n, m = K.fbm(u, v, 4, 4), lift = (v * 3) % 1, wv = K.fbm(u, v, 6, 2);
+    mixInto(T, C[2], C[1], smooth(.4, .66, m) * .7);
+    const run = smooth(.52, .7, runs[x] + (wv - .5) * .25) * (.55 + .45 * smooth(.2, .9, lift)), cal = smooth(.66, .76, drip[x] + (wv - .5) * .2) * smooth(.0, .55, lift) * (1 - smooth(.55, .95, lift));
+    mixInto(T, T, C[0], run * .75); mixInto(T, T, C[3], cal * .7);
+    const hu = Math.abs(((u * 4 + .5) % 1) - .5) / 4, hv = Math.abs(lift - .5) / 3, hole = Math.hypot(hu, hv), bleed = (1 - smooth(px * 2, px * 3.2, hole)) + smooth(px * 14, px * 2, Math.abs(hu) * 4 + (K.vn(u * 60, v * 60, 60) - .5) * px * 6) * smooth(.5, .52, lift) * smooth(.98, .6, lift) * smooth(.4, .55, K.fbm(u, v, 9, 2)) * 1.1;
+    mixInto(T, T, RUST, Math.min(.75, bleed * .7)); mixInto(T, T, C[0], (1 - smooth(px * .8, px * 2.2, Math.min(lift, 1 - lift) / 3)) * .85);
+    put(d, (y * n + x) * 4, T, .95 + K.vn(u * 180, v * 180, 180) * .1);
+  }
+}
+/* Marais de Saulnes: a reed bed, tapered blades in three layers over dark peat water */
+function* genReeds(f, n, d) {
+  const C = f.c.map(rgb), K = noiseKit(1717), T = [0, 0, 0], ink = new Uint8Array(n * n);
+  const blades = (level, count, lenA, lenB, wide) => {
+    for (let s = 0; s < count; s++) {
+      const cx = K.R() * n, cy = K.R() * n, lean = (K.R() - .5) * .22, len = (lenA + K.R() * (lenB - lenA)) * n, w = wide * n * (.6 + K.R() * .6), bend = (K.R() - .5) * .25;
+      for (let i = 0; i <= len; i++) {
+        const t = i / len, rad = w * (1 - t) ** .7 * Math.min(1, t * 9 + .35), px = cx + (lean * t + bend * t * t) * len, py = cy - i, r = Math.ceil(rad);
+        for (let dx = -r; dx <= r; dx++) { if (Math.abs(dx) > rad + .25) continue; const q = ((Math.round(py)) % n + n) % n, e = ((Math.round(px) + dx) % n + n) % n, at = q * n + e; if (ink[at] < level) ink[at] = level; }
+      }
+    }
+  };
+  blades(1, 70, .35, .8, .016); yield 0; blades(2, 60, .3, .7, .011); yield 0; blades(3, 40, .2, .5, .007);
+  for (let y = 0; y < n; y++) for (let x = 0, _p = (y & 31) || (yield 0); x < n; x++) {
+    const u = x / n, v = y / n, lv = ink[y * n + x], g = K.vn(u * 140, v * 10, 10);
+    mixInto(T, C[0], C[1], smooth(.4, .7, K.fbm(u, v, 3, 3)) * .5);
+    if (lv === 1) mixInto(T, C[1], C[2], .35 + .3 * g); else if (lv === 2) mixInto(T, C[2], C[3], .2 + .5 * g); else if (lv === 3) mixInto(T, C[3], C[2], .25 * g);
+    put(d, (y * n + x) * 4, T, .94 + K.vn(u * 200, v * 30, 30) * .1);
+  }
+}
+/* Cité Verrière: tinted curtain-wall glass (blue-green to smoky grey, a broad sky sheen) on thin steel mullions, cracked all over: a fine fracture
+   network everywhere, and large spiderweb fractures (long wandering radial cracks, polygonal rings) that run across the mullions and wrap the tile */
+function* genShatter(f, n, d) {
+  const C = f.c.map(rgb), K = noiseKit(1818), T = [0, 0, 0], px = 1 / n, V = cellsOf(K, 5), W = cellsOf(K, 13), o = new Float32Array(5), o2 = new Float32Array(5);
+  const HITS = [[.27, .31, .46, 13, .4], [.76, .68, .56, 11, 2.1], [.58, .07, .3, 9, 4.4]];       // centre u, v, reach, radial cracks, phase
+  const wrapD = (a, b) => { const t = a - b; return t - Math.round(t); };
+  for (let y = 0; y < n; y++) for (let x = 0, _p = (y & 15) || (yield 0); x < n; x++) {       // a heavier pattern: a pause every 16 rows
+    const u = x / n, v = y / n, g = K.fbm(u, v, 2, 3), sheen = smooth(.55, .95, Math.sin((u * 1.0 + v * .55) * Math.PI * 2 + .6) * .5 + .5);
+    mixInto(T, C[2], C[1], smooth(.3, .7, g) * .85); mixInto(T, T, C[3], sheen * .22 + smooth(.62, .8, K.fbm(u + .3, v, 3, 2)) * .06);
+    // spiderweb fractures: radial cracks that wander with the distance, rings that are straight between the radials
+    let web = 0, near = 0;
+    for (const [hx, hy, R, N, ph] of HITS) {
+      const dx = wrapD(u, hx), dy = wrapD(v, hy), r = Math.hypot(dx, dy) + 1e-5; if (r > R) continue;
+      const a = Math.atan2(dy, dx) + ph, wob = (K.vn(a * 2.2 + ph * 9, r * 9, 64) - .5) * .42, k = a / 6.283 * N + wob, fr = k - Math.floor(k);
+      const len = .5 + .5 * K.vn(Math.floor(k) * 3.7 + ph * 5, 1.5, 64), fade = smooth(R * len, R * len * .5, r);
+      const radial = (1 - smooth(px * .5, px * 1.5, Math.abs(.5 - fr) * 6.283 / N * r)) * fade;       // distance to the crack across the radial, in tile units
+      const cosA = Math.cos((fr - .5) * 6.283 / N), rp = r * cosA, ringSp = .028 + .02 * K.vn(ph * 7, Math.floor(k) * .9, 64), ringK = rp / ringSp, ring = (1 - smooth(px * .5, px * 1.4, Math.abs(ringK - Math.round(ringK)) * ringSp)) * smooth(R * .55, R * .12, r) * (Math.round(ringK) >= 1 ? 1 : 0);
+      web = Math.max(web, radial, ring * .85, (1 - smooth(.004, .02, r)) * .9); near = Math.max(near, smooth(R, R * .2, r));
+    }
+    // fine fracture network everywhere (denser near the impacts), each crack a bright line with a darker lip
+    const wu = (K.fbm(u, v, 4, 2) - .5) * .05; vor(V, u + wu, v - wu, o); vor(W, u - wu * 1.4, v + wu, o2);
+    const net = Math.max((1 - smooth(px * .4, px * 1.3, (o[1] - o[0]) * .2)) * .55, (1 - smooth(px * .3, px * 1.1, (o2[1] - o2[0]) * .08)) * (.12 + .5 * near));
+    const crack = Math.min(1, Math.max(web, net)), lip = (1 - smooth(px * 1, px * 3, (o[1] - o[0]) * .2)) * .18;
+    mixInto(T, T, C[0], lip); mixInto(T, T, C[3], crack * .9);
+    // thin steel mullions, a wide pane grid across the tile
+    const mu = Math.abs(((u * 2 + .5) % 1) - .5) / 2, mv = Math.abs(((v * 3 + .5) % 1) - .5) / 3, m = Math.min(mu, mv);
+    mixInto(T, T, C[0], (1 - smooth(px * .9, px * 1.9, m)) * .9); mixInto(T, T, C[3], (1 - smooth(px * 1.6, px * 2.6, Math.abs(m - px * 1.6))) * .12 * (mu < mv ? 1 : .6));
+    put(d, (y * n + x) * 4, T, .97 + K.vn(u * 220, v * 220, 220) * .04);
+  }
+}
 const GEN = { digital: genDigital, woodland: genWoodland, tiger: genTiger, splinter: genSplinter, carbon: genCarbon, brushed: genBrushed, gilded: genGilded, heat: genHeat, veined: genVeined, eclipse: genEclipse,
-  mottle: genMottle, cobble: genCobble, patchwork: genPatchwork, concrete: genConcrete, facet: genFacet, asphalt: genAsphalt, crackle: genCrackle, topo: genTopo };
+  mottle: genMottle, cobble: genCobble, patchwork: genPatchwork, concrete: genConcrete, facet: genFacet, asphalt: genAsphalt, crackle: genCrackle, topo: genTopo,
+  spillway: genSpillway, reeds: genReeds, shatter: genShatter };
 
 /* ---------- shared textures ---------- */
 const TEX = new Map(), TEX_SIZE = 256, TILE = 4.2;       // one tile covers about 24 cm of weapon
@@ -314,7 +379,8 @@ const CAMO = { body: { tex: 1, m: .05, r: .8 }, furniture: { tex: 1, m: .03, r: 
 const METALLIC = { body: { tex: 1, m: 1, r: .3, k: .86 }, furniture: { col: 0x141518, m: .06, r: .74 }, metal: { tex: 1, m: 1, r: .26, k: .92 }, accent: { acc: 1, m: .95, r: .3 }, blade: { tex: 1, m: 1, r: .2 } };
 const STYLES = {
   digital: CAMO, woodland: CAMO, tiger: CAMO, splinter: CAMO,
-  mottle: CAMO, cobble: CAMO, concrete: CAMO, asphalt: CAMO, crackle: CAMO, topo: CAMO,
+  mottle: CAMO, cobble: CAMO, concrete: CAMO, asphalt: CAMO, crackle: CAMO, topo: CAMO, spillway: CAMO, reeds: CAMO,
+  shatter: { ...CAMO, body: { tex: 1, m: .42, r: .2 }, furniture: { tex: 1, m: .28, r: .28 }, accent: { acc: 1, m: .75, r: .26 } },       // glass: a strong sheen; the accent parts a thin steel highlight
   patchwork: { ...CAMO, body: { tex: 1, m: .18, r: .6 }, furniture: { tex: 1, m: .12, r: .66 } }, facet: { ...CAMO, body: { tex: 1, m: .05, r: .52 } },
   carbon: { body: { tex: 1, m: .28, r: .4 }, furniture: { tex: 1, m: .16, r: .46 }, metal: { col: 0x24262b, m: .8, r: .46 }, accent: { acc: 1, m: .6, r: .42 }, blade: { tex: 1, m: .55, r: .36 } },
   veined: { body: { tex: 1, m: .34, r: .22 }, furniture: { tex: 1, m: .2, r: .3 }, metal: { col: 0x16171d, m: .85, r: .32 }, accent: { acc: 1, m: .5, r: .34 }, blade: { tex: 1, m: .7, r: .2 } },

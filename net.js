@@ -1,5 +1,5 @@
 /* FRONT ZERO multiplayer client. n.remote(id, timeNow) expects performance.now() milliseconds. */
-const EVENTS = ['room', 'start', 'state', 'shot', 'damage', 'death', 'respawn', 'score', 'round', 'action', 'end', 'error', 'close', 'boom', 'loot', 'prop', 'zone', 'att', 'gx', 'flow', 'fin', 'sg'];
+const EVENTS = ['room', 'start', 'state', 'shot', 'damage', 'death', 'respawn', 'score', 'round', 'action', 'end', 'error', 'close', 'boom', 'loot', 'prop', 'zone', 'att', 'gx', 'flow', 'fin', 'sg', 'front', 'bk'];
 const SEND_INTERVAL = 50, INTERP_DELAY = 100, MIN_DELAY = 90, MAX_DELAY = 240, MAX_EXTRAPOLATE = 100, COAST = 0.07, BUFFER = 24, SNAP_DIST = 8, PING_MS = 2000;
 const WAKE_MS = 75000, WAKE_RETRY_MS = 2500;   // a free host sleeps when idle and can take up to a minute to answer
 
@@ -31,6 +31,7 @@ export function createNet(url) {
   let ws = null, connecting = null, pingTimer = 0, stateTimer = 0, lastState = -Infinity, pendingState = null, offset = 0;
 
   const emit = (event, data) => {
+    if (n.mute && n.mute(event, data)) return;       // bots-sim.js: the shots of the bots this client simulates come back from the server, already drawn here
     for (const fn of [...handlers.get(event)]) {
       try { fn(data); } catch (e) { console.error(`[net] "${event}" handler failed`, e); }
     }
@@ -125,7 +126,7 @@ export function createNet(url) {
   function startWire(sock) {
     syncModule.then(mod => {
       if (!mod || ws !== sock || !isOpen()) return;
-      wire = mod.createWire({ socket: () => (isOpen() ? ws : null), myId: () => n.id, hostId: () => (n.room ? n.room.hostId : null), sendJson: raw, pushSnapshot, noteArrival, emit, wantsState: () => handlers.get('state').size > 0 });
+      wire = mod.createWire({ socket: () => (isOpen() ? ws : null), myId: () => n.id, hostId: () => (n.room ? n.room.hostId : null), sendJson: raw, pushSnapshot, noteArrival, emit, wantsState: () => handlers.get('state').size > 0, quality: () => n.quality() });       // quality: ping and view delay for the server's lag compensation
       raw({ t: 'nc', v: mod.WIRE_VERSION });
     }).catch(e => console.warn('[net] compact protocol off', e));
   }
@@ -137,7 +138,7 @@ export function createNet(url) {
     switch (m.t) {
       case 'nc': if (wire) wire.onAck(m); return;
       case 'nd': if (wire) wire.onDict(m); return;
-      case 'welcome': if (m.nc >= 1) startWire(ev.target); n.lootOk = m.loot === 1; n.propsOk = m.props === 1; n.zoneOk = m.zone === 1; n.attOk = m.att === 1; n.finOk = m.fin === 1; n.fitOk = m.fit === 1; n.xwOk = m.xw === 1; n.gxOk = m.gx === 1; n.flowOk = m.mf === 1; n.sgOk = m.sg === 1; return;
+      case 'welcome': if (m.nc >= 1) startWire(ev.target); n.lootOk = m.loot === 1; n.propsOk = m.props === 1; n.zoneOk = m.zone === 1; n.attOk = m.att === 1; n.finOk = m.fin === 1; n.fitOk = m.fit === 1; n.xwOk = m.xw === 1; n.gxOk = m.gx === 1; n.bkOk = m.bk === 1; n.flowOk = m.mf === 1; n.sgOk = m.sg === 1; n.pubOk = m.pub === 1; n.btOk = m.bt === 1; n.frontOk = m.front === 1; if (n.frontOk) emit('front', { op: 'hello' }); return;       // living front (front-ui.js answers with its identity)
       case 'att': if (typeof m.id === 'string' && m.w && typeof m.w === 'object') attMap.set(m.id, m.w); break;
       case 'fin': if (typeof m.id === 'string' && m.w && typeof m.w === 'object') finMap.set(m.id, m.w); break;
       case 'fit': if (typeof m.id === 'string') { if (typeof m.o === 'string') fitMap.set(m.id, m.o); else fitMap.delete(m.id); } return;
@@ -235,8 +236,18 @@ export function createNet(url) {
       if (ws) ws.close(1000, 'leave');
     },
 
-    createRoom({ name, mode, map } = {}) { withConnection({ t: 'create', name, mode, map, zv: 1, ...(n.flowClient ? { mf: 1 } : null) }); },
-    joinRoom(code, name) { withConnection({ t: 'join', code, name, zv: 1, ...(n.flowClient ? { mf: 1 } : null) }); },
+    // extra: public room, bots, target size ({pub, bots, bz}) or a join from the public list ({ls}); joinCaps: what this client can do (bots-sim.js sets {bc: 1}). Older servers ignore both.
+    createRoom({ name, mode, map, ...extra } = {}) { withConnection({ t: 'create', name, mode, map, zv: 1, ...(n.flowClient ? { mf: 1 } : null), ...n.joinCaps, ...extra }); },
+    joinRoom(code, name, extra) { withConnection({ t: 'join', code, name, zv: 1, ...(n.flowClient ? { mf: 1 } : null), ...n.joinCaps, ...(extra || null) }); },
+    /** Quick play (room-list.js): connects if needed, then asks the server for the best public room of a mode. Only when the server announced it. */
+    quickPlay({ name, mode, map } = {}) {       // connect() resolves inside the 'welcome' event, before onMessage has read its flags: look at them one turn later
+      n.connect().then(() => setTimeout(() => { if (n.pubOk) raw({ t: 'quick', name, mode, map, zv: 1, ...(n.flowClient ? { mf: 1 } : null), ...n.joinCaps }); else emit('error', { code: 'no_public' }); }, 0), () => { /* connect() already emitted the error */ });
+    },
+    /** Room options, bot reports and measurements (room-list.js, net-bots.js): only on a server that announced them. */
+    sendRoomOpts(o) { if (n.pubOk && isOpen() && n.id) raw({ t: 'ro', ...o }); },
+    sendBots(o) { if (n.btOk && isOpen() && n.id) raw({ t: 'bt', ...o }); },
+    sendPerf(o) { if (n.btOk && isOpen() && n.id) raw({ t: 'bp', ...o }); },
+    joinCaps: {}, pubOk: false, btOk: false, mute: null,
     setReady(v) { send({ t: 'ready', v: !!v }); },
     setTeam(t) { send({ t: 'team', team: t }); },
     setConfig({ mode, map } = {}) { send({ t: 'config', mode, map }); },
@@ -293,12 +304,18 @@ export function createNet(url) {
     // Equipment (only when this server announced it in 'welcome').
     gxOk: false,
     sendGear(o) { if (n.gxOk && isOpen() && n.id) raw({ t: 'gx', ...o }); },
+    // Breachable walls (only when this server announced them in 'welcome').
+    bkOk: false,
+    sendBreach(o) { if (n.bkOk && isOpen() && n.id) raw({ t: 'bk', ...o }); },
     // End-of-match flow (match-flow.js sets flowClient once it is installed; the server announces it in 'welcome').
     flowOk: false, flowClient: false,
     sendFlow(o) { if (n.flowOk && isOpen() && n.id) raw({ t: 'flow', ...o }); },
     // Spawn protection (only when this server announced it in 'welcome'; engine-guard.js asks who is protected once it has loaded).
     sgOk: false,
     sendGuard(o) { if (n.sgOk && isOpen() && n.id) raw({ t: 'sg', ...o }); },
+    // Living front (only when this server announced it in 'welcome'): the signed front identity of this player (front-ui.js).
+    frontOk: false,
+    sendFront(o) { if (n.frontOk && isOpen() && n.id) raw({ t: 'fid', ...o }); },
     /** The drops currently on the map, with their remaining lifetime. */
     lootNow() { const now = clock(), out = []; for (const d of lootItems.values()) out.push({ ...d, ttl: Math.max(0, d.ttl - (now - d.at)) }); return out; },
 

@@ -9,7 +9,7 @@ const hash = (i, j) => { let h = Math.imul(i, 374761393) + Math.imul(j, 66826526
 export const noise2 = (x, y) => { const i = Math.floor(x), j = Math.floor(y), f = x - i, g = y - j, u = f * f * (3 - 2 * f), v = g * g * (3 - 2 * g); return (hash(i, j) * (1 - u) + hash(i + 1, j) * u) * (1 - v) + (hash(i, j + 1) * (1 - u) + hash(i + 1, j + 1) * u) * v; };
 
 /* échelle de texture (mètres par répétition) */
-const UVK = { ar_plaster: 2.6, ar_rubble: 2.1, ar_ashlar: 2.2, ar_tile: 1.5, ar_cobble: 1.9, ar_gravel: 2.6, ar_wood: 1.3, ar_cloth: 1.6, ar_iron: 1, ar_dark: 1, ar_plant: 1, lampA: 1, ar_rock: 3.2, ar_plank: 2.2, ar_shingle: 1.5, ar_water: 4, ar_stonewall: 1.6, ar_brick: 1.3, ar_tin: 1.9, ar_snow: 3, ar_needle: 1 };
+const UVK = { ar_plaster: 2.6, ar_rubble: 2.1, ar_ashlar: 2.2, ar_tile: 1.5, ar_cobble: 1.9, ar_gravel: 2.6, ar_wood: 1.3, ar_cloth: 1.6, ar_iron: 1, ar_dark: 1, ar_plant: 1, lampA: 1, ar_rock: 3.2, ar_plank: 2.2, ar_shingle: 1.5, ar_water: 4, ar_water_cave: 4, ar_water_marsh: 4, ar_stonewall: 1.6, ar_brick: 1.3, ar_tin: 1.9, ar_snow: 3, ar_needle: 1 };
 
 class FA { constructor(a, n) { this.a = a; this.n = n; this.count = a.length / n; this.itemSize = n; } getX(i) { return this.a[i * this.n]; } getY(i) { return this.a[i * this.n + 1]; } getZ(i) { return this.a[i * this.n + 2]; } }
 class IA { constructor(a) { this.a = a; this.count = a.length; } getX(i) { return this.a[i]; } }
@@ -212,6 +212,23 @@ export class Arch {
     { const arcK = (w + rise) / 2; for (let q = 0, n = P.length / 3; q < n; q++) { const i3 = q * 3, px = P[i3], py = P[i3 + 1], pz = P[i3 + 2], pc = ax === 'x' ? pz : px, qc = ax === 'x' ? px : pz; let na = (mid - pc) / (w * w), nb = (spring - py) / (rise * rise); const nl = Math.hypot(na, nb) || 1; na /= nl; nb /= nl; N[i3] = ax === 'x' ? 0 : na; N[i3 + 1] = nb; N[i3 + 2] = ax === 'x' ? na : 0; const tv = (o.tone ?? 1) * (.9 + .2 * noise2(qc * .9 + pc * 1.3, py * 1.1)); C[i3] = C[i3 + 1] = C[i3 + 2] = tv; T[q * 2] = qc / uvK; T[q * 2 + 1] = Math.atan2((py - spring) / rise, (pc - mid) / w) * arcK / uvK; } }
     tr = tg = tb = .12; if (ax === 'x') Q(u0, crown + .05, b, u1, crown + .05, b, u1, crown + .05, a, u0, crown + .05, a); else Q(a, crown + .05, u1, b, crown + .05, u1, b, crown + .05, u0, a, crown + .05, u0); if (o.hole) { P.length -= 12; N.length -= 12; C.length -= 12; T.length -= 8; I.length -= 6; }
     this.end();
+    /* o.shell (m) : extrados tourné vers l'extérieur, là où la voûte se voit du dehors (sinon elle est transparente vue de dos) */
+    if (o.shell) { const sh = o.shell, Ro = (t) => { const ang = Math.PI * t; return [mid - Math.cos(ang) * (w + sh), spring + Math.sin(ang) * (rise + sh)]; }; this.begin(m); tr = tg = tb = (o.tone ?? 1) * .82;
+      for (let i = 0; i < seg; i++) { const [p0, h0] = Ro(i / seg), [p1, h1] = Ro((i + 1) / seg); for (let j = 0; j < nu; j++) { const q0 = u0 + (u1 - u0) * j / nu, q1 = u0 + (u1 - u0) * (j + 1) / nu;
+        if (o.hole && (ax === 'x' ? (o.hole((q0 + q1) / 2, (p0 + p1) / 2)) : o.hole((p0 + p1) / 2, (q0 + q1) / 2))) continue;
+        if (ax === 'x') Q(q0, h0, p0, q0, h1, p1, q1, h1, p1, q1, h0, p0); else Q(p0, h0, q1, p1, h1, q1, p1, h1, q0, p0, h0, q0); } }
+      /* épaisseur fermée : sous-face des naissances (avec 5 cm sous l'intrados bruité) et anneaux des deux bouts, sinon une fente vue d'en bas ou de bout */
+      { const P3 = (q, h, p) => (ax === 'x' ? [q, h, p] : [p, h, q]), F = (A, B, C, D, nx, ny, nz) => { const ux = B[0] - A[0], uy = B[1] - A[1], uz = B[2] - A[2], vx = C[0] - A[0], vy = C[1] - A[1], vz = C[2] - A[2]; if ((uy * vz - uz * vy) * nx + (uz * vx - ux * vz) * ny + (ux * vy - uy * vx) * nz < 0) { const t = B; B = D; D = t; } Q(...A, ...B, ...C, ...D); }, Ri = (t) => { const ang = Math.PI * t; return [mid - Math.cos(ang) * (w - .05), spring + Math.sin(ang) * (rise - .05)]; };
+        for (let j = 0; j < nu; j++) { const q0 = u0 + (u1 - u0) * j / nu, q1 = u0 + (u1 - u0) * (j + 1) / nu; for (const [po, pi] of [[a - sh, a + .05], [b + sh, b - .05]]) { if (o.hole && (ax === 'x' ? o.hole((q0 + q1) / 2, po) : o.hole(po, (q0 + q1) / 2))) continue; F(P3(q0, spring, po), P3(q1, spring, po), P3(q1, spring, pi), P3(q0, spring, pi), 0, -1, 0); const sp = Math.sign(mid - pi); F(P3(q0, spring, pi), P3(q1, spring, pi), P3(q1, spring + .07, pi), P3(q0, spring + .07, pi), ax === 'x' ? 0 : sp, 0, ax === 'x' ? sp : 0); } }
+        for (const [u, sg] of [[u0, -1], [u1, 1]]) for (let i = 0; i < seg; i++) { const [a0, b0] = Ri(i / seg), [a1, b1] = Ri((i + 1) / seg), [c0, d0] = Ro(i / seg), [c1, d1] = Ro((i + 1) / seg); F(P3(u, b0, a0), P3(u, d0, c0), P3(u, d1, c1), P3(u, b1, a1), ax === 'x' ? sg : 0, 0, ax === 'x' ? 0 : sg); } }
+      this.end(); }
+    /* o.ends ('u0' | 'u1' | true) : tympan plein au bout (tête dans un mur, jonction), de l'intrados (5 cm en retrait) jusqu'au couvercle ; sinon on voit le ciel entre l'arc et l'ouverture rectangulaire */
+    if (o.ends) { const sh = o.shell || 0, top = crown + Math.max(.05, sh), P3 = (q, h, p) => (ax === 'x' ? [q, h, p] : [p, h, q]), F = (A, B, C, D, nx, nz) => { const ux = B[0] - A[0], uy = B[1] - A[1], uz = B[2] - A[2], vx = C[0] - A[0], vy = C[1] - A[1], vz = C[2] - A[2]; if ((uy * vz - uz * vy) * nx + (ux * vy - uy * vx) * nz < 0) { const t = B; B = D; D = t; } Q(...A, ...B, ...C, ...D); }, Ri = (t) => { const ang = Math.PI * t; return [mid - Math.cos(ang) * (w - .05), spring + Math.sin(ang) * (rise - .05)]; };
+      this.begin(m); tr = tg = tb = (o.tone ?? 1) * .86;
+      for (const [u, sg] of [[u0, -1], [u1, 1]]) { if (o.ends !== true && o.ends !== (sg < 0 ? 'u0' : 'u1')) continue; const uf = u + sg * .012, nx = ax === 'x' ? sg : 0, nz = ax === 'x' ? 0 : sg;
+        for (let i = 0; i < seg; i++) { const [a0, b0] = Ri(i / seg), [a1, b1] = Ri((i + 1) / seg); F(P3(uf, b0, a0), P3(uf, b1, a1), P3(uf, top, a1), P3(uf, top, a0), nx, nz); }
+        for (const [p0, p1] of [[a - sh, a + .05], [b - .05, b + sh]]) F(P3(uf, spring, p0), P3(uf, spring, p1), P3(uf, top, p1), P3(uf, top, p0), nx, nz); }
+      this.end(); }
     if (rib) for (let q = u0 + rib * .5; q < u1 - .3; q += rib) { this.begin('ar_ashlar'); const n = 11; for (let i = 0; i < n; i++) { const t0 = i / n, t1 = (i + 1) / n, [p0, h0] = R(t0), [p1, h1] = R(t1); if (o.hole) { const pm = (p0 + p1) / 2; if (ax === 'x' ? (o.hole(q - .2, pm) || o.hole(q + .2, pm)) : (o.hole(pm, q - .2) || o.hole(pm, q + .2))) continue; } this.stoneTint(.74, .92); const c0 = Math.cos(Math.PI * t0), s0 = Math.sin(Math.PI * t0), c1 = Math.cos(Math.PI * t1), s1 = Math.sin(Math.PI * t1), th = .17; EXT(ax === 'x' ? 'z' : 'x', [[p0, h0], [p1, h1], [p1 + c1 * th, h1 - s1 * th], [p0 + c0 * th, h0 - s0 * th]], q - .17, q + .17); } this.end(); }
   }
 
@@ -236,7 +253,8 @@ export class Arch {
     const top = (u) => { let q = y + h; if (o.broken) q -= (noise2(u * .55 + seed, 3.1) ** 2) * h * .9 + noise2(u * 2.6, seed) * .12; return q; };
     this.begin(m); this.tint(o.tone ?? .95);
     for (let i = 0; i < n; i++) { const a = u0 + (u1 - u0) * i / n, b = u0 + (u1 - u0) * (i + 1) / n; EXT(ax, [[a, y], [b, y], [b, top(b)], [a, top(a)]], w0, w1); } this.end();
-    this.begin(cap); for (let i = 0; i < n; i++) { const a = u0 + (u1 - u0) * i / n, b = u0 + (u1 - u0) * (i + 1) / n, ta = top(a), tb = top(b), e = t / 2 + .035; this.stoneTint(.86, 1.04); const seg = 3; for (let q = 0; q < seg; q++) { const f0 = Math.PI * q / seg, f1 = Math.PI * (q + 1) / seg, w = (f) => c + Math.cos(f) * e, yy = (f) => Math.sin(f) * .075; WQ(ax, 1, a, ta + yy(f1), w(f1), b, tb + yy(f1), w(f1), b, tb + yy(f0), w(f0), a, ta + yy(f0), w(f0)); } } this.end(true);
+    const bands = o.cap || t <= .48 ? [0] : h >= .5 ? [-1, 1] : [];   /* dessus large (> 0,48 m, sans o.cap) : on garde le dessus d'origine (planches, enduit…) ; vrai mur : deux bandeaux de rive de 20 cm ; dalle basse : rien */
+    this.begin(cap); for (let i = 0; i < n; i++) { const a = u0 + (u1 - u0) * i / n, b = u0 + (u1 - u0) * (i + 1) / n, ta = top(a), tb = top(b); this.stoneTint(.86, 1.04); for (const sd of bands) { const e = sd ? .1 : t / 2 + .035, cc = sd ? c + sd * (t / 2 + .035 - e) : c, hh = sd ? .05 : .075, seg = sd ? 2 : 3; for (let q = 0; q < seg; q++) { const f0 = Math.PI * q / seg, f1 = Math.PI * (q + 1) / seg, w = (f) => cc + Math.cos(f) * e, yy = (f) => Math.sin(f) * hh; WQ(ax, -1, a, ta + yy(f1), w(f1), b, tb + yy(f1), w(f1), b, tb + yy(f0), w(f0), a, ta + yy(f0), w(f0)); } } } this.end(true);   /* chaperon : faces tournées vers l'extérieur (s = -1 avec f0 < f1) */
     if (o.col !== false) { const steps = o.broken ? Math.max(1, Math.round((u1 - u0) / 1.1)) : 1; for (let i = 0; i < steps; i++) { const a = u0 + (u1 - u0) * i / steps, b = u0 + (u1 - u0) * (i + 1) / steps; let q = 0; for (let f = 0; f <= 4; f++) q = Math.max(q, top(a + (b - a) * f / 4)); this.wcol(ax, a, b, y, q + .05, w0, w1, o.surface || 'concrete'); } }
     if (merl) { for (let u = u0 + gapW / 2; u + merl <= u1; u += merl + gapW) { const b = top(u + merl / 2), mH = o.merlonH ?? .72, v = merl / 2, um = u + v, seg = 6, poly = [[u, b], [u + merl, b], [u + merl, b + mH - v * .7]]; for (let q = 1; q < seg; q++) { const f = Math.PI * q / seg; poly.push([um + Math.cos(f) * v, b + mH - v * .7 + Math.sin(f) * v * .7]); } poly.push([u, b + mH - v * .7]); this.begin(m); this.tint(.92); EXT(ax, poly, w0 + .02, w1 - .02); this.end(); if (o.col !== false) this.wcol(ax, u, u + merl, b, b + mH, w0, w1, o.surface || 'concrete'); } }
   }
@@ -328,7 +346,7 @@ export class Arch {
     if (o.col !== false) this.col(x0, x1, o.y0 ?? y - .4, y, z0, z1, 'concrete');
     this.begin(o.m || 'ar_ashlar'); const nx = Math.max(1, Math.round((x1 - x0) / .62)), nz = Math.max(1, Math.round((z1 - z0) / .62));
     for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) { this.stoneTint(.82, 1.02); const a = x0 + (x1 - x0) * i / nx, b = x0 + (x1 - x0) * (i + 1) / nx, c = z0 + (z1 - z0) * j / nz, d = z0 + (z1 - z0) * (j + 1) / nz, h = y - this.rnd(0, .006); Q(a, h, d, b, h, d, b, h, c, a, h, c); }
-    if (o.y0 !== undefined) { this.tint(.78); BX(x0, x1, o.y0, y - .004, z0, z1, 0, 'yY'); }
+    if (o.y0 !== undefined) { this.tint(.78); BX(x0, x1, o.y0, y - .004, z0, z1, 0, o.y0 > .01 ? 'Y' : 'yY'); }   /* palier en hauteur : dessous dessiné (on le voit d'en bas) */
     this.end();
   }
   /** Escalier à vis : marches rayonnantes autour d'un noyau, mur tambour, collisions en petites boîtes (hauteur de marche .16 max). */
@@ -423,8 +441,8 @@ export class Arch {
   awning(ax, c, s, ua, ub, y, o = {}) {
     const dp = o.d ?? 1.5, drop = o.drop ?? .55, n = Math.max(3, Math.round((ub - ua) / .34)), cols = o.cols || [[.82, .32, .24], [.92, .86, .72]]; this.begin('ar_cloth');
     for (let i = 0; i < n; i++) { const a = ua + (ub - ua) * i / n, b = ua + (ub - ua) * (i + 1) / n, cc = cols[i % cols.length], sagE = (u) => .04 * Math.sin((u - ua) / (ub - ua) * Math.PI * Math.max(2, Math.round((ub - ua) / 1.2))); this.tint(cc[0], cc[1], cc[2]);
-      for (let k = 0; k < 4; k++) { const t0 = k / 4, t1 = (k + 1) / 4, w0 = c + s * dp * t0, w1 = c + s * dp * t1, h0 = y - drop * t0 - .05 * Math.sin(t0 * Math.PI), h1 = y - drop * t1 - .05 * Math.sin(t1 * Math.PI); WQ(ax, s, a, h1 + sagE(a) * t1, w1, b, h1 + sagE(b) * t1, w1, b, h0 + sagE(b) * t0, w0, a, h0 + sagE(a) * t0, w0); WQ(ax, -s, b, h1 + sagE(b) * t1 - .005, w1, a, h1 + sagE(a) * t1 - .005, w1, a, h0 + sagE(a) * t0 - .005, w0, b, h0 + sagE(b) * t0 - .005, w0); }
-      const w1 = c + s * dp, h1 = y - drop - .0; WQ(ax, s, a, h1 - .2 + sagE(a) * .2, w1, b, h1 - .2 + sagE(b) * .2, w1, b, h1 + sagE(b), w1, a, h1 + sagE(a), w1); }
+      for (let k = 0; k < 4; k++) { const t0 = k / 4, t1 = (k + 1) / 4, w0 = c + s * dp * t0, w1 = c + s * dp * t1, h0 = y - drop * t0 - .05 * Math.sin(t0 * Math.PI), h1 = y - drop * t1 - .05 * Math.sin(t1 * Math.PI); WQ(ax, s, a, h1 + sagE(a) * t1, w1, b, h1 + sagE(b) * t1, w1, b, h0 + sagE(b) * t0, w0, a, h0 + sagE(a) * t0, w0); WQ(ax, s, b, h1 + sagE(b) * t1 - .005, w1, a, h1 + sagE(a) * t1 - .005, w1, a, h0 + sagE(a) * t0 - .005, w0, b, h0 + sagE(b) * t0 - .005, w0); }   /* dessous tourné vers le bas (il regardait vers le haut : toile transparente vue d'en dessous) */
+      const w1 = c + s * dp, h1 = y - drop - .0; WQ(ax, s, a, h1 - .2 + sagE(a) * .2, w1, b, h1 - .2 + sagE(b) * .2, w1, b, h1 + sagE(b), w1, a, h1 + sagE(a), w1); WQ(ax, -s, a, h1 - .2 + sagE(a) * .2, w1 - s * .005, b, h1 - .2 + sagE(b) * .2, w1 - s * .005, b, h1 + sagE(b), w1 - s * .005, a, h1 + sagE(a), w1 - s * .005); }   /* revers du lambrequin */
     this.end(true);
     if (o.poles !== false) { this.begin('ar_wood'); this.tint(.52, .4, .3); const yb = o.floor ?? y - 2.6; for (const q of [ua + .05, ub - .05]) { pt(ax, q, c + s * dp); ROD(_x, yb, _z, _x, y - drop, _z, .035, 5); if (o.col !== false) this.k.col(_x - .05, _x + .05, yb, y - drop, _z - .05, _z + .05, 'wood'); } this.end(); }
   }
@@ -528,7 +546,7 @@ export class Arch {
     /* longerons */
     for (const v of [-hw * .62, 0, hw * .62]) { const a = P3(u0, c + v, deck - .22), b = P3(u1, c + v, deck - .22); ax === 'x' ? BX(u0, u1, deck - .34, deck - .1, c + v - .12, c + v + .12, .01, '', this.r) : BX(c + v - .12, c + v + .12, deck - .34, deck - .1, u0, u1, .01, '', this.r); void a; void b; }
     this.end();
-    this.begin('ar_plank'); for (let u = u0; u < u1 - .05; u += .26) { const v = this.rnd(.62, .9); this.tint(v, v * .9, v * .8); const e = Math.min(u1, u + .25); ax === 'x' ? BX(u + .006, e - .006, deck - .1, deck, c - hw - this.rnd(0, .08), c + hw + this.rnd(0, .08), .004, 'y', this.r) : BX(c - hw - this.rnd(0, .08), c + hw + this.rnd(0, .08), deck - .1, deck, u + .006, e - .006, .004, 'y', this.r); } this.end();
+    this.begin('ar_plank'); for (let u = u0; u < u1 - .05; u += .26) { const v = this.rnd(.62, .9); this.tint(v, v * .9, v * .8); const e = Math.min(u1, u + .25); ax === 'x' ? BX(u + .006, e - .006, deck - .1, deck, c - hw - this.rnd(0, .08), c + hw + this.rnd(0, .08), .004, '', this.r) : BX(c - hw - this.rnd(0, .08), c + hw + this.rnd(0, .08), deck - .1, deck, u + .006, e - .006, .004, '', this.r); } this.end();   /* planches du tablier fermées dessous : le tablier ne disparaît plus vu d'en bas */
     this.wcol(ax, u0, u1, deck - .35, deck, c - hw, c + hw, 'wood');
     if (o.rails !== false) this.rails(ax, c, u0, u1, deck, { solid: false });
     /* garde-corps : poteaux et lisses, ouverts aux sorties */
@@ -592,6 +610,7 @@ export class Arch {
 }
 
 /* ---------- MATÉRIAUX DU KIT (appelés par createWorld, textures peintes en différé) ---------- */
+const AR_Z = { ar_dark: -1, ar_ashlar: -1, ar_wood: -.75, ar_rubble: -.5, ar_cobble: -.5, ar_tile: -.5, ar_shingle: -.5 };   /* petits décalages : pas de décollement vu en rasant */
 export function archMaterial(k, H) {
   if (!k.startsWith('ar_')) return null;
   const { tex, nmap, blotch, streaks, cracks, rnd, hook } = H;
@@ -642,10 +661,15 @@ export function archMaterial(k, H) {
       for (let i = 0; i < 430; i++) { const u = rnd(.03, .97), py = y0 + (u - .5) * rnd(-14, 14) * .2, l = (1 - Math.abs(u - .5) * 1.2) * rnd(10, 26) + 5, an = rnd(.5, 1.1) * (rnd(0, 1) < .5 ? 1 : -1), v = rnd(-14, 18), tip = rnd(0, 1) < .15; x.strokeStyle = tip ? `rgb(${112 + v},${142 + v},${84 + v})` : `rgb(${48 + v},${78 + v},${46 + v})`; x.lineWidth = rnd(1.6, 3); x.beginPath(); x.moveTo(u * s, py); x.lineTo(u * s + Math.cos(an) * l * .5, py + Math.sin(an) * l); x.stroke(); } } }, 256); m = new THREE.MeshStandardMaterial({ map: t2, alphaTest: .22, roughness: .9, metalness: 0, vertexColors: true }); }
   else if (k === 'ar_iron') m = new THREE.MeshStandardMaterial({ color: 0x6a6a6e, roughness: .62, metalness: .5, vertexColors: true });
   else if (k === 'ar_water') m = new THREE.MeshStandardMaterial({ color: 0x24302e, roughness: .08, metalness: .35, vertexColors: true });
+  else if (k === 'ar_water_marsh') m = new THREE.MeshStandardMaterial({ color: 0x26302c, roughness: .5, metalness: .15, vertexColors: true });   /* eau du marais (MAP QA) : trouble, sans éclat de soleil dur sous le ciel couvert ; même programme que ar_water */
+  else if (k === 'ar_water_cave') m = new THREE.MeshStandardMaterial({ color: 0x111614, roughness: .9, metalness: 0, vertexColors: true });   /* eau sous terre, trouble : rugueuse (plus de reflet du soleil en rasant) et reflet du ciel à 0,1 plus bas ; même programme que ar_water */
   else if (k === 'ar_dark') m = new THREE.MeshStandardMaterial({ color: 0x35373a, roughness: .5, metalness: .1, vertexColors: true });
   else if (k === 'ar_plant' || k === 'ar_hill') m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: k === 'ar_hill' ? 1 : .92, vertexColors: true });
   else return null;
   /* carte de normales sans filtrage anisotrope : les murs vus en rasant coûtent moins, la couleur garde le sien */
   if (m.normalMap) m.normalMap.anisotropy = 1;
-  hook(m); m.userData.envI = 1; return m;
+  /* priorité de profondeur des pièces posées à plat sur un parement (fonds de baie, pierre de taille, bois, soubassement, pavés, toitures) :
+     les faces confondues ne scintillent plus. État GL seulement (polygonOffset), aucun programme de shader nouveau. */
+  { const z = AR_Z[k]; if (z) { m.polygonOffset = true; m.polygonOffsetFactor = m.polygonOffsetUnits = z; } }
+  hook(m); m.userData.envI = k === 'ar_water_cave' ? .1 : k === 'ar_water_marsh' ? .55 : 1; return m;
 }

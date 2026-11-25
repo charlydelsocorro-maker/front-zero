@@ -26,7 +26,7 @@ const SCREEN_ALIASES = {
   end: 'end',
 };
 /* Codes d’erreur du serveur qui concernent le salon (les autres relèvent de la partie en cours). */
-const LOBBY_ERRORS = new Set(['connect_failed', 'not_connected', 'room_not_found', 'room_full', 'server_full', 'bad_code', 'bad_mode', 'bad_map',
+const LOBBY_ERRORS = new Set(['too_many_rooms', 'in_progress', 'no_public', 'connect_failed', 'not_connected', 'room_not_found', 'room_full', 'server_full', 'bad_code', 'bad_mode', 'bad_map',
   'not_enough_players', 'players_not_ready', 'not_host', 'not_in_lobby', 'not_in_room', 'already_started', 'already_in_room', 'rate_limited',
   'no_teams_in_mode', 'server_error']);
 
@@ -55,7 +55,7 @@ const LOCAL = {
   'm.env.snow': ['Neige', 'Snow', 'Nieve', 'Schnee', 'Neve', 'Neve'],
   'm.env.airbase': ['Base aérienne', 'Airbase', 'Base aérea', 'Luftwaffenbasis', 'Base aérea', 'Base aerea'],
   'm.env.refinery': ['Industriel', 'Industrial', 'Industrial', 'Industrie', 'Industrial', 'Industriale'],
-  'm.env.hillside': ['Village perché', 'Hill village', 'Pueblo en colina', 'Bergdorf', 'Aldeia na encosta', 'Borgo collinare'], 'm.env.mineval': ['Vallée minière', 'Mining valley', 'Valle minero', 'Bergbautal', 'Vale mineiro', 'Valle mineraria'], 'm.mapDesc.valferrade': ['Bourg minier au fond d’une vallée de montagne : gare de chargement, rue haute et place, chevalement, voie sur chevalet et galeries de mine reliées.', 'Mining town at the head of a mountain valley: a loading station, a high street and square, a headframe, a trestle railway and connected mine galleries.', 'Pueblo minero al fondo de un valle de montaña: estación de carga, calle mayor y plaza, castillete, vía sobre caballete y galerías de mina conectadas.', 'Bergbaustädtchen am Ende eines Gebirgstals: Verladebahnhof, Hauptstraße und Platz, Förderturm, Holzviadukt und verbundene Stollen.', 'Vila mineira no fundo de um vale de montanha: estação de carga, rua principal e praça, castelete, via sobre cavalete e galerias de mina ligadas.', 'Borgo minerario in fondo a una valle di montagna: stazione di carico, via maestra e piazza, castello di estrazione, ferrovia su cavalletti e gallerie collegate.'],'m.env.valley': ['Montagne', 'Mountain', 'Montaña', 'Gebirge', 'Montanha', 'Montagna'],
+  'm.env.hillside': ['Village perché', 'Hill village', 'Pueblo en colina', 'Bergdorf', 'Aldeia na encosta', 'Borgo collinare'], 'm.env.mineval': ['Vallée minière', 'Mining valley', 'Valle minero', 'Bergbautal', 'Vale mineiro', 'Valle mineraria'], 'm.env.marsh': ['Marais', 'Marshland', 'Marisma', 'Marschland', 'Pântano', 'Palude'], 'm.mapDesc.marais': ['Delta brumeux : digue et station de pompage, roselières, péniche à demi coulée, village sur pilotis et aqueducs sous le marais.', 'Misty delta: a levee and pumping station, reed beds, a half-sunken barge, a stilt village and culverts under the marsh.', 'Delta brumoso: dique y estación de bombeo, carrizales, una barcaza medio hundida, un pueblo sobre pilotes y alcantarillas bajo la marisma.', 'Nebliges Delta: Deich und Pumpwerk, Schilfgürtel, ein halb gesunkener Lastkahn, ein Pfahldorf und Durchlässe unter dem Sumpf.', 'Delta enevoado: dique e estação de bombagem, caniçais, uma barcaça meio afundada, uma aldeia sobre estacas e aquedutos sob o pântano.', 'Delta nebbioso: argine e idrovora, canneti, una chiatta semiaffondata, un villaggio su palafitte e canali sotto la palude.'],'m.mapDesc.valferrade': ['Bourg minier au fond d’une vallée de montagne : gare de chargement, rue haute et place, chevalement, voie sur chevalet et galeries de mine reliées.', 'Mining town at the head of a mountain valley: a loading station, a high street and square, a headframe, a trestle railway and connected mine galleries.', 'Pueblo minero al fondo de un valle de montaña: estación de carga, calle mayor y plaza, castillete, vía sobre caballete y galerías de mina conectadas.', 'Bergbaustädtchen am Ende eines Gebirgstals: Verladebahnhof, Hauptstraße und Platz, Förderturm, Holzviadukt und verbundene Stollen.', 'Vila mineira no fundo de um vale de montanha: estação de carga, rua principal e praça, castelete, via sobre cavalete e galerias de mina ligadas.', 'Borgo minerario in fondo a una valle di montagna: stazione di carico, via maestra e piazza, castello di estrazione, ferrovia su cavalletti e gallerie collegate.'],'m.env.valley': ['Montagne', 'Mountain', 'Montaña', 'Gebirge', 'Montanha', 'Montagna'], 'm.env.gorge': ['Gorge et barrage', 'Dam gorge', 'Garganta y presa', 'Staudamm-Schlucht', 'Garganta e barragem', 'Gola e diga'], 'm.mapDesc.barrage': ['Barrage-poids au fond d’une gorge rocheuse, occupé par l’armée : couronnement et tour de prise d’eau, galeries et usine dans le barrage, retenue, lit de la rivière, poste électrique et passerelle haute.', 'Gravity dam deep in a rocky gorge, held by the army: crest road and intake tower, galleries and turbine hall inside the dam, reservoir, riverbed, switchyard and a high footbridge.', 'Presa de gravedad al fondo de un desfiladero rocoso, ocupada por el ejército: coronación y torre de toma, galerías y sala de turbinas dentro de la presa, embalse, cauce del río, subestación y pasarela alta.', 'Gewichtsstaumauer tief in einer Felsschlucht, vom Militär besetzt: Mauerkrone und Entnahmeturm, Stollen und Turbinenhalle in der Mauer, Stausee, Flussbett, Umspannwerk und hoher Steg.', 'Barragem de gravidade no fundo de um desfiladeiro rochoso, ocupada pelo exército: coroamento e torre de tomada, galerias e casa das turbinas dentro da barragem, albufeira, leito do rio, subestação e passadiço alto.', 'Diga a gravità in fondo a una gola rocciosa, occupata dall’esercito: coronamento e torre di presa, cunicoli e sala turbine nella diga, bacino, letto del fiume, sottostazione e passerella alta.'], 'm.env.cite': ['Quartier d’affaires', 'Business district', 'Distrito financiero', 'Geschäftsviertel', 'Distrito comercial', 'Quartiere degli affari'], 'm.mapDesc.cite': ['Quartier d’affaires en ruines : tours de verre à visiter, atrium à escalators, passerelle effondrée, parvis à fontaine sèche, avenue barricadée, chantier à grue et parking souterrain relié au métro.', 'Ruined business district: glass towers to explore, an atrium with escalators, a collapsed skybridge, a plaza with a dry fountain, a barricaded avenue, a crane construction site and an underground car park linked to the metro.', 'Distrito financiero en ruinas: torres de cristal visitables, atrio con escaleras mecánicas, pasarela derrumbada, plaza con fuente seca, avenida con barricadas, obra con grúa y aparcamiento subterráneo unido al metro.', 'Zerstörtes Geschäftsviertel: begehbare Glastürme, ein Atrium mit Rolltreppen, eine eingestürzte Hochbrücke, ein Platz mit trockenem Brunnen, eine verbarrikadierte Allee, eine Baustelle mit Kran und eine Tiefgarage mit Zugang zur U-Bahn.', 'Distrito comercial em ruínas: torres de vidro para explorar, átrio com escadas rolantes, passadiço desabado, praça com fonte seca, avenida com barricadas, obra com grua e parque subterrâneo ligado ao metro.', 'Quartiere degli affari in rovina: torri di vetro da esplorare, atrio con scale mobili, passerella crollata, piazza con fontana asciutta, viale barricato, cantiere con gru e parcheggio sotterraneo collegato alla metropolitana.'],
   'm.mapDesc.noirval': ['Complexe pétrolier au crépuscule : parcs de cuves, racks de tuyaux, passerelles sur plusieurs niveaux, entrepôts et gare de triage.', 'Oil complex at dusk: tank farms, pipe racks, catwalks on several levels, warehouses and a rail yard.', 'Complejo petrolero al anochecer: parques de tanques, racks de tuberías, pasarelas en varios niveles, almacenes y playa de vías.', 'Ölanlage in der Dämmerung: Tanklager, Rohrbrücken, Laufstege auf mehreren Ebenen, Lagerhallen und ein Rangierbahnhof.', 'Complexo petrolífero ao anoitecer: parques de tanques, racks de tubagens, passadiços em vários níveis, armazéns e pátio ferroviário.', 'Complesso petrolifero al crepuscolo: parchi serbatoi, rack di tubi, passerelle su più livelli, magazzini e scalo ferroviario.'],
   'm.mapDesc.roqueseche': ['Village en terrasses au-dessus d’une rivière à sec : ruelles, marché couvert, toits et rempart, citernes et égouts qui relient tout.', 'Terraced village above a dry river: alleys, a covered market, rooftops and a rampart, with cisterns and drains linking it all.', 'Pueblo en terrazas sobre un río seco: callejones, mercado cubierto, tejados y muralla, con cisternas y alcantarillas que lo conectan todo.', 'Terrassendorf über einem trockenen Fluss: Gassen, überdachter Markt, Dächer und Wehrmauer, verbunden durch Zisternen und Kanäle.', 'Aldeia em socalcos sobre um rio seco: vielas, mercado coberto, telhados e muralha, com cisternas e esgotos que ligam tudo.', 'Borgo a terrazze su un fiume in secca: vicoli, mercato coperto, tetti e bastioni, con cisterne e fogne che collegano tutto.'], 'm.mapDesc.val-cendre': ['Village de montagne à l’automne : maisons à visiter, pont sur la rivière à sec, terrasses étagées et crête fortifiée.', 'Mountain village in autumn: houses to enter, bridges over a dry river bed, stepped terraces and a fortified ridge.', 'Pueblo de montaña en otoño: casas accesibles, puentes sobre un río seco, terrazas escalonadas y una cresta fortificada.', 'Bergdorf im Herbst: begehbare Häuser, Brücken über ein trockenes Flussbett, Terrassen und ein befestigter Grat.', 'Aldeia de montanha no outono: casas para explorar, pontes sobre um rio seco, socalcos e uma crista fortificada.', 'Villaggio di montagna in autunno: case visitabili, ponti su un fiume in secca, terrazze a gradoni e una cresta fortificata.'],
   'm.random': ['Aléatoire', 'Random', 'Aleatorio', 'Zufall', 'Aleatório', 'Casuale'],
@@ -204,7 +204,10 @@ const THUMBS = {
   ] },
   random: { bg: 'repeating-linear-gradient(135deg,rgba(232,166,40,.13) 0 12px,transparent 12px 24px),#171a13', layers: [], glyph: '?' },
   refinery: { bg: 'linear-gradient(180deg,#2a2630 0%,#a4624a 42%,#f6b062 58%,#3e3430 60%,#1f1b1c 100%)', layers: [['#4a403a', 'polygon(12% 60%,12% 30%,22% 30%,22% 60%)'], ['#5a4e46', 'polygon(40% 60%,40% 44%,74% 44%,74% 60%)']] },
+  cite: { bg: 'linear-gradient(180deg,#5a6470 0%,#c8b494 46%,#dcc49c 54%,#6a6052 62%,#3e3a32 100%)', layers: [['#4a4c52', 'polygon(18% 64%,18% 24%,21% 19%,26% 19%,29% 24%,29% 64%)'], ['#3c3f46', 'polygon(56% 64%,56% 15%,62% 10%,68% 15%,68% 64%)'], ['#d4a32a', 'polygon(77% 64%,77.6% 21%,78.6% 21%,79.2% 64%)'], ['#d4a32a', 'polygon(50% 21%,94% 21%,94% 22.6%,50% 22.6%)'], ['#6e655a', 'polygon(0 70%,12% 60%,38% 62%,50% 57%,84% 62%,100% 59%,100% 100%,0 100%)']] },
+  marsh: { bg: 'linear-gradient(180deg,#6e7470 0%,#a9ab9a 40%,#c4c0a8 52%,#7d7f62 58%,#3e4234 100%)', layers: [['#8a8c78', 'polygon(0 56%,30% 50%,60% 53%,100% 49%,100% 60%,0 62%)'], ['#4a5236', 'polygon(0 70%,100% 66%,100% 100%,0 100%)'], ['#7a5446', 'polygon(10% 58%,10% 44%,30% 44%,30% 58%)'], ['#5e4636', 'polygon(20% 44%,20% 26%,23% 26%,23% 44%)'], ['#6b5a42', 'polygon(56% 64%,56% 46%,62% 40%,68% 46%,68% 64%)'], ['#4a3a2c', 'polygon(57% 64%,57.5% 74%,58.5% 74%,59% 64%)'], ['#4a3a2c', 'polygon(65% 64%,65.5% 74%,66.5% 74%,67% 64%)'], ['#b49a5a', 'polygon(0 100%,4% 72%,6% 100%,9% 70%,12% 100%,16% 74%,18% 100%)'], ['#a88e52', 'polygon(80% 100%,84% 70%,86% 100%,90% 72%,93% 100%,96% 68%,100% 100%)']] },
   mineval: { bg: 'linear-gradient(180deg,#3d6a9a 0%,#b8cad6 44%,#e6eaea 52%,#7a7766 60%,#4a483c 100%)', layers: [['#8c8f88', 'polygon(0 60%,18% 30%,34% 52%,52% 22%,70% 48%,86% 28%,100% 50%,100% 100%,0 100%)'], ['#eef2f6', 'polygon(14% 36%,18% 30%,22% 36%)'], ['#eef2f6', 'polygon(47% 29%,52% 22%,57% 29%)'], ['#7a7f84', 'polygon(8% 63%,20% 55%,32% 63%)'], ['#7a7f84', 'polygon(44% 59%,55% 50%,66% 59%)'], ['#5a4a3a', 'polygon(10% 78%,10% 62%,30% 62%,30% 70%,46% 70%,46% 58%,64% 58%,64% 68%,84% 68%,84% 60%,94% 60%,94% 80%)'], ['#6a4a32', 'polygon(73% 60%,75% 34%,77% 34%,79% 60%)'], ['#6b6656', 'polygon(0 82%,100% 78%,100% 100%,0 100%)']] },  hillside: { bg: 'linear-gradient(180deg,#3f7aae 0%,#a9cbdc 42%,#efe3c8 56%,#b59a70 60%,#7a6647 100%)', layers: [['#c9b48a', 'polygon(0 58%,22% 40%,46% 52%,72% 36%,100% 54%,100% 100%,0 100%)'], ['#e4d3ae', 'polygon(8% 74%,8% 54%,26% 54%,26% 62%,44% 62%,44% 48%,62% 48%,62% 60%,82% 60%,82% 52%,94% 52%,94% 76%)'], ['#b5623d', 'polygon(6% 55%,17% 47%,28% 55%)'], ['#a8553a', 'polygon(42% 49%,53% 40%,64% 49%)'], ['#b5623d', 'polygon(80% 53%,88% 46%,96% 53%)'], ['radial-gradient(ellipse at 53% 70%,#2a221a 0 4%,transparent 4.5%)'], ['#8f7a58', 'polygon(0 78%,100% 74%,100% 100%,0 100%)']] },  valley: { bg: 'linear-gradient(180deg,#56738c 0%,#c4d2d4 50%,#6d6a4a 62%,#3f4034 100%)', layers: [['#5c6450', 'polygon(0 62%,24% 30%,48% 54%,70% 24%,100% 58%,100% 100%,0 100%)'], ['#8a6a3a', 'polygon(0 82%,40% 72%,100% 80%,100% 100%,0 100%)']] },
+  gorge: { bg: 'linear-gradient(180deg,#4b6f93 0%,#a9bccb 40%,#cfd6d8 50%,#6f6c60 56%,#3c3b34 100%)', layers: [['#5e5c56', 'polygon(0 30%,22% 38%,30% 62%,30% 100%,0 100%)'], ['#55534d', 'polygon(100% 28%,78% 36%,70% 62%,70% 100%,100% 100%)'], ['#9a9890', 'polygon(28% 52%,72% 52%,72% 60%,28% 60%)'], ['#7d7b72', 'polygon(30% 60%,70% 60%,66% 82%,34% 82%)'], ['#33464a', 'polygon(34% 82%,66% 82%,70% 100%,30% 100%)']] },
   airbase: { bg: 'linear-gradient(180deg,#2c64a0 0%,#8fbedb 52%,#dbe6e6 62%,#57534a 63%,#3f3d38 100%)', layers: [['#6d7068', 'polygon(8% 63%,8% 46%,38% 46%,38% 63%)'], ['#8a8c84', 'polygon(62% 63%,62% 30%,72% 30%,72% 63%)']] },
   unknown: { bg: 'linear-gradient(180deg,#3d4431,#1c2016)', layers: [['#2a2f21', 'polygon(0 70%,30% 58%,62% 66%,100% 54%,100% 100%,0 100%)']] },
 };
@@ -1066,6 +1069,7 @@ export function createMenu(rootEl, deps = {}) {
           { id: 'solo', kids: h('span', tx('mode.solo')) }, { id: 'multi', kids: h('span', tx('mode.multiplayer')) },
         ], id => { st.playMode = id; savePrefs(); render(); }, 'fzm-seg fzm-seg--big')),
       h('div', { class: 'fzm-play-grid' },
+        multi ? extPart('browser') : null,       // public rooms and quick play (online-ui.js): above the mode and map columns, the side panel keeps its place
         h('section', { class: 'fzm-col' }, heading(T('mode.title')), modePicker),
         h('section', { class: 'fzm-col' }, heading(T('lobby.map')), mapPicker),
         h('aside', { class: 'fzm-side' }, multi ? multiPanel(summary) : soloPanel(summary), multi ? multiCta() : soloCta())));
@@ -1134,17 +1138,17 @@ export function createMenu(rootEl, deps = {}) {
     clearTimeout(connTimer);
     connTimer = setTimeout(() => { if (st.pending) { st.pending = null; st.netError = { code: 'connect_failed' }; scheduleRender(); } }, 9000);
   }
-  function createRoom() {
+  function createRoom(opts) {       // opts (online-ui.js): {pub, bots, bz}; none = private room, as before
     if (!net || st.pending) return;
     commitName();
     const map = st.map === 'random' ? randomMap() : st.map;
-    st.netError = null; st.pending = 'create'; st.lastIntent = { type: 'create' };
+    st.netError = null; st.pending = 'create'; st.lastIntent = { type: 'create', opts };
     expectReply();
     sfx('ui');
-    net.createRoom({ name: playerName(), mode: st.mode, map });
+    net.createRoom({ name: playerName(), mode: st.mode, map, ...(opts || null) });
     render();
   }
-  function joinRoom(raw) {
+  function joinRoom(raw, extra) {
     if (!net || st.pending) return;
     commitName();
     const code = String(raw || '').trim().toUpperCase();
@@ -1152,7 +1156,7 @@ export function createMenu(rootEl, deps = {}) {
     st.netError = null; st.pending = 'join'; st.lastIntent = { type: 'join', code };
     expectReply();
     sfx('ui');
-    net.joinRoom(code, playerName());
+    net.joinRoom(code, playerName(), extra);
     render();
   }
   function leaveRoom() {
@@ -1166,7 +1170,8 @@ export function createMenu(rootEl, deps = {}) {
   }
   function retryNet() {
     const code = st.lastCode || (st.lastIntent && st.lastIntent.type === 'join' && st.lastIntent.code);
-    if (code) joinRoom(code); else createRoom();
+    if (!code && st.lastIntent && typeof st.lastIntent.retry === 'function') { st.lastIntent.retry(); return; }       // quick play (online-ui.js)
+    if (code) joinRoom(code); else createRoom(st.lastIntent && st.lastIntent.opts);
   }
   function syncLoadout(room) {
     const self = me(room);
@@ -1193,8 +1198,12 @@ export function createMenu(rootEl, deps = {}) {
       case 'not_host': return L('m.hostOnly');
       case 'rate_limited': return L('m.errRate');
       case 'no_net': return L('m.errNoNet');
-      default: return L('m.errGeneric', { code });
+      default: return extPart('errorText', code) || L('m.errGeneric', { code });
     }
+  }
+  /* Online lobby extension (online-ui.js sets api.ext): public rooms, quick play, room options, bots. A failure there never breaks the menu. */
+  function extPart(name, ...args) {
+    try { const f = api.ext && api.ext[name]; return typeof f === 'function' ? f(...args) || null : null; } catch (err) { console.warn('[menu] ext', name, err); return null; }
   }
   function alertBox() {
     if (!st.netError) return null;
@@ -1251,7 +1260,7 @@ export function createMenu(rootEl, deps = {}) {
   function multiCta() {
     if (!net) return null;
     return h('div', { class: 'fzm-cta-wrap' },
-      button('fzm-btn--primary fzm-btn--block fzm-cta', 'multi:create', h('span', tx('lobby.create')), createRoom, { disabled: !!st.pending, style: 'font-size:clamp(22px,1.6vw,27px)' }),
+      button('fzm-btn--primary fzm-btn--block fzm-cta', 'multi:create', h('span', tx('lobby.create')), () => { if (!extPart('create', createRoom)) createRoom(); }, { disabled: !!st.pending, style: 'font-size:clamp(22px,1.6vw,27px)' }),       // online-ui.js asks private or public first
       h('p', { class: 'fzm-hint', text: L('m.createHint') }));
   }
 
@@ -1269,7 +1278,7 @@ export function createMenu(rootEl, deps = {}) {
     const needPlayers = room.mode !== 'zombie' && room.mode !== 'zone' && players.length < 2, notReady = others.some(p => !p.ready);
     const env = (mapOf(room.map) || {}).env;
 
-    const row = p => h('div', { class: `fzm-player${p.ready || p.id === room.hostId ? ' is-ready' : ''}${self && p.id === self.id ? ' is-you' : ''}` },
+    const row = p => (p.bot ? extPart('botRow', p) : null) || h('div', { class: `fzm-player${p.ready || p.id === room.hostId ? ' is-ready' : ''}${self && p.id === self.id ? ' is-you' : ''}` },       // an online bot: its own row (online-ui.js)
       h('i', { class: 'fzm-dot', 'aria-hidden': 'true' }),
       h('span', { class: 'fzm-player-name', text: p.name || '' }),
       self && p.id === self.id ? h('span', { class: 'fzm-tag fzm-tag--you', ...tx('hud.you') }) : null,
@@ -1337,12 +1346,13 @@ export function createMenu(rootEl, deps = {}) {
           heading(T('lobby.code')),
           h('div', { class: 'fzm-code' }, h('span', { class: 'fzm-code-val', 'data-fid': 'lobby:codeval', text: room.code }),
             button('fzm-btn--sm', 'lobby:copy', h('span', tx('lobby.copyCode')), () => copyText(room.code, T('lobby.copied')))),
-          isHost ? h('div', { class: 'fzm-callout' }, h('span', { text: L('m.share') }), address ? h('span', { class: 'fzm-addr', text: address }) : null,
+          extPart('invite', room),       // invite link (online-ui.js)
+          isHost ? extPart('share') || h('div', { class: 'fzm-callout' }, h('span', { text: L('m.share') }), address ? h('span', { class: 'fzm-addr', text: address }) : null,       // online-ui.js: on the public site, "share this code" instead of the network address
             local ? h('small', { text: L('m.shareLocal') }) : null,
             address ? button('fzm-btn--sm', 'lobby:copyaddr', L('m.copyAddr'), () => copyText(address, L('m.addrCopied'))) : null) : null,
           alertBox(),
           button('fzm-btn--danger fzm-btn--block', 'lobby:leave', h('span', tx('lobby.leave')), leaveRoom)),
-        h('section', { class: 'fzm-panel' }, heading(T('lobby.players'), `${players.length} / ${room.maxPlayers || 12}`), roster),
+        h('section', { class: 'fzm-panel' }, heading(T('lobby.players'), `${players.length} / ${room.maxPlayers || 12}`), roster, extPart('lobby', room, isHost, playing)),       // visibility and bots (online-ui.js)
         h('aside', { class: 'fzm-side' }, h('section', { class: 'fzm-panel' },
           heading(L('m.brief')),
           h('div', { class: 'fzm-sum' }, thumb(env, room.map),
@@ -1519,9 +1529,11 @@ export function createMenu(rootEl, deps = {}) {
             h('span', { 'data-end': 'into', text: `${num(startXp % XP_PER_LEVEL)} / ${num(XP_PER_LEVEL)} XP` })),
           h('div', { class: 'fzm-lvl-bar' }, h('i', { 'data-end': 'bar', class: 'is-snap', style: `width:${((startXp % XP_PER_LEVEL) / XP_PER_LEVEL) * 100}%` })))),
       (() => { try { return globalThis.FZPass && globalThis.FZPass.endBlock ? globalThis.FZPass.endBlock('menu') : null; } catch { return null; } })(),       // passe de saison (pass.js)
+      (() => { try { return globalThis.FZReplay && globalThis.FZReplay.endBlock ? globalThis.FZReplay.endBlock('menu') : null; } catch { return null; } })(),       // meilleur moment (replay-rec.js)
       h('div', { class: 'fzm-end-actions' },
         button('fzm-btn--primary', 'end:again', online ? L('m.backLobby') : h('span', tx('end.again')), guard(endAgain)),
-        button('', 'end:back', h('span', tx('end.back')), guard(endBack))));
+        button('', 'end:back', h('span', tx('end.back')), guard(endBack)),
+        online && st.room ? extPart('endInvite', st.room) : null));       // the room goes on: invite friends (online-ui.js)
   }
 
   function runEndAnimation() {
@@ -1693,6 +1705,12 @@ export function createMenu(rootEl, deps = {}) {
     /* match-flow.js : quitter le salon depuis l'écran de vote, relire ce que l'écran de fin a calculé. */
     leaveRoom() { leaveRoom(); },
     get lastEnd() { return st.end; },
+    /* online-ui.js : ses morceaux d'écran (ext) et les briques du menu qu'il réutilise (kit), pour garder le même rendu. */
+    ext: null,
+    kit: {
+      h, button, radios, heading, tag, thumb, modeName, mapName, mapOf, L, T, tx, sfx, toast, st, MODES, MAPS, uid, joinRoom, render: () => scheduleRender(),
+      pending(kind, retry) { if (!net || st.pending) return null; commitName(); st.netError = null; st.pending = kind; st.lastIntent = { type: kind, retry }; expectReply(); sfx('ui'); render(); return playerName(); },
+    },
     showEnd(result) {
       if (destroyed) return;
       const r = result && typeof result === 'object' ? result : {};

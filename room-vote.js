@@ -10,6 +10,8 @@ const FALLBACK_MAPS = ['depot', 'vieille-ville', 'port', 'bunker', 'col-blanc', 
 // Maps a mode must not be offered on. Every map currently has bomb sites, capture zones and a Zone plan.
 const EXCLUDED = { ffa: [], tdm: [], dom: [], bomb: [], zombie: [], zone: [] };
 const minPlayers = mode => (mode === 'zombie' || mode === 'zone' ? 1 : 2);
+// Online bots (net-bots.js) count as players for the minimum, but they never vote: the early end waits for the humans only.
+const voters = room => { let n = 0; for (const q of room.players.values()) if (!q.bot) n++; return n; };
 const pickOne = list => list[crypto.randomInt(list.length)];
 
 /** The map list comes from maps.js when it can be read, so a new map is offered without touching this file. */
@@ -18,6 +20,8 @@ function readMaps() {
     const src = fs.readFileSync(path.join(__dirname, 'maps.js'), 'utf8'), at = src.indexOf('export const MAPS=['), end = src.indexOf('\n];', at);
     if (at < 0 || end < 0) return FALLBACK_MAPS;
     const ids = [...src.slice(at, end).matchAll(/\{id:'([a-z0-9-]{1,24})',name:/g)].map(m => m[1]);
+    // Maps added by a module (maps-<name>.js, registerMap at runtime) are not in the MAPS text: read their ids from the modules themselves.
+    try { for (const f of fs.readdirSync(__dirname)) if (/^maps-[a-z0-9-]+\.js$/.test(f)) for (const m of fs.readFileSync(path.join(__dirname, f), 'utf8').matchAll(/registerMap\(\s*\{\s*id\s*:\s*['"]([a-z0-9-]{1,24})['"]/g)) if (!ids.includes(m[1])) ids.push(m[1]); } catch { /* the MAPS text alone */ }
     if (ids.length < PROPOSED) return FALLBACK_MAPS;
     // The vote shows real pictures: a map still without one is not offered yet. A server hosted without the pictures offers them all.
     const pictured = ids.filter(id => fs.existsSync(path.join(__dirname, 'map-shots', id + '.webp')));
@@ -47,7 +51,7 @@ module.exports = function createRoomVote({ all, send, strike, reject, sendRoom, 
   }
   function view(room) {
     const f = room.flow;
-    const v = { t: 'flow', op: 'state', phase: f.phase, left: Math.max(0, f.endsAt - Date.now()), total: f.total, maps: f.maps, tally: tallyOf(f), voted: f.votes.size, voters: room.players.size, hostId: room.hostId, mode: f.mode, played: f.played };
+    const v = { t: 'flow', op: 'state', phase: f.phase, left: Math.max(0, f.endsAt - Date.now()), total: f.total, maps: f.maps, tally: tallyOf(f), voted: f.votes.size, voters: voters(room), hostId: room.hostId, mode: f.mode, played: f.played };
     if (f.phase === 'results') { v.board = f.board; v.winner = f.winner; v.reason = f.reason; v.teams = f.teams; }
     if (f.phase === 'winner') { v.pick = f.pick; v.how = f.how; v.choice = f.choice; }
     return v;
@@ -126,7 +130,7 @@ module.exports = function createRoomVote({ all, send, strike, reject, sendRoom, 
         if (typeof m.id !== 'string' || (m.id !== RANDOM && !f.maps.includes(m.id))) return strike(p, 'bad_vote');
         if (f.votes.get(p.id) === m.id) return;
         f.votes.set(p.id, m.id);
-        if (f.votes.size >= room.players.size) return guard(room, () => decide(room));
+        if (f.votes.size >= voters(room)) return guard(room, () => decide(room));
         return broadcast(room);
       }
       if (m.a === 'lobby') {
@@ -144,7 +148,7 @@ module.exports = function createRoomVote({ all, send, strike, reject, sendRoom, 
       guard(room, () => {
         f.votes.delete(p.id);
         if (f.phase !== 'results' && room.players.size < minPlayers(f.mode)) return toLobby(room, 'players');
-        if (f.phase === 'vote' && f.votes.size && f.votes.size >= room.players.size) return decide(room);
+        if (f.phase === 'vote' && f.votes.size && f.votes.size >= voters(room)) return decide(room);
         broadcast(room);
       });
     },

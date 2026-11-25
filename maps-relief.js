@@ -49,11 +49,12 @@ export function* roquesecheSteps(Kit) {
   VOID(-14, 12, -34, -16, 6);            // citerne
   VOID(-3, 0, -16, 23, 3.4);             // galerie nord-sud
   VOID(-37, -33.5, 26.5, 46, 3.4); VOID(33, 36.5, 26.5, 46, 3.4);      // déversoirs sur la rivière
+  fill(33, 36.5, 40, 41, c => { H[c] = L1; }); fill(36.5, 37.5, 39.5, 41, c => { H[c] = L1; });   /* (et l'encoche d'1 m entre le déversoir et l'escalier de la rivière : les claveaux et le parapet ne débordent plus dans le vide) quai droit au-dessus du déversoir est (z 41, comme à côté) : la tête de voûte affleure le mur */
   VOID(-56, -47, 14.5, 23, 3.4); VOID(47, 56, 14.5, 23, 3.4);          // caves ouest et est
   VOID(-24, -14, 14, 23, 3.4); VOID(14, 21, 14, 23, 3.4);              // caves centrales
   /* cages d'escalier ouvertes : maison ouest, maison est, place basse */
   const SLOT = (x0, x1, z0, z1) => fill(x0, x1, z0, z1, c => { H[c] = 0; V[c] = 0; B[c] = 5; });
-  const slotW = 2.4, cellarRun = run(L1), halfRun = run(L1 / 2, .4, .24); SLOT(-27.5, -24.5, 26.5, 31.6); SLOT(24.5, 27.5, 26.5, 31.6); SLOT(-13.2, -10.8, 23 - cellarRun, 23);
+  const slotW = 2.4, cellarRun = run(L1), halfRun = run(L1 / 2, .4, .24); SLOT(-29.5, -26.5, 26.5, 31.6); SLOT(26.5, 29.5, 26.5, 31.6); /* cages de cave contre le mur pignon, hors du passage entre les deux portes */ SLOT(-13.2, -10.8, 23 - cellarRun, 23);
   /* puits : escalier à vis de la place jusqu'à la citerne */
   const WX = -1, WZ = -25, WR = 2.75; for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const ex = Math.max(0, Math.abs(X(i) - WX) - G / 2), ez = Math.max(0, Math.abs(X(j) - WZ) - G / 2), an = Math.atan2(X(j) - WZ, X(i) - WX) * 180 / Math.PI; if (Math.hypot(X(i) - WX, X(j) - WZ) < WR || (Math.hypot(ex, ez) < WR - .03 && an > 40 && an < 100)) { const c = j * N + i; H[c] = 0; V[c] = 0; B[c] = 5; } }
   /* tour d'angle : cylindre vide */
@@ -62,10 +63,10 @@ export function* roquesecheSteps(Kit) {
   yield;
   /* ---------- 3. maisons ouvertes (intérieurs réels) et terrasses ---------- */
   const OPEN = [
-    { x0: -44, x1: -36, z0: -22, z1: -12, base: L2, doors: { xn: [-17], zp: [-38] }, up: { xp: [-16] }, st: 1 },
-    { x0: 36, x1: 44, z0: -22, z1: -12, base: L2, doors: { xp: [-17], zp: [38] }, up: { xn: [-16] }, st: 1 },
-    { x0: -30, x1: -22, z0: 22, z1: 32, base: L1, doors: { zn: [-27.9], zp: [-23.6] }, cellar: -26 },
-    { x0: 22, x1: 30, z0: 22, z1: 33, base: L1, doors: { zn: [27.9], zp: [23.6] }, cellar: 26 },
+    { x0: -44, x1: -36, z0: -22, z1: -12, base: L2, doors: { xn: [-17], zp: [-38] }, up: { xp: [-16] }, st: 1, bk: { zp: [-42.1] }, stair: { x: -42.74, z: -20.76, dir: 'x+', rail: 1, tread: .38 } },       // bk: breachable panel (map-breach-data.js, engine-breach.js) ; volée le long du mur sud, hors du passage
+    { x0: 36, x1: 44, z0: -22, z1: -12, base: L2, doors: { xp: [-17], zp: [38] }, up: { xn: [-16] }, st: 1, bk: { zp: [42.15] }, stair: { x: 42.74, z: -20.76, dir: 'x-', rail: 1, tread: .38 } },   /* pied à 0,9 m du mur, palier de 1,4 m en haut */
+    { x0: -30, x1: -22, z0: 22, z1: 32, base: L1, doors: { zn: [-27.9], zp: [-23.6] }, cellar: -28 },
+    { x0: 22, x1: 30, z0: 22, z1: 33, base: L1, doors: { zn: [27.9], zp: [23.6] }, cellar: 28 },
   ];
   for (const h of OPEN) fill(h.x0, h.x1, h.z0, h.z1, c => { if (B[c] !== 5) { B[c] = 4; H[c] = h.base; } CV[c] = 1; });
   const TERR = [[-36, -20, -23, -8], [-14, -4, -14, -6], [4, 12, -14, -6], [18, 36, -23, -8]];
@@ -167,18 +168,20 @@ export function* roquesecheSteps(Kit) {
     for (const h of hs) { seg(u, h.a, y0, y1); if (h.y0 > y0) seg(h.a, h.b, y0, h.y0); if (h.y1 < y1) seg(h.a, h.b, h.y1, y1); if (h.door) A.arch(ax, c, h.a, h.b, y0, h.spring, h.y1, T_W, { th: .26, pointed: h.pointed }); u = h.b; } seg(u, b, y0, y1);
     if (ax === 'x') { A.begin('ar_plaster'); A.tint(...(rgb || [1, 1, 1])); A.box(a - .004, a + .02, y0, y1, c - T_W / 2, c + T_W / 2); A.box(b - .02, b + .004, y0, y1, c - T_W / 2, c + T_W / 2); A.end(); }
     if (sP) A.sheet('ar_plaster', ax, c + T_W / 2, 1, a, b, y0, y1, { holes: hs, rgb, rough: .02, du: .78, dy: .34 }); if (sN) A.sheet('ar_plaster', ax, c - T_W / 2, -1, a, b, y0, y1, { holes: hs, rgb, rough: .02, du: .78, dy: .34 });
-    for (const h of hs) if (!h.door) { for (const s of [-1, 1]) if (s > 0 ? sP : sN) A.window(ax, c + s * T_W / 2, s, (h.a + h.b) / 2, h.y0, h.b - h.a, h.y1 - h.y0, { shutter: false }); }
+    for (const h of hs) if (h.bk) { const s = ax === 'x' ? k.col(h.a, h.b, h.y0, h.y1, c - T_W / 2, c + T_W / 2, 'concrete') : k.col(c - T_W / 2, c + T_W / 2, h.y0, h.y1, h.a, h.b, 'concrete'); s.breachable = true; s.bkind = h.bk; }       // tagging API: the game draws the panel in this gap
+    for (const h of hs) if (!h.door && !h.bk) { for (const s of [-1, 1]) if (s > 0 ? sP : sN) A.window(ax, c + s * T_W / 2, s, (h.a + h.b) / 2, h.y0, h.b - h.a, h.y1 - h.y0, { shutter: false }); }
   }
   for (const h of OPEN) {
     const { x0, x1, z0, z1, base: y } = h, F = 3, top = h.st ? y + 5.8 : y + 3.3, rgb = PLASTERS[Math.floor(k.r() * PLASTERS.length)], D = (c) => ({ a: c - 1, b: c + 1, y0: y, y1: y + 2.62, spring: y + 1.72, door: true, pointed: c % 2 < 1 }), Up = (c) => ({ a: c - .95, b: c + .95, y0: y + F, y1: y + F + 2.5, spring: y + F + 1.7, door: true }), Win = (c, yy) => ({ a: c - .4, b: c + .4, y0: yy, y1: yy + 1.05 });
-    const mk = (side, lo, hi) => { const ds = (h.doors[side] || []).map(D), hs = [...ds]; for (let c = lo + 1.2; c < hi - .9; c += 2.3) if (ds.every(d => c + .55 < d.a || c - .55 > d.b)) hs.push(Win(c, y + 1.15)); return hs; }, mkU = (side, lo, hi) => { const ds = ((h.up || {})[side] || []).map(Up), hs = [...ds]; for (let c = lo + 1.2; c < hi - .9; c += 2.3) if (ds.every(d => c + .55 < d.a || c - .55 > d.b)) hs.push(Win(c, y + F + 1.0)); return hs; };
-    hWall('x', z0 + T_W / 2, x0, x1, y, y + F, mk('zn', x0, x1), true, true, rgb); hWall('x', z1 - T_W / 2, x0, x1, y, y + F, mk('zp', x0, x1), true, true, rgb); hWall('z', x0 + T_W / 2, z0 + T_W, z1 - T_W, y, y + F, mk('xn', z0, z1), true, true, rgb); hWall('z', x1 - T_W / 2, z0 + T_W, z1 - T_W, y, y + F, mk('xp', z0, z1), true, true, rgb);
+    const mk = (side, lo, hi) => { const ds = [...(h.doors[side] || []).map(D), ...((h.bk || {})[side] || []).map(c => ({ a: c - 1.1, b: c + 1.1, y0: y, y1: y + 2.4, bk: 'plaster' }))], hs = [...ds]; for (let c = lo + 1.2; c < hi - .9; c += 2.3) if (ds.every(d => c + .55 < d.a || c - .55 > d.b)) hs.push(Win(c, y + 1.15)); return hs; }, mkU = (side, lo, hi) => { const ds = ((h.up || {})[side] || []).map(Up), hs = [...ds]; for (let c = lo + 1.2; c < hi - .9; c += 2.3) if (ds.every(d => c + .55 < d.a || c - .55 > d.b)) hs.push(Win(c, y + F + 1.0)); return hs; };
+    { const yw = h.st ? y + F : top + .08;   /* maison basse : les murs montent jusqu'au toit (fente de 30 cm sous le toit avant) */ hWall('x', z0 + T_W / 2, x0, x1, y, yw, mk('zn', x0, x1), true, true, rgb); hWall('x', z1 - T_W / 2, x0, x1, y, yw, mk('zp', x0, x1), true, true, rgb); hWall('z', x0 + T_W / 2, z0 + T_W, z1 - T_W, y, yw, mk('xn', z0, z1), true, true, rgb); hWall('z', x1 - T_W / 2, z0 + T_W, z1 - T_W, y, yw, mk('xp', z0, z1), true, true, rgb); }
     if (h.st) {
-      hWall('x', z0 + T_W / 2, x0, x1, y + F, top, mkU('zn', x0, x1), true, true, rgb); hWall('x', z1 - T_W / 2, x0, x1, y + F, top, mkU('zp', x0, x1), true, true, rgb); hWall('z', x0 + T_W / 2, z0 + T_W, z1 - T_W, y + F, top, mkU('xn', z0, z1), true, true, rgb); hWall('z', x1 - T_W / 2, z0 + T_W, z1 - T_W, y + F, top, mkU('xp', z0, z1), true, true, rgb);
+      hWall('x', z0 + T_W / 2, x0, x1, y + F, top + .08, mkU('zn', x0, x1), true, true, rgb); hWall('x', z1 - T_W / 2, x0, x1, y + F, top + .08, mkU('zp', x0, x1), true, true, rgb); hWall('z', x0 + T_W / 2, z0 + T_W, z1 - T_W, y + F, top + .08, mkU('xn', z0, z1), true, true, rgb); hWall('z', x1 - T_W / 2, z0 + T_W, z1 - T_W, y + F, top + .08, mkU('xp', z0, z1), true, true, rgb);
       /* volée intérieure le long du mur et plancher percé */
-      const sx = (x0 + x1) / 2 - .2, sz = z0 + T_W + .25, w = 1.7, L = A.stairs(sx, sz, w, 'z+', y, y + F, { walls: false, rail: 1, m: 'ar_ashlar' }), hole = [sx - w / 2 - .02, sx + w / 2 + .02, sz - .05, sz + L + .05];
-      for (const [a, b, c, d] of [[x0 + T_W, hole[0], z0 + T_W, z1 - T_W], [hole[1], x1 - T_W, z0 + T_W, z1 - T_W], [hole[0], hole[1], z0 + T_W, hole[2]], [hole[0], hole[1], hole[3], z1 - T_W]]) if (b - a > .02 && d - c > .02) { sol(a, b, y + F - .18, y + F, c, d, 'wood'); A.begin('ar_wood'); const nb = Math.max(1, Math.round((b - a) / .22)); for (let i = 0; i < nb; i++) { const v = A.rnd(.72, .96); A.tint(v * .86, v * .68, v * .5); const u0 = a + (b - a) * i / nb, u1 = a + (b - a) * (i + 1) / nb; A.box(u0 + .004, u1 - .004, y + F - .05, y + F, c, d, 0, 'y'); } A.tint(.5, .38, .27); for (let q = c + .3; q < d; q += .85) A.box(a, b, y + F - .24, y + F - .05, q - .07, q + .07); A.end(); }
-      A.handrail('x', hole[0], 1, hole[1] - hole[0], hole[3] + .03, y + F, y + F); k.col(hole[0], hole[1], y + F, y + F + .95, hole[3], hole[3] + .06, 'metal');
+      const ST = h.stair || { x: (x0 + x1) / 2 - .2, z: z0 + T_W + .25, dir: 'z+', rail: 1 }, w = 1.7, sx = ST.x, sz = ST.z, L = A.stairs(sx, sz, w, ST.dir, y, y + F, { walls: false, rail: ST.rail, m: 'ar_ashlar', tread: ST.tread }), hole = ST.dir === 'z+' ? [sx - w / 2, sx + w / 2, sz - .05, sz + L] : ST.dir === 'z-' ? [sx - w / 2, sx + w / 2, sz - L, sz + .05] : ST.dir === 'x+' ? [sx - .05, sx + L, sz - w / 2, sz + w / 2] : [sx - L, sx + .05, sz - w / 2, sz + w / 2];   // trémie à l'aplomb de la volée
+      for (const [a, b, c, d] of [[x0 + T_W, hole[0], z0 + T_W, z1 - T_W], [hole[1], x1 - T_W, z0 + T_W, z1 - T_W], [hole[0], hole[1], z0 + T_W, hole[2]], [hole[0], hole[1], hole[3], z1 - T_W]]) if (b - a > .02 && d - c > .02) { sol(a, b, y + F - .18, y + F, c, d, 'wood'); A.begin('ar_wood'); const nb = Math.max(1, Math.round((b - a) / .22)); for (let i = 0; i < nb; i++) { const v = A.rnd(.72, .96); A.tint(v * .86, v * .68, v * .5); const u0 = a + (b - a) * i / nb, u1 = a + (b - a) * (i + 1) / nb; A.box(u0 + .004, u1 - .004, y + F - .05, y + F, c, d, 0, 'y'); } A.tint(.5, .38, .27); A.box(a, b, y + F - .06, y + F - .05, c, d); /* sous-plancher : les joints des lames et le dessous ne laissent plus voir à travers */ for (let q = c + .3; q < d; q += .85) A.box(a, b, y + F - .24, y + F - .05, q - .07, q + .07); A.end(); }
+      /* garde-corps sur les bords ouverts de la trémie, jamais sur le bord d'arrivée de la volée */
+      { const yF = y + F, arr = ST.dir === 'z+' ? 3 : ST.dir === 'z-' ? 2 : ST.dir === 'x+' ? 1 : 0, lim = [x0 + T_W, x1 - T_W, z0 + T_W, z1 - T_W]; for (let e = 0; e < 4; e++) { if (e === arr) continue; const v = hole[e], far = e & 1 ? lim[e] - v : v - lim[e]; if (far < .3) continue; const c = v + (e & 1 ? .03 : -.03); if (e < 2) { A.handrail('z', hole[2], 1, hole[3] - hole[2], c, yF, yF); k.col(c - .03, c + .03, yF, yF + .95, hole[2], hole[3], 'metal'); } else { A.handrail('x', hole[0], 1, hole[1] - hole[0], c, yF, yF); k.col(hole[0], hole[1], yF, yF + .95, c - .03, c + .03, 'metal'); } } }
       A.begin('ar_wood'); A.tint(.56, .42, .3); for (let q = z0 + .5; q < z1 - .3; q += .9) A.box(x0 + T_W, x1 - T_W, top - .2, top - .04, q - .08, q + .08); A.end(); sol(x0, x1, top, top + .1, z0, z1);
       A.roof(x0, x1, z0, z1, top + .08, (x1 - x0 >= z1 - z0) ? 'x' : 'z', { pitch: .44 });
     } else {
@@ -186,8 +189,8 @@ export function* roquesecheSteps(Kit) {
       A.cask(x0 + .95, z0 + 1.1, y); A.cask(x0 + .95, z0 + 1.95, y); A.crate(x1 - .95, z1 - 1, y); A.jar(x1 - .8, z0 + .9, y);
     }
     if (h.cellar !== undefined) { /* escalier de cave à deux volées et palier, du grand égout au rez-de-chaussée */
-      const c = h.cellar, mid = y / 2, zL = 26.5 + halfRun; A.stairs(c - .75, 26.5, 1.42, 'z+', 0, mid, { walls: false, rise: .24, tread: .4 }); A.landing(c - 1.5, c + 1.5, zL, 31.6, mid, { y0: 0 }); A.stairs(c + .75, zL, 1.42, 'z-', mid, y, { walls: false, rise: .24, tread: .4 });
-      sol(c - .05, c + .05, 0, y + .95, 26.5, zL); A.begin('ar_rubble'); A.tint(.9); A.box(c - .05, c + .05, 0, y + .92, 26.5, zL, .006); A.end(); A.parapet('x', 26.44, c - 1.5, c, y, .92, .12, {}); A.parapet('z', c - 1.56, 26.5, 31.6, y, .92, .12, {}); A.parapet('z', c + 1.56, 26.5, 31.6, y, .92, .12, {}); A.parapet('x', 31.66, c - 1.5, c + 1.5, y, .92, .12, {}); }
+      const c = h.cellar, mid = y / 2, zL = 26.5 + halfRun; A.stairs(c - .75, 26.5, 1.5, 'z+', 0, mid, { walls: false, rise: .24, tread: .4 }); A.landing(c - 1.5, c + 1.5, zL, 31.6, mid, { y0: 0 }); A.stairs(c + .75, zL, 1.5, 'z-', mid, y, { walls: false, rise: .24, tread: .4 });
+      sol(c - .05, c + .05, 0, y + .95, 26.5, zL); A.begin('ar_rubble'); A.tint(.9); A.box(c - .05, c + .05, 0, y + .92, 26.5, zL, .006); A.end(); const pa = c - 1.5 - (c - 1.5 - (x0 + T_W) < .2 ? .14 : 0), pb = c + 1.5 + ((x1 - T_W) - c - 1.5 < .2 ? .14 : 0);   /* cage contre le pignon : les garde-corps vont jusqu'au mur */ A.parapet('x', 26.44, pa, c, y, .92, .12, {}); A.parapet('z', c - 1.56, 26.5, 31.6, y, .92, .12, {}); A.parapet('z', c + 1.56, 26.5, 31.6, y, .92, .12, {}); A.parapet('x', 31.66, pa, pb, y, .92, .12, {}); }
     A.lantern((x0 + x1) / 2 + 1.2, y + 2.35, (z0 + z1) / 2);
   }
 
@@ -197,7 +200,7 @@ export function* roquesecheSteps(Kit) {
   for (const x of [-54, 54]) A.stairs(x, 7.5 + run(L2 - L1), 4, 'z-', L1, L2, { walls: false, rail: 1 });
   A.stairs(0, 12, 8, 'z-', L1, L2, { tread: 1, rise: RISE, walls: false, wear: .03 });
   for (const sd of [-1, 1]) A.handrail('z', 12, -1, 16, sd * 3.86, L1, L2);
-  for (const x of [-26, 26]) A.stairs(x, 6 + run(L2 - L1), 3.8, 'z-', L1, L2, { walls: false, rail: x < 0 ? 1 : -1 });
+  for (const x of [-26, 26]) A.stairs(x, 6 + run(L2 - L1), 4, 'z-', L1, L2, { walls: false, rail: x < 0 ? 1 : -1 });   // toute la largeur du passage (4 m) : plus de vide de 10 cm le long des murs
   /* quai <-> rivière */
   for (const x of RIV) A.stairs(x, 42.5 + run(L1), 3.6, 'z-', 0, L1, { rail: -1 });
   /* place basse <-> égout */
@@ -205,10 +208,10 @@ export function* roquesecheSteps(Kit) {
   for (const sd of [-1, 1]) A.parapet('z', -12 + sd * (slotW / 2 + .08), 23 - cellarRun, 23, L1, .9, .16, {});
   A.parapet('x', 23.08, -13.3, -10.7, L1, .9, .16, {});
   /* ville haute <-> rempart */
-  for (const [x, w] of [[-46, 3.8], [-1, 3.8], [46, 3.8]]) A.stairs(x, -42 + run(L3 - L2), w, 'z-', L2, L3, { walls: false, rail: 1 });
+  for (const [x, w] of [[-46, 4], [-1, 4], [46, 4]]) A.stairs(x, -42 + run(L3 - L2), w, 'z-', L2, L3, { walls: false, rail: 1 });
   /* rue <-> terrasses : escaliers extérieurs */
   const rr = run(ROOF - L2), OUT = [[-15.5, -14.85, 'x+', -15.5 + rr, -15.5 + rr + 1.15, -15.6, -14], [12.5, -14.85, 'x-', 12.5 - rr, 12.5 - rr - 1.15, -15.6, -14], [-35.5, -7.25, 'x+', -35.5 + rr, -35.5 + rr + 1.15, -8, -6.5], [35.1, -7.25, 'x-', 35.1 - rr, 35.1 - rr - 1.15, -8, -6.5]];
-  for (const [x, z, dir, e0, e1, z0, z1] of OUT) { A.stairs(x, z, 1.5, dir, L2, ROOF, { walls: false, rail: dir === 'x+' ? -1 : 1, newel: [-1, 1].filter(sd => { const px = x + (dir === 'x+' ? 1 : -1) * .23, pz = z + sd * .92; return openAt(px, pz); }) }); const lo = Math.min(e0, e1), hi = Math.max(e0, e1); A.landing(lo, hi, z0, z1, ROOF, { y0: ROOF - .3 }); A.begin('ar_ashlar'); A.tint(.8); A.box(lo, hi, ROOF - .3, ROOF - .02, z0, z1, .01); A.end(); for (const px of [lo + .12, hi - .12]) { A.column(px, z < -12 ? z0 + .14 : z1 - .14, L2, ROOF - .3, .09, { seg: 8 }); } }
+  for (const [x, z, dir, e0, e1, z0, z1] of OUT) { A.stairs(x, (z0 + z1) / 2, z1 - z0, dir, L2, ROOF, { walls: false, rail: dir === 'x+' ? -1 : 1, newel: [-1, 1].filter(sd => { const px = x + (dir === 'x+' ? 1 : -1) * .23, pz = z + sd * .92; return openAt(px, pz); }) }); const lo = Math.min(e0, e1), hi = Math.max(e0, e1); A.landing(lo, hi, z0, z1, ROOF, { y0: ROOF - .3 }); A.begin('ar_ashlar'); A.tint(.8); A.box(lo, hi, ROOF - .3, ROOF - .02, z0, z1, .01); A.end(); for (const px of [lo + .12, hi - .12]) { A.column(px, z < -12 ? z0 + .14 : z1 - .14, L2, ROOF - .3, .09, { seg: 8 }); } }
   /* passerelles couvertes entre les terrasses */
   const bridge = (x0, x1, z0, z1, covered) => { const s = sol(x0, x1, ROOF - .16, ROOF, z0, z1, 'wood'); void s; A.begin('ar_wood'); const n = Math.round((x1 - x0) / .2); for (let i = 0; i < n; i++) { const v = A.rnd(.74, 1); A.tint(v * .84, v * .66, v * .46); const a = x0 + (x1 - x0) * i / n + .005, b = x0 + (x1 - x0) * (i + 1) / n - .005, sag = -.03 * Math.sin(((a + b) / 2 - x0) / (x1 - x0) * Math.PI); A.box(a, b, ROOF - .05 + sag, ROOF + sag, z0, z1, .004); } A.tint(.5, .38, .27); for (const z of [z0 + .12, z1 - .12]) A.box(x0, x1, ROOF - .26, ROOF - .05, z - .08, z + .08, .006); A.end();
     for (const sd of [-1, 1]) { const z = sd < 0 ? z0 + .05 : z1 - .05; A.begin('ar_wood'); A.tint(.56, .42, .3); const m = Math.max(2, Math.round((x1 - x0) / 1.05)); for (let i = 0; i <= m; i++) { const x = x0 + (x1 - x0) * i / m; A.rod(x, ROOF - .05, z, x, ROOF + (covered ? 2.2 : .98), z, .04, 5); } A.rod(x0, ROOF + .96, z, x1, ROOF + .96, z, .035, 5); A.rod(x0, ROOF + .5, z, x1, ROOF + .5, z, .02, 4); A.end(); k.col(x0, x1, ROOF, ROOF + 1, z - .04, z + .04, 'wood'); }
@@ -216,7 +219,7 @@ export function* roquesecheSteps(Kit) {
   bridge(-20, -14, -11.5, -8.5, false); bridge(-4, 4, -11.5, -8.5, true); bridge(12, 18, -11.5, -8.5, false);
   /* parapets des terrasses, ouverts aux passerelles, escaliers et portes */
   const gapped = (ax, c, a, b, y, gaps, h = .92) => { let u = a; for (const [p, q] of gaps.slice().sort((m, n) => m[0] - n[0])) { if (p - u > .3) A.parapet(ax, c, u, p, y, h, .24); u = Math.max(u, q); } if (b - u > .3) A.parapet(ax, c, u, b, y, h, .24); };
-  gapped('x', -22.9, -36, -20, ROOF, []); gapped('x', -8.12, -36, -20, ROOF, [[-35.5 + rr - .05, -35.5 + rr + 1.2]]); gapped('z', -19.9, -23, -8, ROOF, [[-11.6, -8.4]]); gapped('z', -35.9, -23, -8, ROOF, [[-17, -15]]);
+  gapped('x', -22.9, -36, -20, ROOF, []); gapped('x', -8.12, -36, -20, ROOF, [[-35.5 + rr - .05, -35.5 + rr + 1.2]]); gapped('z', -19.9, -23, -8, ROOF, [[-11.49, -8.4]]); gapped('z', -35.9, -23, -8, ROOF, [[-17, -15]]);
   gapped('x', -13.88, -14, -4, ROOF, [[-15.5 + rr - .05, -15.5 + rr + 1.2]]); gapped('x', -6.12, -14, -4, ROOF, []); gapped('z', -13.88, -14, -6, ROOF, [[-11.6, -8.4]]); gapped('z', -4.12, -14, -6, ROOF, [[-11.6, -8.4]]);
   gapped('x', -13.88, 4, 12, ROOF, [[12.5 - rr - 1.2, 12.5 - rr + .05]]); gapped('x', -6.12, 4, 12, ROOF, []); gapped('z', 4.12, -14, -6, ROOF, [[-11.6, -8.4]]); gapped('z', 11.88, -14, -6, ROOF, [[-11.6, -8.4]]);
   gapped('x', -22.9, 18, 36, ROOF, []); gapped('x', -8.12, 18, 36, ROOF, [[35.1 - rr - 1.2, 35.1 - rr + .05]]); gapped('z', 18.12, -23, -8, ROOF, [[-11.6, -8.4]]); gapped('z', 35.9, -23, -8, ROOF, [[-17, -15]]);
@@ -243,10 +246,12 @@ export function* roquesecheSteps(Kit) {
   const inWell = (x, z) => Math.hypot(x - WX, z - WZ) < WR + .1;
   for (const [a, b] of [[-34, -28], [-28, -22], [-22, -16]]) A.vault('x', -14, 12, a, b, 3.6, 5.96, { hole: inWell, rib: 5.2, seg: 12 });
   for (const z of [-28, -22]) for (let x = -11.4; x < 12; x += 5.2) { if (Math.hypot(x - WX, z - WZ) < WR + .8) continue; A.column(x, z, 0, 3.7, .42, { m: 'ar_ashlar' }); }
-  A.vault('x', -56, 56, 23, 26.5, 2.1, 3.58, { rib: 3.6, hole: (x) => (x > -27.4 && x < -24.6) || (x > 24.6 && x < 27.4) || (x > -13.4 && x < -10.6) ? false : false });
-  A.vault('z', -16, 23, -3, 0, 2.1, 3.38, { rib: 3.8 });
-  A.vault('z', 26.5, 46, -37, -33.5, 2.1, 3.38, { rib: 3.8 }); A.vault('z', 26.5, 46, 33, 36.5, 2.1, 3.38, { rib: 3.8 });
-  for (const [x0, x1] of [[-56, -47], [47, 56], [-24, -14], [14, 21]]) A.vault('z', 14.5, 23, x0, x1, 2.1, 3.38, { rib: 2.8 });
+  A.vault('x', -56, 56, 23, 26.5, 2.1, 3.58, { rib: 3.6, shell: .12, hole: (x) => (x > -27.4 && x < -24.6) || (x > 24.6 && x < 27.4) || (x > -13.4 && x < -10.6) ? false : false });
+  /* plafond sombre du grand égout au ras de la roche (vu d'en bas seulement) : depuis les galeries latérales, le regard passait au-dessus des reins jusqu'au ciel */ A.begin('ar_rubble'); for (let x = -56; x < 56; x += 4) { A.tint(.6 + .08 * noise2(x * .3, 2.1)); A.quad(x, 3.6, 23, x + 4, 3.6, 23, x + 4, 3.6, 26.5, x, 3.6, 26.5); } A.end();   /* moellon dans l'ombre, pas un vide noir */
+  A.vault('z', -16, 23, -3, 0, 2.1, 3.38, { rib: 3.8, ends: 'u0' });   /* tympan côté citerne : plus de ciel dans les coins de l'ouverture */
+  /* déversoirs : la voûte s'arrête au mur du quai (tête à claveaux, tympan, parapet au-dessus) ; dehors, le radier seul */
+  for (const [x0, x1, zb] of [[-37, -33.5, 40], [33, 36.5, 41]]) { A.vault('z', 26.5, zb, x0, x1, 2.1, 3.38, { rib: 3.8, ends: 'u1' }); A.arch('x', zb - .1, x0, x1, 0, 2.1, 3.38, .2, { col: false, th: .32, proud: .03 });   /* le parapet au-dessus est celui du quai (boucle des garde-corps de la rivière) */ }
+  for (const [x0, x1] of [[-56, -47], [47, 56], [-24, -14], [14, 21]]) A.vault('z', x0 === -24 || x0 === 14 ? 14 : 14.5, 23, x0, x1, 2.1, 3.38, { rib: 2.8 });   /* caves centrales : la voûte couvre toute la cave (fente de 50 cm au fond avant) */
   for (const l of LAMPS) { A.lantern(l[0], l[1], l[2]); }
   for (const [x, z] of [[-54.8, 15.6], [-54.8, 16.5], [-53.9, 15.6], [54.6, 15.6], [54.6, 16.5], [-23, 15.4], [-23, 16.3], [20, 15.4], [19.1, 15.4]]) A.cask(x, z, 0);
   for (const [x, z] of [[-49, 16], [49, 16], [-15.2, 15.6], [15.2, 15.6]]) { A.crate(x, z, 0, .85); A.jar(x + 1.1, z - .1, 0, 1.1); }
@@ -254,7 +259,7 @@ export function* roquesecheSteps(Kit) {
   yield;
   A.wellCurb(WX, WZ, 5.72, WR + .03, .28, .34);
   /* ---------- 13. marché couvert ---------- */
-  { const [x0, x1, z0, z1] = MK, sp = L2 + 2.5, cr = L2 + 3.75; k.col(x0, x1, cr, cr + .3, z0, z1, 'concrete').mm = 0; A.vault('x', x0, x1, z0, z1, sp, cr, { m: 'ar_plaster', rib: 3.2, seg: 10, tone: .92 }); A.roof(x0, x1, z0 - .3, z1 + .3, cr + .28, 'x', { pitch: .32, gable: false }); for (let x = x0 + 2; x < x1 - 1; x += 4.1) { const nS = (Math.round((x - x0) / 4.1) % 2); A.stall('x', x, nS ? z0 + .72 : z1 - .72, L2, { L: 2.6, D: .95, cols: nS ? [[.76, .3, .24], [.9, .84, .7]] : [[.34, .46, .55], [.9, .86, .74]] }); } for (const e of [x0, x1]) A.arch('z', e, z0 + .36, z1 - .36, L2, sp, cr, .5, { th: .34, pointed: true }); A.lantern((x0 + x1) / 2 - 4, cr - .55, (z0 + z1) / 2); A.lantern((x0 + x1) / 2 + 4, cr - .55, (z0 + z1) / 2); }
+  { const [x0, x1, z0, z1] = MK, sp = L2 + 2.5, cr = L2 + 3.75; k.col(x0, x1, cr, cr + .3, z0, z1, 'concrete').mm = 0; A.vault('x', x0, x1, z0, z1, sp, cr, { m: 'ar_plaster', rib: 3.2, seg: 10, tone: .92 }); A.roof(x0, x1, z0 - .3, z1 + .3, cr + .28, 'x', { pitch: .32, gable: false }); for (let x = x0 + 2; x < x1 - 1; x += 4.1) { const nS = (Math.round((x - x0) / 4.1) % 2); A.stall('x', x, nS ? z0 + .72 : z1 - .72, L2, { L: 2.6, D: .95, cols: nS ? [[.76, .3, .24], [.9, .84, .7]] : [[.34, .46, .55], [.9, .86, .74]] }); } for (const e of [x0, x1]) A.arch('z', e, z0 + .34, z1 - .34, L2, sp, cr, .5, { th: .34, pointed: true });   /* piles contre les façades (fente de 2 cm avant) */ A.lantern((x0 + x1) / 2 - 4, cr - .55, (z0 + z1) / 2); A.lantern((x0 + x1) / 2 + 4, cr - .55, (z0 + z1) / 2); }
 
   yield;
   /* ---------- 14. arches sur rue, détails de vie ---------- */
@@ -308,8 +313,12 @@ export function* roquesecheSteps(Kit) {
     { x0: -37, x1: -33.5, y0: 0, y1: 4.8, z0: 26.5, z1: 46 }, { x0: 33, x1: 36.5, y0: 0, y1: 4.8, z0: 26.5, z1: 46 }, { x0: -56, x1: -47, y0: 0, y1: 4.8, z0: 14.5, z1: 23 }, { x0: 47, x1: 56, y0: 0, y1: 4.8, z0: 14.5, z1: 23 }, { x0: -24, x1: -14, y0: 0, y1: 4.8, z0: 14, z1: 23 }, { x0: 14, x1: 21, y0: 0, y1: 4.8, z0: 14, z1: 23 },
     { x0: MK[0], x1: MK[1], y0: L2, y1: L2 + 3.8, z0: MK[2], z1: MK[3] }, ...OPEN.map(h => ({ x0: h.x0, x1: h.x1, y0: h.base, y1: h.base + (h.st ? 5.8 : 3.3), z0: h.z0, z1: h.z1 })),
   ];
+  /* murs de limite (anneau |x| ou |z| > 60, dessus ≥ 8 m) : volume de collision de leur dessus jusqu'à 18 m ; on y montait depuis les toits du sud-est (test de sauts escape.mjs) */
+  { const lim = k.solids.filter(s => s.y1 < 17.9), topAt = (x, z) => { let t = 0; for (const s of lim) if (x > s.x0 && x < s.x1 && z > s.z0 && z < s.z1 && s.y1 > t) t = s.y1; return t; };
+    for (let zi = -S; zi < S; zi++) { let run = null; const flush = () => { if (run) { k.col(run.x0, run.x1, run.t, 18, zi, zi + 1, 'concrete'); run = null; } };
+      for (let xi = -S; xi < S; xi++) { const x = xi + .5, z = zi + .5, t = Math.abs(x) > 60 || Math.abs(z) > 60 ? topAt(x, z) : 0; if (t >= 8 && t < 17.9) { if (run && Math.abs(run.t - t) < .01) run.x1 = xi + 1; else { flush(); run = { x0: xi, x1: xi + 1, t }; } } else flush(); } flush(); } }
   k.shadowProxy = true; for (const q of k.solids) if (A.under((q.x0 + q.x1) / 2, (q.z0 + q.z1) / 2, q.y1)) q.ug = 1;
-  const OPENINGS = [[WX, WZ, 17], [-12, 19, 13], [-26, 28.5, 11], [26, 28.5, 11], [-35.25, 41, 13], [34.75, 41, 13], [-35.25, 30, 10], [34.75, 30, 10], [-1.5, -2, 8.5]];
+  const OPENINGS = [[WX, WZ, 17], [-12, 19, 13], [-28, 28.5, 11], [28, 28.5, 11], [-35.25, 41, 13], [34.75, 41, 13], [-35.25, 30, 10], [34.75, 30, 10], [-1.5, -2, 8.5]];
   k.visAt = (x, y, z) => { for (let i = 0; i < OPENINGS.length; i++) { const o = OPENINGS[i], dx = x - o[0], dz = z - o[1]; if (dx * dx + dz * dz < o[2] * o[2]) return 3; } if (Math.abs(x) >= S || Math.abs(z) >= S) return 2; const c = Ic(z) * N + Ic(x); if ((V[c] > 0 && y < V[c]) || H[c] > y + 1.2) return 1; return 2; };
   /* itinéraires des bots : un détour par les souterrains, le rempart ou les toits */
   /* identité des deux moitiés : enduit chaud (ocre) à l'ouest, chaux froide à l'est ; quartier du linge à l'est. Rien ne touche aux collisions. */
