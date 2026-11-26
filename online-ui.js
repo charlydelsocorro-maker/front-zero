@@ -9,12 +9,14 @@ const TX = {
   quickSub: ['{mode} · rejoindre ou créer', '{mode} · join or create', '{mode} · unirse o crear', '{mode} · beitreten oder erstellen', '{mode} · entrar ou criar', '{mode} · entra o crea'],
   waking: ['Réveil du serveur…', 'Waking the server…', 'Despertando el servidor…', 'Server wird geweckt…', 'A acordar o servidor…', 'Risveglio del server…'],
   wakingLong: ['jusqu’à une minute', 'up to a minute', 'hasta un minuto', 'bis zu einer Minute', 'até um minuto', 'fino a un minuto'],
+  woke: ['Serveur réveillé ({s} s)', 'Server woke up ({s} s)', 'Servidor despierto ({s} s)', 'Server geweckt ({s} s)', 'Servidor acordado ({s} s)', 'Server risvegliato ({s} s)'],
+  onlineNow: ['Serveur en ligne', 'Server online', 'Servidor en línea', 'Server online', 'Servidor online', 'Server online'],
   online: ['Serveur en ligne · {ms} ms', 'Server online · {ms} ms', 'Servidor en línea · {ms} ms', 'Server online · {ms} ms', 'Servidor online · {ms} ms', 'Server online · {ms} ms'],
   down: ['Serveur injoignable · nouvel essai dans {s} s', 'Server unreachable · retrying in {s} s', 'Servidor inaccesible · reintento en {s} s', 'Server nicht erreichbar · neuer Versuch in {s} s', 'Servidor inacessível · nova tentativa em {s} s', 'Server irraggiungibile · nuovo tentativo tra {s} s'],
   downStop: ['Serveur injoignable', 'Server unreachable', 'Servidor inaccesible', 'Server nicht erreichbar', 'Servidor inacessível', 'Server irraggiungibile'],
   retry: ['Réessayer', 'Retry', 'Reintentar', 'Erneut versuchen', 'Tentar de novo', 'Riprova'],
   old: ['Ce serveur ne liste pas encore les salons', 'This server does not list rooms yet', 'Este servidor aún no lista salas', 'Dieser Server listet noch keine Räume', 'Este servidor ainda não lista salas', 'Questo server non elenca ancora le stanze'],
-  empty: ['Aucun salon public pour l’instant. Lancez une partie rapide : des bots vous attendent, et les joueurs qui arrivent prennent leur place.', 'No public room right now. Start a quick play: bots are waiting, and players who arrive take their seats.', 'Ninguna sala pública por ahora. Lanza una partida rápida: los bots te esperan y los jugadores que llegan ocupan su lugar.', 'Gerade kein öffentlicher Raum. Starte ein schnelles Spiel: Bots warten, und neue Spieler übernehmen ihre Plätze.', 'Nenhuma sala pública por agora. Lança uma partida rápida: os bots esperam por ti e os jogadores que chegam ocupam o lugar deles.', 'Nessuna stanza pubblica per ora. Avvia una partita rapida: i bot ti aspettano e chi arriva prende il loro posto.'],
+  empty: ['Aucun salon public pour l’instant. Lance une partie rapide : des bots t’attendent, et les joueurs qui arrivent prennent leur place.', 'No public room right now. Start a quick play: bots are waiting, and players who arrive take their seats.', 'Ninguna sala pública por ahora. Lanza una partida rápida: los bots te esperan y los jugadores que llegan ocupan su lugar.', 'Gerade kein öffentlicher Raum. Starte ein schnelles Spiel: Bots warten, und neue Spieler übernehmen ihre Plätze.', 'Nenhuma sala pública por agora. Lança uma partida rápida: os bots esperam por ti e os jogadores que chegam ocupam o lugar deles.', 'Nessuna stanza pubblica per ora. Avvia una partita rapida: i bot ti aspettano e chi arriva prende il loro posto.'],
   loading: ['Recherche des salons…', 'Looking for rooms…', 'Buscando salas…', 'Räume werden gesucht…', 'À procura de salas…', 'Ricerca delle stanze…'],
   join: ['Rejoindre', 'Join', 'Unirse', 'Beitreten', 'Entrar', 'Entra'],
   full: ['Complet', 'Full', 'Llena', 'Voll', 'Cheia', 'Piena'],
@@ -38,32 +40,32 @@ const TX = {
   noBots: ['Ce mode a ses propres adversaires : pas de bots.', 'This mode has its own opponents: no bots.', 'Este modo tiene sus propios rivales: sin bots.', 'Dieser Modus hat eigene Gegner: keine Bots.', 'Este modo tem os seus próprios adversários: sem bots.', 'Questa modalità ha i suoi avversari: niente bot.'],
   createBtn: ['Créer le salon', 'Create room', 'Crear sala', 'Raum erstellen', 'Criar sala', 'Crea stanza'],
   cancel: ['Annuler', 'Cancel', 'Cancelar', 'Abbrechen', 'Cancelar', 'Annulla'],
-  share: ['Partagez ce code avec vos amis.', 'Share this code with your friends.', 'Comparte este código con tus amigos.', 'Teile diesen Code mit deinen Freunden.', 'Partilha este código com os teus amigos.', 'Condividi questo codice con i tuoi amici.'],
+  share: ['Partage ce code avec tes amis.', 'Share this code with your friends.', 'Comparte este código con tus amigos.', 'Teile diesen Code mit deinen Freunden.', 'Partilha este código com os teus amigos.', 'Condividi questo codice con i tuoi amici.'],
   sharePub: ['Le salon est aussi dans la liste des salons publics.', 'The room is also in the public room list.', 'La sala también aparece en la lista de salas públicas.', 'Der Raum steht auch in der Liste der öffentlichen Räume.', 'A sala também aparece na lista de salas públicas.', 'La stanza è anche nella lista delle stanze pubbliche.'],
   roomOpts: ['Options du salon','Room options', 'Opciones de la sala', 'Raumoptionen', 'Opções da sala', 'Opzioni della stanza'],
   botsOn: ['{n} bots · cible {t} joueurs', '{n} bots · target {t} players', '{n} bots · objetivo {t} jugadores', '{n} Bots · Ziel {t} Spieler', '{n} bots · alvo {t} jogadores', '{n} bot · obiettivo {t} giocatori'],
   botsOff: ['Pas de bots', 'No bots', 'Sin bots', 'Keine Bots', 'Sem bots', 'Nessun bot'],
   simBy: ['Bots pilotés par {name}', 'Bots run by {name}', 'Bots controlados por {name}', 'Bots gesteuert von {name}', 'Bots controlados por {name}', 'Bot gestiti da {name}'],
   noSim: ['Aucun joueur ne peut piloter les bots (version trop ancienne).', 'No player can run the bots (outdated version).', 'Ningún jugador puede controlar los bots (versión antigua).', 'Kein Spieler kann die Bots steuern (veraltete Version).', 'Nenhum jogador pode controlar os bots (versão antiga).', 'Nessun giocatore può gestire i bot (versione vecchia).'],
-  errTooMany: ['Trop de salons publics ouverts depuis cette adresse. Fermez-en un d’abord.', 'Too many public rooms open from this address. Close one first.', 'Demasiadas salas públicas abiertas desde esta dirección. Cierra una primero.', 'Zu viele öffentliche Räume von dieser Adresse aus. Schließe zuerst einen.', 'Demasiadas salas públicas abertas a partir deste endereço. Fecha uma primeiro.', 'Troppe stanze pubbliche aperte da questo indirizzo. Chiudine prima una.'],
+  errTooMany: ['Trop de salons publics ouverts depuis cette adresse. Ferme-en un d’abord.', 'Too many public rooms open from this address. Close one first.', 'Demasiadas salas públicas abiertas desde esta dirección. Cierra una primero.', 'Zu viele öffentliche Räume von dieser Adresse aus. Schließe zuerst einen.', 'Demasiadas salas públicas abertas a partir deste endereço. Fecha uma primeiro.', 'Troppe stanze pubbliche aperte da questo indirizzo. Chiudine prima una.'],
   errInProgress: ['Cette partie a commencé et n’accepte plus de joueurs.', 'This match has started and no longer takes players.', 'Esta partida ha empezado y ya no admite jugadores.', 'Dieses Spiel hat begonnen und nimmt keine Spieler mehr auf.', 'Esta partida já começou e não aceita mais jogadores.', 'Questa partita è iniziata e non accetta più giocatori.'],
-  errNoPublic: ['Ce serveur ne connaît pas encore les salons publics : créez un salon et partagez son code.', 'This server does not support public rooms yet: create a room and share its code.', 'Este servidor aún no admite salas públicas: crea una sala y comparte su código.', 'Dieser Server kennt noch keine öffentlichen Räume: erstelle einen Raum und teile den Code.', 'Este servidor ainda não suporta salas públicas: cria uma sala e partilha o código.', 'Questo server non supporta ancora le stanze pubbliche: crea una stanza e condividi il codice.'],
+  errNoPublic: ['Ce serveur ne connaît pas encore les salons publics : crée un salon et partage son code.', 'This server does not support public rooms yet: create a room and share its code.', 'Este servidor aún no admite salas públicas: crea una sala y comparte su código.', 'Dieser Server kennt noch keine öffentlichen Räume: erstelle einen Raum und teile den Code.', 'Este servidor ainda não suporta salas públicas: cria uma sala e partilha o código.', 'Questo server non supporta ancora le stanze pubbliche: crea una stanza e condividi il codice.'],
 };
 /* invite links (?join=CODE or #join=CODE) */
 Object.assign(TX, {
   inviteBtn: ['Copier le lien d’invitation', 'Copy the invite link', 'Copiar el enlace de invitación', 'Einladungslink kopieren', 'Copiar a ligação de convite', 'Copia il link d’invito'],
   inviteShare: ['Inviter des amis', 'Invite friends', 'Invitar a amigos', 'Freunde einladen', 'Convidar amigos', 'Invita amici'],
   linkCopied: ['Lien d’invitation copié', 'Invite link copied', 'Enlace de invitación copiado', 'Einladungslink kopiert', 'Ligação de convite copiada', 'Link d’invito copiato'],
-  linkShow: ['Copiez ce lien : {url}', 'Copy this link: {url}', 'Copia este enlace: {url}', 'Kopiere diesen Link: {url}', 'Copia esta ligação: {url}', 'Copia questo link: {url}'],
+  linkShow: ['Copie ce lien : {url}', 'Copy this link: {url}', 'Copia este enlace: {url}', 'Kopiere diesen Link: {url}', 'Copia esta ligação: {url}', 'Copia questo link: {url}'],
   cardLink: ['Copier le lien', 'Copy link', 'Copiar enlace', 'Link kopieren', 'Copiar ligação', 'Copia link'],
   shareText: ['Rejoins-moi sur FRONT ZÉRO, salon {code} :', 'Join me on FRONT ZÉRO, room {code}:', 'Únete a mí en FRONT ZÉRO, sala {code}:', 'Komm zu mir in FRONT ZÉRO, Raum {code}:', 'Junta-te a mim no FRONT ZÉRO, sala {code}:', 'Raggiungimi su FRONT ZÉRO, stanza {code}:'],
   inviteTitle: ['Invitation au salon {code}', 'Invitation to room {code}', 'Invitación a la sala {code}', 'Einladung in Raum {code}', 'Convite para a sala {code}', 'Invito alla stanza {code}'],
-  inviteName: ['Choisissez votre nom de soldat pour rejoindre la partie.', 'Pick your soldier name to join the match.', 'Elige tu nombre de soldado para unirte a la partida.', 'Wähle deinen Soldatennamen, um beizutreten.', 'Escolhe o teu nome de soldado para entrar na partida.', 'Scegli il tuo nome di soldato per unirti alla partita.'],
+  inviteName: ['Choisis ton nom de soldat pour rejoindre la partie.', 'Pick your soldier name to join the match.', 'Elige tu nombre de soldado para unirte a la partida.', 'Wähle deinen Soldatennamen, um beizutreten.', 'Escolhe o teu nome de soldado para entrar na partida.', 'Scegli il tuo nome di soldato per unirti alla partita.'],
   inviteGo: ['Rejoindre', 'Join', 'Unirse', 'Beitreten', 'Entrar', 'Entra'],
   inviteWait: ['Invitation au salon {code} : connexion dès que le serveur répond…', 'Invitation to room {code}: joining as soon as the server answers…', 'Invitación a la sala {code}: conexión en cuanto responda el servidor…', 'Einladung in Raum {code}: Beitritt, sobald der Server antwortet…', 'Convite para a sala {code}: ligação assim que o servidor responder…', 'Invito alla stanza {code}: ingresso appena il server risponde…'],
   inviteJoining: ['Connexion au salon {code}…', 'Joining room {code}…', 'Entrando en la sala {code}…', 'Raum {code} wird betreten…', 'A entrar na sala {code}…', 'Ingresso nella stanza {code}…'],
-  badLink: ['Ce lien d’invitation n’est pas valide (le code doit faire 6 lettres). Choisissez un salon public ou entrez un code.', 'This invite link is not valid (the code must be 6 letters). Pick a public room or enter a code.', 'Este enlace de invitación no es válido (el código debe tener 6 letras). Elige una sala pública o introduce un código.', 'Dieser Einladungslink ist ungültig (der Code hat 6 Buchstaben). Wähle einen öffentlichen Raum oder gib einen Code ein.', 'Esta ligação de convite não é válida (o código tem 6 letras). Escolhe uma sala pública ou introduz um código.', 'Questo link d’invito non è valido (il codice è di 6 lettere). Scegli una stanza pubblica o inserisci un codice.'],
-  inviteGone: ['Le salon {code} n’existe plus : la partie est finie ou l’hôte est parti. Rejoignez un salon public ou créez le vôtre.', 'Room {code} no longer exists: the match is over or the host left. Join a public room or create your own.', 'La sala {code} ya no existe: la partida terminó o el anfitrión se fue. Únete a una sala pública o crea la tuya.', 'Raum {code} gibt es nicht mehr: Das Spiel ist vorbei oder der Host ist gegangen. Tritt einem öffentlichen Raum bei oder erstelle deinen eigenen.', 'A sala {code} já não existe: a partida acabou ou o anfitrião saiu. Entra numa sala pública ou cria a tua.', 'La stanza {code} non esiste più: la partita è finita o l’host è uscito. Entra in una stanza pubblica o creane una tua.'],
+  badLink: ['Ce lien d’invitation n’est pas valide (le code doit faire 6 lettres). Choisis un salon public ou entre un code.', 'This invite link is not valid (the code must be 6 letters). Pick a public room or enter a code.', 'Este enlace de invitación no es válido (el código debe tener 6 letras). Elige una sala pública o introduce un código.', 'Dieser Einladungslink ist ungültig (der Code hat 6 Buchstaben). Wähle einen öffentlichen Raum oder gib einen Code ein.', 'Esta ligação de convite não é válida (o código tem 6 letras). Escolhe uma sala pública ou introduz um código.', 'Questo link d’invito non è valido (il codice è di 6 lettere). Scegli una stanza pubblica o inserisci un codice.'],
+  inviteGone: ['Le salon {code} n’existe plus : la partie est finie ou l’hôte est parti. Rejoins un salon public ou crée le tien.', 'Room {code} no longer exists: the match is over or the host left. Join a public room or create your own.', 'La sala {code} ya no existe: la partida terminó o el anfitrión se fue. Únete a una sala pública o crea la tuya.', 'Raum {code} gibt es nicht mehr: Das Spiel ist vorbei oder der Host ist gegangen. Tritt einem öffentlichen Raum bei oder erstelle deinen eigenen.', 'A sala {code} já não existe: a partida acabou ou o anfitrião saiu. Entra numa sala pública ou cria a tua.', 'La stanza {code} non esiste più: la partita è finita o l’host è uscito. Entra in una stanza pubblica o creane una tua.'],
 });
 const BOT_SIZE = { ffa: 8, tdm: 8, dom: 10, bomb: 8 }, BOT_MODES = Object.keys(BOT_SIZE);       // default target size per mode (same table in net-bots.js)
 const sizeKey = mode => 'frontzero.botSize.' + mode;
@@ -74,7 +76,7 @@ const CSS = `
 .fzm .fzo-band{display:grid;gap:12px;min-width:0;margin:0;padding:14px 18px 16px}
 /* the band sits in the play grid above the mode and map columns: the side panel starts where ui-theme sizes it (right under the head) */
 @media (min-width:1181px){.fzm .fzm-play-grid>.fzo-band{grid-column:1/3;grid-row:1}.fzm .fzm-play-grid>.fzo-band~.fzm-col{grid-row:2}.fzm .fzm-play-grid>.fzo-band~.fzm-side{grid-column:3;grid-row:1/3}}
-@media (max-width:1180px){.fzm .fzm-play-grid>.fzo-band{grid-column:1/-1;order:-2}}
+@media (max-width:1180px){.fzm .fzm-play-grid>.fzo-band{grid-column:1/-1;order:-4}}       /* rc8: above the Front band, so PARTIE RAPIDE is on the first screen (960x540, 1024x600) and never under the sticky CRÉER bar */
 /* the multiplayer CRÉER block carries a hint line under its button (the solo one does not): ui-theme reserves 104 px for it, it takes ~120.
    Same cap as ui-theme with the real height, the hint kept on one line (under 841 px of height ui-theme hides it and its own cap stands). */
 @media (min-width:1181px) and (min-height:841px){html.fz2ui .fzm-play--multi .fzm-side>.fzm-panel{max-height:calc(100vh - 80px - clamp(16px,2.2vw,34px) - 58px - clamp(16px,1.8vw,26px) - 126px)}.fzm-play--multi .fzm-cta-wrap .fzm-hint{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}}
@@ -85,6 +87,8 @@ const CSS = `
 .fzm .fzo-srv.is-ok>i{background:var(--green);box-shadow:0 0 8px rgba(156,194,100,.7)}
 .fzm .fzo-srv.is-wake>i{background:var(--amber);animation:fzo-pulse 1s ease-in-out infinite}
 .fzm .fzo-srv.is-down>i,.fzm .fzo-srv.is-old>i{background:var(--red)}
+.fzm .fzo-srv.is-ok.is-mid>i{background:var(--amber);box-shadow:0 0 8px rgba(232,166,40,.7)}       /* network delay: < 80 ms green, 80-150 amber, more red */
+.fzm .fzo-srv.is-ok.is-bad>i{background:var(--red);box-shadow:0 0 8px rgba(224,73,47,.7)}
 .fzm .fzo-srv small{font-size:13px;opacity:.8}
 .fzm .fzo-srv .fzm-btn{min-height:30px;padding:2px 12px;font-size:14px}
 @keyframes fzo-pulse{50%{opacity:.35}}
@@ -199,7 +203,12 @@ export function install({ net, menu, i18n, engine }) {
     W.inflight = true; W.state = 'wake'; W.t0 = performance.now(); paintStatus();
     const ok = await reach(PING_TIMEOUT);
     W.inflight = false;
-    if (ok) { W.state = 'ok'; W.ms = Math.round(performance.now() - W.t0); W.tries = 0; paintStatus(); kick(); for (const fn of awaitQ.splice(0)) { try { fn(); } catch (e) { console.warn('[online]', e); } } return; }
+    if (ok) {
+      // rc8: this first answer is the free host's wake-up (a cold start can take seconds), not the network delay: shown apart, briefly
+      const took = performance.now() - W.t0; W.state = 'ok'; W.ms = 0; W.tries = 0; W.woke = took > 1500 ? Math.max(2, Math.round(took / 1000)) : 0; W.wokeUntil = W.woke ? performance.now() + 4000 : 0;
+      paintStatus(); kick(); for (const fn of awaitQ.splice(0)) { try { fn(); } catch (e) { console.warn('[online]', e); } }
+      rtt(); return;
+    }
     W.state = 'down';
     const wait = BACKOFF[W.tries++];
     if (wait === undefined) { W.nextAt = 0; paintStatus(); return; }       // stops here: the multiplayer tab or the retry button starts again
@@ -207,6 +216,28 @@ export function install({ net, menu, i18n, engine }) {
     W.timer = setTimeout(ping, wait);
   }
   function retryNow() { W.tries = 0; clearTimeout(W.timer); W.timer = 0; ping(); }
+  /* rc8: the real network delay = median of 3 warm requests, refreshed every 30 s while a status is on screen (none while the tab is hidden or a match runs) */
+  let rttTimer = 0, rttBusy = false;
+  const statusOnScreen = () => (!!band && band.isConnected && band.offsetParent !== null) || (!!pillEl && pillEl.isConnected && pillEl.getClientRects().length > 0);
+  async function rtt() {
+    clearTimeout(rttTimer); rttTimer = 0;
+    if (W.state !== 'ok' || W.old) return;
+    if (!rttBusy && !document.hidden && !(engine && (engine.running || engine.loading)) && (statusOnScreen() || !W.ms)) {
+      rttBusy = true; const a = [];
+      for (let i = 0; i < 3; i++) { const t = performance.now(); if (!(await reach(5000))) break; a.push(performance.now() - t); }
+      rttBusy = false;
+      if (a.length) { a.sort((x, y) => x - y); W.ms = Math.max(1, Math.round(a[a.length >> 1])); paintStatus(); }
+    }
+    rttTimer = setTimeout(rtt, 30000);
+  }
+  const rttClass = () => (!W.ms ? '' : W.ms < 80 ? ' is-good' : W.ms <= 150 ? ' is-mid' : ' is-bad');
+  /** The "online" line: the wake-up time for 4 s when the host was asleep, then the measured delay. */
+  function onlineText() {
+    const now = performance.now();
+    if (W.woke && now < W.wokeUntil) { clearTimeout(wokeTimer); wokeTimer = setTimeout(paintStatus, W.wokeUntil - now + 60); return L('woke', { s: W.woke }); }
+    return W.old ? L('old') : W.ms ? L('online', { ms: W.ms }) : L('onlineNow');
+  }
+  let wokeTimer = 0;
 
   /* ---------- the public list: light poll while it is on screen ---------- */
   const LST = { rooms: null, timer: 0, inflight: false, sig: '', total: 0 };
@@ -247,19 +278,19 @@ export function install({ net, menu, i18n, engine }) {
   function buildBand() {
     statusEl = h('span', { class: 'fzo-srv', role: 'status', 'aria-live': 'polite' });
     headCount = h('span', { text: '' });
-    quickEl = K.button('fzm-btn--primary fzo-quick', 'online:quick', [h('b'), h('small'), h('i', { 'aria-hidden': 'true' })], quick);
+    quickEl = K.button('fzm-btn--primary fzo-quick', 'online:quick', [h('b'), h('small'), h('i', { 'aria-hidden': 'true' })], () => { if (quickWant) return; if (!quickNow()) quick(); });       // rc8: waits for a sleeping server instead of failing after 9 s
     listEl = h('div', { class: 'fzo-list', role: 'list' });
     const head = h('h3', { class: 'fzm-h' }, h('b', { class: 'fzo-title', style: 'font:inherit;letter-spacing:inherit' }), headCount);
     invEl = h('div', { class: 'fzo-inv-wait', role: 'status', 'data-fid': 'online:invite-wait', hidden: true });
     band = h('section', { class: 'fzm-panel fzo-band', 'data-fid': 'online:browser' }, h('div', { class: 'fzo-head' }, head, statusEl, quickEl), invEl, listEl);
   }
   function paintStatus() {
-    if (!statusEl) return;
+    if (!statusEl) { paintPill(); return; }       // the band was never shown: only the home card's pill
     clearTimeout(statusTimer); statusTimer = 0;
     statusEl.textContent = '';
-    statusEl.className = 'fzo-srv is-' + (W.state === 'ok' ? (W.old ? 'old' : 'ok') : W.state === 'down' ? 'down' : 'wake');
+    statusEl.className = 'fzo-srv is-' + (W.state === 'ok' ? (W.old ? 'old' : 'ok' + rttClass()) : W.state === 'down' ? 'down' : 'wake');
     statusEl.append(h('i', { 'aria-hidden': 'true' }));
-    if (W.state === 'ok') statusEl.append(h('span', { text: W.old ? L('old') : L('online', { ms: W.ms }) }));
+    if (W.state === 'ok') statusEl.append(h('span', { text: onlineText() }));
     else if (W.state === 'down') {
       const s = W.nextAt ? Math.max(1, Math.ceil((W.nextAt - Date.now()) / 1000)) : 0;
       statusEl.append(h('span', { text: s ? L('down', { s }) : L('downStop') }), K.button('fzm-btn--sm', 'online:retry', L('retry'), () => { K.sfx('ui'); retryNow(); }));
@@ -269,9 +300,32 @@ export function install({ net, menu, i18n, engine }) {
       if (performance.now() - W.t0 > 4000) statusEl.append(h('small', { text: '(' + L('wakingLong') + ')' }));
       else statusTimer = setTimeout(paintStatus, 4100 - (performance.now() - W.t0));
     }
-    if (quickEl) quickEl.disabled = busy() || W.old;
+    if (quickEl) quickEl.disabled = busy() || W.old || quickWant;
+    paintPill();
     paintList();
   }
+  /* rc8 menu flow (menu-flow.js): a small copy of the server status for the home card, and quick play started from the home card
+     (it waits for the free host to wake up instead of failing after 9 s) */
+  let pillEl = null, quickWant = false, quickAt = 0;
+  function paintPill() {
+    if (!pillEl) return;
+    const cls = 'fzo-srv fzo-pill is-' + (W.state === 'ok' ? (W.old ? 'old' : 'ok' + rttClass()) : W.state === 'down' ? 'down' : 'wake'), txt = W.state === 'ok' ? onlineText() : W.state === 'down' ? L('downStop') : L('waking');
+    if (pillEl.className !== cls) pillEl.className = cls;
+    const s = pillEl.lastChild; if (s && s.textContent !== txt) s.textContent = txt;
+  }
+  function statusPill() {
+    if (!pillEl) { pillEl = h('span', { class: 'fzo-srv fzo-pill', role: 'status' }, h('i', { 'aria-hidden': 'true' }), h('span', { text: '' })); }
+    paintPill(); setTimeout(kickPill, 0);
+    return pillEl;
+  }
+  function kickPill() { if (W.state !== 'ok' && !W.inflight && !W.timer) { W.tries = Math.min(W.tries, 2); ping(); } }       // the home card is on screen: wake the host
+  function quickNow() {
+    if (busy() || W.old || quickWant) return false;
+    quickWant = true; quickAt = performance.now(); paintStatus(); K.render();
+    whenAwake(() => { if (!quickWant) return; quickWant = false; paintStatus(); quick(); });
+    return true;
+  }
+  function quickCancel() { if (!quickWant) return false; quickWant = false; paintStatus(); K.render(); return true; }
   function roomCard(r) {
     const mine = r.m === K.st.mode, can = r.j === 1 && r.n < r.max;
     const state = r.st === 'playing' ? (r.r ? L('stRound', { n: r.r }) : L('stPlay')) : r.st === 'flow' ? L('stVote') : L('stLobby');
@@ -543,7 +597,9 @@ export function install({ net, menu, i18n, engine }) {
     });
   } catch { /* optional */ }
 
-  menu.ext = { browser, create, lobby, botRow, errorText, share, invite, endInvite, siteUrl };       // siteUrl: also the address on the best-moment videos (replay-export.js)
+  menu.ext = { browser, create, lobby, botRow, errorText, share, invite, endInvite, siteUrl,       // siteUrl: also the address on the best-moment videos (replay-export.js)
+    statusPill, quickNow, quickCancel, quickWaiting: () => quickWant, serverState: () => ({ state: W.state, ms: W.ms, old: W.old, t0: W.t0, inflight: W.inflight, nextAt: W.nextAt, quickAt }),       // rc8 menu flow (menu-flow.js)
+    inviteStatus: () => { if (!band) buildBand(); paintInvite(); return invEl; } };
   if (net.on) { try { net.on('room', () => { if (dlg) closeDlg(); }); } catch { /* optional */ } }
   K.render();
   ping();       // the menu just loaded: wake the free host now, not when the player clicks

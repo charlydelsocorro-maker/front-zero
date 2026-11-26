@@ -123,6 +123,25 @@ export class Arch {
   /* primitives directes (à utiliser entre begin/end) */
   box(x0, x1, y0, y1, z0, z1, j = 0, skip = '') { BX(x0, x1, y0, y1, z0, z1, j, skip, this.r); return this; }
   blob(x, y, z, r, ry = r) { BLOB(x, y, z, r, ry, this.r); return this; }
+  /** Sac de toile couché (TEXTURE QA : les sacs en blob étaient des boules pâles à facettes, UV écrasées en une couleur) : coussin à bouts
+      froncés, plis légers, UV de la toile (tour × longueur, ~160 texels/m), couleur cuite : contact au sol, bas humide, couture sur le dessus,
+      fronces aux bouts. (x, y, z) = centre au sol ; 12 tirages aléatoires comme blob(), la suite de la carte ne bouge pas. */
+  sack(x, y, z, L, W, H, yaw = 0, tone = [.37, .3, .19]) {
+    const R = []; for (let i = 0; i < 12; i++) R.push(this.r()); const c = Math.cos(yaw), s = Math.sin(yaw), NA = 12, NL = 10, NA1 = NA + 1, ph = R[0] * 6.283, vt = .9 + R[1] * .18, hh = H * (.92 + R[2] * .14), b0 = P.length / 3, per = Math.PI * (W + hh) / 2;
+    const prof = t => Math.pow(Math.max(0, 1 - Math.pow(Math.abs(2 * t - 1), 5)), .3);
+    const loc = (t, a) => { const k = prof(t), ca = Math.cos(a), sa = Math.sin(a), ex = Math.sign(ca) * Math.pow(Math.abs(ca), .6), ey = Math.sign(sa) * Math.pow(Math.abs(sa), .6), wr = 1 + .04 * Math.sin(a * 5 + t * 13 + ph) * Math.sin(t * Math.PI); return [(t - .5) * L, Math.max(0, hh / 2 * (1 + ey * k * wr)), W / 2 * ex * k * wr, k]; };
+    const W3 = q => [x + q[0] * c - q[2] * s, y + q[1], z + q[0] * s + q[2] * c];
+    for (let i = 0; i <= NL; i++) { const t = i / NL; for (let j = 0; j <= NA; j++) { const a = -Math.PI / 2 + j * 2 * Math.PI / NA, q = loc(t, a), p = W3(q); let nx, ny, nz;
+      if (i === 0 || i === NL) { const sg = i ? 1 : -1; nx = sg * c; ny = 0; nz = sg * s; }
+      else { const h = 1e-3, A1 = W3(loc(t + h, a)), A0 = W3(loc(t - h, a)), B1 = W3(loc(t, a + h)), B0 = W3(loc(t, a - h)), ux = A1[0] - A0[0], uy = A1[1] - A0[1], uz = A1[2] - A0[2], vx = B1[0] - B0[0], vy = B1[1] - B0[1], vz = B1[2] - B0[2], ax = W3([q[0], hh / 2, 0]);
+        nx = uy * vz - uz * vy; ny = uz * vx - ux * vz; nz = ux * vy - uy * vx; if (nx * (p[0] - ax[0]) + ny * (p[1] - ax[1]) + nz * (p[2] - ax[2]) < 0) { nx = -nx; ny = -ny; nz = -nz; } const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l; }
+      const ly = q[1], ao = .5 + .5 * Math.min(1, ly / (hh * .45)), damp = ly < hh * .55 ? .68 + .32 * ly / (hh * .55) : 1, seam = j === NA / 2 ? .7 : 1, fold = .68 + .32 * Math.min(1, q[3] * 1.6), f = vt * ao * damp * seam * fold * (.95 + .1 * noise2(t * 7 + ph, j * .9));
+      tr = tone[0] * f; tg = tone[1] * f; tb = tone[2] * f; V(p[0], p[1], p[2], nx, ny, nz); T[T.length - 2] = j / NA * per / uvK; T[T.length - 1] = t * L / uvK; } }
+    const m = b0 + (NL >> 1) * NA1, ga = [P[(m + 1) * 3] - P[m * 3], P[(m + 1) * 3 + 1] - P[m * 3 + 1], P[(m + 1) * 3 + 2] - P[m * 3 + 2]], gb = [P[(m + NA1 + 1) * 3] - P[m * 3], P[(m + NA1 + 1) * 3 + 1] - P[m * 3 + 1], P[(m + NA1 + 1) * 3 + 2] - P[m * 3 + 2]];
+    const flip = (ga[1] * gb[2] - ga[2] * gb[1]) * N[m * 3] + (ga[2] * gb[0] - ga[0] * gb[2]) * N[m * 3 + 1] + (ga[0] * gb[1] - ga[1] * gb[0]) * N[m * 3 + 2] < 0;
+    for (let i = 0; i < NL; i++) for (let j = 0; j < NA; j++) { const a = b0 + i * NA1 + j, b = a + 1, d = a + NA1, e = d + 1; if (flip) I.push(a, e, b, a, d, e); else I.push(a, b, e, a, e, d); }
+    return this;
+  }
   rod(ax, ay, az, bx, by, bz, r = .02, seg = 5) { ROD(ax, ay, az, bx, by, bz, r, seg); return this; }
   quad(...a) { Q(...a); return this; }
   tri(...a) { TRI(...a); return this; }
@@ -381,6 +400,8 @@ export class Arch {
     for (const sd of [-1, 1]) for (let i = 0; i < courses; i++) { const w0 = cm + sd * i / courses * half, w1 = cm + sd * (i + 1) / courses * half;
       for (let j = 0; j < nU; j++) { const u0 = uA(j), u1 = uA(j + 1), v = tone * (.86 + .22 * noise2(j * 1.3 + a0, i * 1.1 + sd)); tr = v; tg = v * .97; tb = v * .92;
         const A = PP(u0, H(u0, w0, sd), w0), B = PP(u1, H(u1, w0, sd), w0), C2 = PP(u1, H(u1, w1, sd), w1), D = PP(u0, H(u0, w1, sd), w1); if ((sd > 0) === (ax === 'x')) Q(...A, ...D, ...C2, ...B); else Q(...A, ...B, ...C2, ...D); } }
+    /* faîtage selon z : la projection (x, z) mettait les rangs de tuiles, de bardeaux et les nervures de tôle dans le sens de la pente (TEXTURE QA) */
+    if (!along) for (let i = 0; i < T.length; i += 2) { const t = T[i]; T[i] = T[i + 1]; T[i + 1] = t; }
     const eb = th; tr = tg = tb = tone * .6; for (const sd of [-1, 1]) { const we = cm + sd * half; for (let j = 0; j < nU; j++) { const u0 = uA(j), u1 = uA(j + 1), ha = H(u0, we, sd), hb = H(u1, we, sd); WQ(ax, sd, u0, ha - eb, we, u1, hb - eb, we, u1, hb, we, u0, ha, we); } }
     this.end();
     /* rang d'égout et faîtage en tuiles rondes réelles (toits de tuiles) ; tôle et bardeaux : faîtière en V */
@@ -589,12 +610,18 @@ export class Arch {
     this.begin('ar_iron'); this.tint(.3, .28, .27); for (const hh of [.35, 1.2, 2.05]) TUBE([[x, y + h + hh - .03, z, R + .03], [x, y + h + hh + .03, z, R + .03]], 18); this.end();
     this.begin('ar_shingle'); this.tint(.8); TUBE([[x, y + h + 2.35, z, R + .25], [x, y + h + 3.4, z, .06]], 18); this.end(); this.ladder(x + R + .05, y + h, z, x + R + .05, y + h + 2.4, z, {}); }
   /** Surface lisse en grille : rangées de points [x, y, z, r, g, b], normales moyennées tournées vers toward(x, y, z) ; o.keep(i, j) filtre les quads, o.lift décale le long de la normale. */
-  surface(m, rows, toward, o = {}) { this.begin(m); const nI = rows.length, nJ = rows[0].length, b0 = P.length / 3, NRM = [], i0 = o.i0 ?? 0, i1 = Math.min(nI - 1, o.i1 ?? nI - 1);
+  surface(m, rows, toward, o = {}) { this.begin(m); const nI = rows.length, nJ = rows[0].length, b0 = P.length / 3, NRM = [], G = [], i0 = o.i0 ?? 0, i1 = Math.min(nI - 1, o.i1 ?? nI - 1);
     for (let i = i0; i <= i1; i++) for (let j = 0; j < nJ; j++) { const p = rows[i][j], pa = rows[Math.min(nI - 1, i + 1)][j], pb = rows[Math.max(0, i - 1)][j], pc = rows[i][Math.min(nJ - 1, j + 1)], pd = rows[i][Math.max(0, j - 1)];
       const ux = pa[0] - pb[0], uy = pa[1] - pb[1], uz = pa[2] - pb[2], vx = pc[0] - pd[0], vy = pc[1] - pd[1], vz = pc[2] - pd[2]; let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx; const w = toward(p[0], p[1], p[2]); if (nx * w[0] + ny * w[1] + nz * w[2] < 0) { nx = -nx; ny = -ny; nz = -nz; } if (Math.hypot(nx, ny, nz) < 1e-9) { nx = w[0]; ny = w[1] + 1; nz = w[2]; } const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l; NRM.push(nx, ny, nz);
-      tr = p[3]; tg = p[4]; tb = p[5]; const lf = o.lift || 0; V(p[0] + nx * lf, p[1] + ny * lf, p[2] + nz * lf, nx, ny, nz); }
-    for (let i = i0; i < i1; i++) for (let j = 0; j < nJ - 1; j++) { if (o.keep && !o.keep(i, j)) continue; const a = b0 + (i - i0) * nJ + j, b = a + nJ, c = b + 1, d = a + 1, pa = rows[i][j], pb = rows[i + 1][j], pc = rows[i + 1][j + 1];
-      const gx = (pb[1] - pa[1]) * (pc[2] - pa[2]) - (pb[2] - pa[2]) * (pc[1] - pa[1]), gy = (pb[2] - pa[2]) * (pc[0] - pa[0]) - (pb[0] - pa[0]) * (pc[2] - pa[2]), gz = (pb[0] - pa[0]) * (pc[1] - pa[1]) - (pb[1] - pa[1]) * (pc[0] - pa[0]), q = ((i - i0) * nJ + j) * 3;
+      const lf = o.lift || 0; G.push([p[0] + nx * lf, p[1] + ny * lf, p[2] + nz * lf, nx, ny, nz, p[3], p[4], p[5]]); }
+    /* axe de projection par quadrilatère (somme des normales de ses coins ; le dessus est préféré jusqu'à ~50° de pente), sommets doublés
+       seulement où l'axe change : la projection par sommet mélangeait deux axes dans un même triangle (talus et digues striés, falaises
+       étalées en traînées, TEXTURE QA). Positions, normales et couleurs inchangées. */
+    void b0; const vid = new Map(), VX = (g, ax) => { const key = g * 3 + ax; let r = vid.get(key); if (r === undefined) { const q = G[g]; r = P.length / 3; P.push(q[0], q[1], q[2]); N.push(q[3], q[4], q[5]); C.push(q[6], q[7], q[8]); if (ax === 0) T.push(q[2] / uvK, q[1] / uvK); else if (ax === 1) T.push(q[0] / uvK, q[2] / uvK); else T.push(q[0] / uvK, q[1] / uvK); vid.set(key, r); } return r; };
+    for (let i = i0; i < i1; i++) for (let j = 0; j < nJ - 1; j++) { if (o.keep && !o.keep(i, j)) continue; const ga = (i - i0) * nJ + j, gb = ga + nJ, gc = gb + 1, gd = ga + 1, pa = rows[i][j], pb = rows[i + 1][j], pc = rows[i + 1][j + 1];
+      let sx = 0, sy = 0, sz = 0; for (const g of [ga, gb, gc, gd]) { sx += G[g][3]; sy += G[g][4]; sz += G[g][5]; } sx = Math.abs(sx); sy = Math.abs(sy) * 1.25; sz = Math.abs(sz); const ax = sy >= sx && sy >= sz ? 1 : sx >= sz ? 0 : 2;
+      const a = VX(ga, ax), b = VX(gb, ax), c = VX(gc, ax), d = VX(gd, ax);
+      const gx = (pb[1] - pa[1]) * (pc[2] - pa[2]) - (pb[2] - pa[2]) * (pc[1] - pa[1]), gy = (pb[2] - pa[2]) * (pc[0] - pa[0]) - (pb[0] - pa[0]) * (pc[2] - pa[2]), gz = (pb[0] - pa[0]) * (pc[1] - pa[1]) - (pb[1] - pa[1]) * (pc[0] - pa[0]), q = ga * 3;
       if (gx * NRM[q] + gy * NRM[q + 1] + gz * NRM[q + 2] >= 0) I.push(a, b, c, a, c, d); else I.push(a, c, b, a, d, c); }
     this.end(o.fine); }
   /** Lierre plaqué sur un mur : grappe de feuilles qui descend d'un point haut. */

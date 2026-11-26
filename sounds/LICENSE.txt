@@ -539,3 +539,116 @@ Prepared_SFX/Walther_PPQ/X_39P.wav
     shots/pistol9-near-1.mp3 (from 1.407 s)
     shots/pistol9-near-2.mp3 (from 6.444 s)
     shots/pistol9-near-3.mp3 (from 10.660 s)
+
+------------------------------------------------------------------------
+
+FRONT ZERO - recorded world-prop sounds (props/: window panes breaking, wooden doors, heavy steel doors, gas hiss, fire)
+
+Every file in props/ is an edit of these CC0 recordings:
+
+  BigSoundBank (https://bigsoundbank.com), recordings by Joseph Sardin.
+  Each sound page states: "License CC0 (public domain): Free and royalty-free".
+  Licences page https://bigsoundbank.com/licenses.html: Creative Commons CC0 1.0 Universal / WTFPL / Public Domain Dedication.
+
+  OpenGameArt "Glass Break" by Till Behrend (submitted by TinyWorlds), https://opengameart.org/content/glass-break
+  The page states: "License(s): CC0".
+
+CC0 does not require attribution; it is given here as a courtesy and for traceability.
+Edits made for the game: takes cut out of the recordings, high-pass, fades, loudness normalisation with at most 3 dB of look-ahead
+peak limiting, at most three narrow peaking cuts (-9 dB) on a ringing resonance, 48 kHz mono, MP3 (LAME VBR). Files marked
+"layered edit" (heavy doors) mix two of these recordings, one of them pitched down by resampling. No synthesized audio is mixed in.
+The edited files are released under the same CC0 1.0 terms.
+
+Source recording -> shipped files
+
+A Mirror Explodes (#387), Joseph Sardin
+  https://bigsoundbank.com/mirror-explodes-s0387.html
+  https://bigsoundbank.com/UPLOAD/bwf-en/0387.wav
+  BigSoundBank page: "License CC0 (public domain): Free and royalty-free"
+    props/glass-1.mp3 (from 0.035 s to 1.430 s)
+Broken glass (#771), Joseph Sardin
+  https://bigsoundbank.com/broken-glass-s0771.html
+  https://bigsoundbank.com/UPLOAD/bwf-en/0771.wav
+  BigSoundBank page: "License CC0 (public domain): Free and royalty-free"
+    props/glass-2.mp3 (from 0.165 s to 1.100 s)
+    props/glass-3.mp3 (from 1.920 s to 2.950 s)
+    props/glass-4.mp3 (from 3.865 s to 4.800 s)
+    props/glass-5.mp3 (from 6.235 s to 7.100 s)
+Glass Break, Till Behrend (submitted by TinyWorlds)
+  https://opengameart.org/content/glass-break
+  https://opengameart.org/sites/default/files/glass_breaking.wav
+  OpenGameArt page: "License(s): CC0"
+    props/glass-6.mp3 (from 0.000 s to 1.310 s)
+Apartment door, opening #3 (#2418), Joseph Sardin
+  https://bigsoundbank.com/apartment-door-opening-3-s2418.html
+  https://bigsoundbank.com/UPLOAD/bwf-en/2418.wav
+  BigSoundBank page: "License CC0 (public domain): Free and royalty-free"
+    props/doorOpen-1.mp3 (from 0.000 s to 1.320 s)
+    props/heavyOpen-1.mp3 (layered edit)
+Apartment door, opening #4 (#2419), Joseph Sardin
+  https://bigsoundbank.com/apartment-door-opening-4-s2419.html
+  https://bigsoundbank.com/UPLOAD/bwf-en/2419.wav
+  BigSoundBank page: "License CC0 (public domain): Free and royalty-free"
+    props/doorOpen-2.mp3 (from 0.000 s to 1.620 s)
+    props/heavyOpen-2.mp3 (layered edit)
+Apartment door, opening #5 (#2420), Joseph Sardin
+  https://bigsoundbank.com/apartment-door-opening-5-s2420.html
+  https://bigsoundbank.com/UPLOAD/bwf-en/2420.wav
+  BigSoundBank page: "License CC0 (public domain): Free and royalty-free"
+    props/doorOpen-3.mp3 (from 0.130 s to 1.750 s)
+Apartment Door, Opening #1 (#1702), Joseph Sardin
+  https://bigsoundbank.com/apartment-door-opening-1-s1702.html
+  https://bigsoundbank.com/UPLOAD/bwf-en/1702.wav
+  BigSoundBank page: "License CC0 (public domain): Free and royalty-free"
+    props/doorOpen-4.mp3 (from 0.075 s to 1.280 s)
+Door Slamming #3 (#1339), Joseph Sardin
+  https://bigsoundbank.com/door-slamming-3-s1339.html
+  https://bigsoundbank.com/UPLOAD/bwf-en/1339.wav
+  BigSoundBank page: "License CC0 (public domain): Free and royalty-free"
+    props/doorSlam-1.mp3 (from 0.005 s to 0.550 s)
+Door Slamming #4 (#1501), Joseph Sardin
+  https://bigsoundbank.com/door-slamming-4-s1501.html
+  https://bigsoundbank.com/UPLOAD/bwf-en/1501.wav
+  BigSoundBank page: "License CC0 (public domain): Free and royalty-free"
+    props/doorSlam-2.mp3 (from 0.155 s to 0.750 s)
+Apartment door, closing #1 (#2421), Joseph Sardin
+  https://bigsoundbank.com/apartment-door-closing-1-s2421.html
+  https://bigsoundbank.com/UPLOAD/bwf-en/2421.wav
+  BigSoundBank page: "License CC0 (public domain): Free and royalty-free"
+    props/doorSlam-3.mp3 (from 1.955 s to 2.750 s)
+Apartment door, closing #2 (#2422), Joseph Sardin
+  https://bigsoundbank.com/apartment-door-closing-2-s2422.html
+  https://bigsoundbank.com/UPLOAD/bwf-en/2422.wav
+  BigSoundBank page: "License CC0 (public domain): Free and royalty-free"
+    props/doorSlam-4.mp3 (from 0.995 s to 1.750 s)
+Door closures (#545), Joseph Sardin
+  https://bigsoundbank.com/door-closures-s0545.html
+  https://bigsoundbank.com/UPLOAD/bwf-en/0545.wav
+  BigSoundBank page: "License CC0 (public domain): Free and royalty-free"
+    props/doorSlam-5.mp3 (from 0.375 s to 1.050 s)
+    props/doorSlam-6.mp3 (from 2.465 s to 3.190 s)
+    props/doorSlam-7.mp3 (from 4.695 s to 5.250 s)
+    props/doorSlam-8.mp3 (from 6.460 s to 7.050 s)
+Metal barrier: Closure #1 (#2358), Joseph Sardin
+  https://bigsoundbank.com/grinding-metal-barrier-closure-1-s2358.html
+  https://bigsoundbank.com/UPLOAD/bwf-en/2358.wav
+  BigSoundBank page: "License CC0 (public domain): Free and royalty-free"
+    props/heavyOpen-2.mp3 (layered edit)
+    props/heavySlam-1.mp3 (from 1.850 s to 3.490 s)
+Metal Barrier: Closure #2 (#2359), Joseph Sardin
+  https://bigsoundbank.com/grinding-metal-barrier-closure-2-s2359.html
+  https://bigsoundbank.com/UPLOAD/bwf-en/2359.wav
+  BigSoundBank page: "License CC0 (public domain): Free and royalty-free"
+    props/heavyOpen-1.mp3 (layered edit)
+    props/heavySlam-2.mp3 (from 1.125 s to 2.740 s)
+Air leak (#1486), Joseph Sardin
+  https://bigsoundbank.com/air-leak-s1486.html
+  https://bigsoundbank.com/UPLOAD/bwf-en/1486.wav
+  BigSoundBank page: "License CC0 (public domain): Free and royalty-free"
+    props/gasHiss-1.mp3 (from 0.500 s to 2.100 s)
+    props/gasHiss-2.mp3 (from 4.000 s to 5.600 s)
+Gasoline fire #1 (#1340), Joseph Sardin
+  https://bigsoundbank.com/gasoline-fire-1-s1340.html
+  https://bigsoundbank.com/UPLOAD/bwf-en/1340.wav
+  BigSoundBank page: "License CC0 (public domain): Free and royalty-free"
+    props/fire-1.mp3 (from 1.000 s to 3.400 s)

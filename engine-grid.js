@@ -128,6 +128,15 @@ export function createMover(g) {
     if (up <= m && up < 1 && !blocked(p.x, c.y1, p.z, r, b.h)) { if (up > 0) b.stepOff += up; p.y = c.y1; if (b.vy < 0) b.vy = 0; b.grounded = true; b.ground = c; return; }
     if (m === a0) p.x = c.x0 - r - EPS; else if (m === a1) p.x = c.x1 + r + EPS; else if (m === b0) p.z = c.z0 - r - EPS; else p.z = c.z1 + r + EPS;
   }
+  /* Round walls built from boxes (solids flagged `slide`, e.g. the outer wall of a spiral stair): a body that only clips the corner of
+     one box (by up to SLIDE on the other axis) steps around it instead of stopping, so pressing into the curved wall still moves along it.
+     Opt-in per solid: every other wall keeps the plain behaviour. */
+  const SLIDE = 0.3;
+  function slideOut(b, ax, c) {
+    const p = b.pos, r = b.r;
+    if (ax === 0) { const lo = p.z + r - c.z0, hi = c.z1 - (p.z - r); if (Math.min(lo, hi) > SLIDE) return false; const nz = lo < hi ? c.z0 - r - EPS : c.z1 + r + EPS; if (blocked(p.x, p.y, nz, r, b.h)) return false; p.z = nz; return true; }
+    const lo = p.x + r - c.x0, hi = c.x1 - (p.x - r); if (Math.min(lo, hi) > SLIDE) return false; const nx = lo < hi ? c.x0 - r - EPS : c.x1 + r + EPS; if (blocked(nx, p.y, p.z, r, b.h)) return false; p.x = nx; return true;
+  }
   function axis(b, ax, d) {
     if (d === 0) return false;
     const p = b.pos, r = b.r, h = b.h, o = ax === 0 ? p.x : p.z; if (ax === 0) p.x += d; else p.z += d;   // o: pre-move coordinate, a push-out never goes past it
@@ -136,6 +145,7 @@ export function createMover(g) {
       const c = A[i]; if (!ov(p, r, h, c)) continue;
       const rise = c.y1 - p.y;
       if (rise > 0 && rise <= STEP_H + EPS) { if (c.y1 > stepTo) stepTo = c.y1; continue; }
+      if (c.slide && slideOut(b, ax, c)) { bump = true; continue; }
       if (ax === 0) p.x = d > 0 ? Math.max(c.x0 - r - EPS, o) : Math.min(c.x1 + r + EPS, o); else p.z = d > 0 ? Math.max(c.z0 - r - EPS, o) : Math.min(c.z1 + r + EPS, o);
       bump = true;
     }

@@ -4,8 +4,8 @@
 //             tier B = the map's picture with a compositor-only slow move and dust (first boot, modest GPU, low quality or no WebGL). Off with reduced motion.
 
 const CSS = `
-html.fzx-on .fzx-in{animation:fzx-rise .15s cubic-bezier(.2,.75,.25,1) calc(var(--i,0) * 8ms) both}
-@keyframes fzx-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+html.fzx-on .fzx-in{animation:fzx-rise .15s cubic-bezier(.2,.75,.25,1) calc(var(--i,0) * 8ms) backwards}
+@keyframes fzx-rise{from{opacity:0;transform:translateY(10px)}}
 html.fzx-on .fzx-fill .fzm-stat i u{transform-origin:0 50%;animation:fzx-fill .22s cubic-bezier(.2,.7,.2,1) both}
 @keyframes fzx-fill{from{transform:scaleX(0)}to{transform:none}}
 html.fzx-on .fzm-enter .fzm-end-title{animation:fzx-strike .22s cubic-bezier(.16,.8,.24,1) both}
@@ -110,6 +110,7 @@ export function install({ engine: E, settings, i18n, profile, menuRoot }) {
   function moveBar() {
     const r = root(); if (!r) return;
     if (!bar || !bar.isConnected) { bar = document.createElement('i'); bar.className = 'fzx-tabbar'; bar.setAttribute('aria-hidden', 'true'); r.append(bar); barX = barW = -1; }
+    const nav = r.querySelector('.fzm-nav'); if (nav && !nav._fzxs) { nav._fzxs = true; nav.addEventListener('scroll', () => { barX = -1; moveBar(); }, { passive: true }); }       // phones scroll the tab row: the bar follows its tab
     const tab = r.querySelector('.fzm-tab[aria-current=page]'), top = r.querySelector('.fzm-top');
     if (!tab || !top || top.hidden) { bar.style.opacity = 0; return; }
     const a = tab.getBoundingClientRect(), b = r.getBoundingClientRect(), inset = parseFloat(getComputedStyle(tab, '::after').left) || 10, x = Math.round(a.left - b.left + inset), w = Math.max(8, Math.round(a.width - inset * 2)), y = Math.round(a.bottom - b.top - 2);       // under its own tab, also when the tabs wrap on two rows
@@ -130,7 +131,7 @@ export function install({ engine: E, settings, i18n, profile, menuRoot }) {
     picked = now;
   }
   /* the entrance is capped whatever the screen holds: a dozen visible items, stat bars in the first four (all of them at once cost 0.5 s at CPU x4 on the Arsenal) */
-  const ENTER = '.fzm-opt,.fzm-map,.fzm-panel,.fzm-card,.fzm-player,.fzm-end-stat,.fzm-reward-row,.gxm-it,.fzm-slot';
+  const ENTER = '.fzh-card,.fzh-gearbox,.fzh-front,.fzh-cls,.fzh-slot,.fzh-search,.fzm-opt,.fzm-map,.fzm-panel,.fzm-card,.fzm-player,.fzm-end-stat,.fzm-reward-row,.gxm-it,.fzm-slot';       // .fzh-*: the rc8 hub and Équipement (menu-flow.js)
   function entrance(main) {
     const v = main.querySelector('.fzm-enter'); if (!v || v._fzx || !html.classList.contains('fzx-on')) return; v._fzx = true;
     const list = v.querySelectorAll(ENTER), H = innerHeight; let n = 0;
@@ -169,7 +170,7 @@ export function install({ engine: E, settings, i18n, profile, menuRoot }) {
 
   /* ---------- background ---------- */
   let bg = null, cut = null, imgs = [], imgI = 0, curShot = '', live = false, shots = [], shotI = 0, shotT = 0, lastMap = '', hiddenSol = false;
-  const mapId = () => { const r = root(), e = r && r.querySelector('.fzm-map[aria-checked=true]'), f = e && e.getAttribute('data-fid'); return f && f.startsWith('map:') ? f.slice(4) : (E.world && E.world.id) || lastMap || 'depot'; };
+  const mapId = () => { const r = root(), e = r && r.querySelector('.fzm-map[aria-checked=true]'), f = e && e.getAttribute('data-fid'); return f && f.startsWith('map:') ? f.slice(4) : (r && r.querySelector('.fzh-hub') && r.dataset.fzBg) || (E.world && E.world.id) || lastMap || 'depot'; };       // the hub: the card under the pointer (menu-anim.js)
   function ensureBg() {
     if (bg && bg.isConnected) return;
     bg = document.createElement('div'); bg.id = 'fzx-bg'; bg.setAttribute('aria-hidden', 'true');
@@ -272,5 +273,7 @@ export function install({ engine: E, settings, i18n, profile, menuRoot }) {
   E.on('quit', () => setTimeout(() => { watch(); after(); }, 0));
   setInterval(() => { if (shown()) bgRefresh(); }, 2000);       // the quality ladder may have moved
   flags(); after(); boot();
+  // rc8 menu animations (screen changes, cards, ripple, shimmer, lists, count-ups, toasts); purely visual, a failure changes nothing else
+  import('./menu-anim.js').then(m => m.install({ settings, i18n, profile, menuRoot, refreshBg: bgRefresh })).catch(e => console.warn('[motion] menu-anim', e));
   return { refresh: bgRefresh, get live() { return live; } };
 }

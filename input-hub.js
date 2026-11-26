@@ -37,12 +37,17 @@ const LOC = {       // fr, en, es, de, pt, it
   haptics: ['Vibrations', 'Vibration', 'Vibración', 'Vibration', 'Vibração', 'Vibrazione'],
   hapticsHint: ['Touche et élimination (si le téléphone le permet).', 'Hits and eliminations (where the phone allows it).', 'Impactos y eliminaciones (si el móvil lo permite).', 'Treffer und Eliminierungen (wenn das Gerät es kann).', 'Impactos e eliminações (se o telemóvel permitir).', 'Colpi ed eliminazioni (se il telefono lo consente).'],
   fullscreen: ['Plein écran automatique', 'Automatic fullscreen', 'Pantalla completa automática', 'Automatisch Vollbild', 'Ecrã inteiro automático', 'Schermo intero automatico'],
+  fsEnter: ['Plein écran', 'Fullscreen', 'Pantalla completa', 'Vollbild', 'Ecrã inteiro', 'Schermo intero'],
+  fsExit: ['Quitter le plein écran', 'Exit fullscreen', 'Salir de pantalla completa', 'Vollbild beenden', 'Sair do ecrã inteiro', 'Esci da schermo intero'],
+  fsIosT: ['Plein écran sur iPhone', 'Fullscreen on iPhone', 'Pantalla completa en iPhone', 'Vollbild auf dem iPhone', 'Ecrã inteiro no iPhone', 'Schermo intero su iPhone'],
+  fsIosB: ['Touche Partager, puis « Sur l’écran d’accueil ». Lance ensuite le jeu depuis cette icône : il s’ouvre en plein écran.', 'Tap Share, then “Add to Home Screen”. Start the game from that icon: it opens fullscreen.', 'Toca Compartir y luego «Añadir a pantalla de inicio». Abre el juego desde ese icono: se abre a pantalla completa.', 'Tippe auf Teilen, dann „Zum Home-Bildschirm“. Starte das Spiel über dieses Symbol: Es öffnet sich im Vollbild.', 'Toca em Partilhar e depois «Adicionar ao ecrã principal». Abre o jogo a partir desse ícone: abre em ecrã inteiro.', 'Tocca Condividi, poi «Aggiungi alla schermata Home». Avvia il gioco da quell’icona: si apre a schermo intero.'],
+  fsClose: ['Fermer', 'Close', 'Cerrar', 'Schließen', 'Fechar', 'Chiudi'],
   opacity: ['Opacité des boutons', 'Button opacity', 'Opacidad de los botones', 'Deckkraft der Tasten', 'Opacidade dos botões', 'Opacità dei pulsanti'],
   layout: ['Disposition des boutons', 'Button layout', 'Disposición de botones', 'Tastenanordnung', 'Disposição dos botões', 'Disposizione pulsanti'],
   layoutHint: ['Déplacer, agrandir, rendre plus ou moins visibles.', 'Move, resize and fade them.', 'Mover, agrandar y atenuar.', 'Verschieben, vergrößern, abblenden.', 'Mover, aumentar e atenuar.', 'Sposta, ridimensiona, attenua.'],
   edit: ['Modifier', 'Edit', 'Editar', 'Bearbeiten', 'Editar', 'Modifica'],
   padGroup: ['Manette', 'Controller', 'Mando', 'Controller', 'Comando', 'Controller'],
-  padNone: ['Aucune manette détectée : branchez-la et appuyez sur un bouton.', 'No controller found: plug it in and press a button.', 'Ningún mando detectado: conéctalo y pulsa un botón.', 'Kein Controller erkannt: anschließen und eine Taste drücken.', 'Nenhum comando detetado: liga-o e carrega num botão.', 'Nessun controller: collegalo e premi un tasto.'],
+  padNone: ['Aucune manette détectée : branche-la et appuie sur un bouton.', 'No controller found: plug it in and press a button.', 'Ningún mando detectado: conéctalo y pulsa un botón.', 'Kein Controller erkannt: anschließen und eine Taste drücken.', 'Nenhum comando detetado: liga-o e carrega num botão.', 'Nessun controller: collegalo e premi un tasto.'],
   padOn: ['Manette connectée', 'Controller connected', 'Mando conectado', 'Controller verbunden', 'Comando ligado', 'Controller collegato'],
   padSens: ['Sensibilité du stick droit', 'Right stick sensitivity', 'Sensibilidad del stick derecho', 'Empfindlichkeit rechter Stick', 'Sensibilidade do analógico direito', 'Sensibilità stick destro'],
   invert: ['Inverser l’axe vertical', 'Invert vertical axis', 'Invertir eje vertical', 'Vertikale Achse umkehren', 'Inverter eixo vertical', 'Inverti asse verticale'],
@@ -53,12 +58,12 @@ const LOC = {       // fr, en, es, de, pt, it
   curveFine: ['Précise', 'Precise', 'Precisa', 'Präzise', 'Precisa', 'Precisa'],
   rumble: ['Vibrations de la manette', 'Controller rumble', 'Vibración del mando', 'Controller-Vibration', 'Vibração do comando', 'Vibrazione controller'],
   remap: ['Boutons de la manette', 'Controller buttons', 'Botones del mando', 'Controller-Tasten', 'Botões do comando', 'Pulsanti controller'],
-  remapHint: ['Choisissez une action puis appuyez sur le bouton voulu.', 'Pick an action, then press the button you want.', 'Elige una acción y pulsa el botón deseado.', 'Aktion wählen, dann gewünschte Taste drücken.', 'Escolhe uma ação e carrega no botão pretendido.', 'Scegli un’azione e premi il pulsante voluto.'],
-  press: ['Appuyez sur un bouton…', 'Press a button…', 'Pulsa un botón…', 'Taste drücken…', 'Carrega num botão…', 'Premi un pulsante…'],
+  remapHint: ['Choisis une action puis appuie sur le bouton voulu.', 'Pick an action, then press the button you want.', 'Elige una acción y pulsa el botón deseado.', 'Aktion wählen, dann gewünschte Taste drücken.', 'Escolhe uma ação e carrega no botão pretendido.', 'Scegli un’azione e premi il pulsante voluto.'],
+  press: ['Appuie sur un bouton…', 'Press a button…', 'Pulsa un botón…', 'Taste drücken…', 'Carrega num botão…', 'Premi un pulsante…'],
   resetPad: ['Boutons par défaut', 'Default buttons', 'Botones por defecto', 'Standardtasten', 'Botões predefinidos', 'Pulsanti predefiniti'],
   'act.use': ['Recharger / utiliser', 'Reload / use', 'Recargar / usar', 'Nachladen / benutzen', 'Recarregar / usar', 'Ricarica / usa'],
   'act.crouch': ['S’accroupir / glisser', 'Crouch / slide', 'Agacharse / deslizarse', 'Ducken / rutschen', 'Agachar / deslizar', 'Accovacciati / scivola'],
-  rotateT: ['Tournez votre téléphone', 'Turn your phone', 'Gira tu móvil', 'Dreh dein Handy', 'Roda o telemóvel', 'Ruota il telefono'],
+  rotateT: ['Tourne ton téléphone', 'Turn your phone', 'Gira tu móvil', 'Dreh dein Handy', 'Roda o telemóvel', 'Ruota il telefono'],
   rotateB: ['FRONT ZÉRO se joue à l’horizontale.', 'FRONT ZÉRO is played in landscape.', 'FRONT ZÉRO se juega en horizontal.', 'FRONT ZÉRO wird im Querformat gespielt.', 'FRONT ZÉRO joga-se na horizontal.', 'FRONT ZÉRO si gioca in orizzontale.'],
   rotatePaused: ['Partie en pause.', 'Match paused.', 'Partida en pausa.', 'Spiel pausiert.', 'Partida em pausa.', 'Partita in pausa.'],
   mobileOn: ['Graphismes : préréglage « Mobile »', 'Graphics: “Mobile” preset', 'Gráficos: ajuste «Móvil»', 'Grafik: Voreinstellung „Mobil“', 'Gráficos: predefinição «Telemóvel»', 'Grafica: preset «Mobile»'],
@@ -223,6 +228,59 @@ export function install({ engine: E, settings, i18n, profile, menu, menuRoot, hu
   const unlockOrient = () => { try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch { /* not locked */ } };
   E.on('matchEnd', unlockOrient); E.on('quit', unlockOrient);
 
+  /* ---------- fullscreen button (phones and tablets): in the menus and the pause screen, never over a running match ---------- */
+  const noFsApi = () => !fsOk() && /iP(hone|od)/.test(navigator.userAgent);       // iPhone Safari has no fullscreen for pages: the home-screen app is the way
+  const FS_IN = '<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/>', FS_OUT = '<path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5"/>';
+  let fsBtn = null, fsTip = null;
+  function fsTipShow(on) {
+    if (on && !fsTip) {
+      fsTip = document.createElement('div'); fsTip.id = 'fzin-fstip'; fsTip.setAttribute('role', 'dialog');
+      fsTip.innerHTML = '<b></b><span></span><button type="button" class="fzin-fsx">×</button>'; document.body.appendChild(fsTip);
+      fsTip.querySelector('button').addEventListener('click', e => { e.stopPropagation(); fsTipShow(false); });
+    }
+    if (!fsTip) return;
+    if (on) {
+      fsTip.querySelector('b').textContent = L('fsIosT'); fsTip.querySelector('span').textContent = L('fsIosB'); fsTip.querySelector('button').setAttribute('aria-label', L('fsClose'));
+      const r = fsBtn && fsBtn.getBoundingClientRect(), top = fsBtn && fsBtn.classList.contains('in-top');       // under the button in the menu bar, above it in the pause screen
+      fsTip.style.top = top ? Math.round(r.bottom + 8) + 'px' : ''; fsTip.style.bottom = top ? 'auto' : ''; fsTip.style.left = top ? 'auto' : ''; fsTip.style.right = top ? Math.max(10, Math.round(innerWidth - r.right)) + 'px' : '';
+    }
+    fsTip.hidden = !on;
+  }
+  /* in the menus the button sits in the top bar, after the credits and the account chip (the bar is redrawn: put it back each time) */
+  function fsSlot() {
+    if (!fsBtn) return;
+    const id = !E.running && !E.loading && menuRoot && menuRoot.querySelector('.fzm-top .fzm-id');
+    if (id) { if (fsBtn.parentElement !== id || fsBtn.nextElementSibling) id.append(fsBtn); fsBtn.classList.add('in-top'); }
+    else { if (fsBtn.parentElement !== document.body) document.body.append(fsBtn); fsBtn.classList.remove('in-top'); }
+  }
+  let fsQ = false; const fsMo = new MutationObserver(() => { if (fsQ || !fsBtn || fsBtn.hidden) return; fsQ = true; queueMicrotask(() => { fsQ = false; fsSlot(); }); });
+  if (menuRoot) fsMo.observe(menuRoot, { childList: true, subtree: true });
+  function fsRefresh() {
+    const inPlay = E.loading || (E.running && !E.paused);
+    const installed = !document.fullscreenElement && standalone();       // (display-mode: fullscreen) also matches a page put in fullscreen by the button
+    const want = ctx.touchOn && !installed && (fsOk() || noFsApi()) && !inPlay;
+    if (want && !fsBtn) {
+      fsBtn = document.createElement('button'); fsBtn.type = 'button'; fsBtn.id = 'fzin-fs';
+      fsBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"></svg>';
+      fsBtn.addEventListener('click', e => {
+        e.stopPropagation(); e.preventDefault();
+        if (!fsOk()) { fsTipShow(!fsTip || fsTip.hidden); return; }
+        try {
+          if (document.fullscreenElement) { const p = document.exitFullscreen(); if (p && p.catch) p.catch(() => {}); }
+          else { const p = html.requestFullscreen({ navigationUI: 'hide' }); if (p && p.then) p.then(lockLandscape, () => {}); }
+        } catch { /* refused */ }
+      });
+      document.body.appendChild(fsBtn);
+    }
+    if (!fsBtn) return;
+    fsBtn.hidden = !want; if (!want) fsTipShow(false); else fsSlot();
+    const full = !!document.fullscreenElement, lab = L(full ? 'fsExit' : 'fsEnter');
+    fsBtn.querySelector('svg').innerHTML = full ? FS_OUT : FS_IN; fsBtn.setAttribute('aria-label', lab); fsBtn.title = lab;
+  }
+  document.addEventListener('fullscreenchange', fsRefresh);
+  for (const ev of ['matchStart', 'matchEnd', 'quit', 'loading', 'pause']) E.on(ev, fsRefresh);
+  ctx.on(fsRefresh); fsRefresh();
+
   /* ---------- "turn your phone": portrait during a match (solo pauses) ---------- */
   let rot = null;
   const portrait = matchMedia('(orientation: portrait)');
@@ -351,6 +409,14 @@ export function install({ engine: E, settings, i18n, profile, menu, menuRoot, hu
 @keyframes fzr-turn{0%,30%{transform:rotate(0)}55%,85%{transform:rotate(-90deg)}100%{transform:rotate(0)}}
 @media(prefers-reduced-motion:reduce){#fzin-rotate .fzr-ph{animation:none;transform:rotate(-90deg)}}
 html.fzin-touch #hud [data-h="lock"],html.fzin-pad #hud [data-h="lock"]{display:none!important}
+#fzin-fs{position:fixed;left:calc(10px + env(safe-area-inset-left,0px));bottom:calc(10px + env(safe-area-inset-bottom,0px));z-index:60;width:44px;height:44px;display:grid;place-items:center;padding:0;border:1px solid rgba(232,166,40,.55);border-radius:10px;background:rgba(13,15,11,.8);color:#e8a628;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+#fzin-fs[hidden],#fzin-fstip[hidden]{display:none}
+#fzin-fs svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+#fzin-fs:active{transform:scale(.94)}
+#fzin-fs.in-top{position:static;flex:none;width:44px;height:44px;margin-left:2px}
+#fzin-fstip{position:fixed;left:calc(10px + env(safe-area-inset-left,0px));bottom:calc(62px + env(safe-area-inset-bottom,0px));z-index:61;max-width:min(320px,calc(100vw - 20px));padding:12px 40px 12px 14px;border:1px solid rgba(232,166,40,.55);border-radius:10px;background:rgba(13,15,11,.95);color:#f4ecd8;font:16px/1.35 'Barlow Condensed','Arial Narrow',Arial,sans-serif}
+#fzin-fstip b{display:block;margin-bottom:4px;color:#e8a628;font-size:15px;letter-spacing:.06em;text-transform:uppercase}
+#fzin-fstip .fzin-fsx{position:absolute;top:4px;right:4px;width:36px;height:36px;border:0;background:none;color:#f4ecd8;font-size:24px;line-height:1;cursor:pointer}
 html.fzin-pad #hud kbd.fz2-k{border-radius:999px;min-width:1.7em;background:linear-gradient(180deg,#f8d27a,#e2a43a);color:#16130a}
 .fzs .fzin-glyph{text-transform:none}
 .fzs .fzin-edit{min-width:120px;min-height:44px}

@@ -5,11 +5,15 @@ import { WEAPONS, WEAPON_CATS, OUTFITS, CLASSES, MODES as DATA_MODES, byId } fro
 import { attText, rewardName, slotsOf } from './attachments.js';
 import { openCustomizer, rewardLines, rewardBlock, rewardToast } from './attachments-ui.js';
 import { gearPanel } from './gear-ui.js';
+/* rc8 menu flow (menu-flow.js): home hub with three entries, RETOUR + breadcrumb on every sub-screen, Équipement screen, first-visit hints.
+   Loaded before the first render; if it fails, the menu keeps the rc7 layout below. */
+let Flow = null;
+try { Flow = await import('./menu-flow.js'); } catch (e) { console.warn('[menu] menu-flow.js unavailable, rc7 layout:', e && e.message); }
 
 const LANGS = ['fr', 'en', 'es', 'de', 'pt', 'it'];
 const PREFS_KEY = 'frontzero.menu';
 const XP_PER_LEVEL = 1000;
-const MODE_KEY = { ffa: 'mode.deathmatch', tdm: 'mode.teams', dom: 'mode.domination', bomb: 'mode.bomb', zombie: 'mode.zombies', zone: 'mode.zone' };
+const MODE_KEY = { ffa: 'mode.deathmatch', tdm: 'mode.teams', dom: 'mode.domination', bomb: 'mode.bomb', zombie: 'mode.zombies', zone: 'mode.zone', zone2: 'mode.zone2', zone3: 'mode.zone3', zone4: 'mode.zone4' };
 const RARITY_KEY = { 'Standard': 'standard', 'Spécial': 'special', 'Élite': 'elite', 'Légende': 'legend' };
 const DIFFICULTIES = ['easy', 'normal', 'hard'];
 const FALLBACK_MAPS = [
@@ -17,8 +21,8 @@ const FALLBACK_MAPS = [
   { id: 'bunker', env: 'bunker' }, { id: 'col-blanc', env: 'snow' },
 ];
 const SCREEN_ALIASES = {
-  play: 'play', home: 'play', accueil: 'play', jouer: 'play', solo: 'play',
-  multi: 'multi', multiplayer: 'multi', multijoueur: 'multi', lobby: 'multi', salon: 'multi',
+  play: 'play', home: 'play', accueil: 'play', jouer: 'play', solo: 'play', hub: 'play', quick: 'play', rapide: 'play', loadout: 'play', equipement: 'play', 'équipement': 'play',
+  multi: 'multi', multiplayer: 'multi', multijoueur: 'multi', lobby: 'multi', salon: 'multi', friends: 'multi', amis: 'multi',
   arsenal: 'arsenal', weapons: 'arsenal', armes: 'arsenal',
   outfits: 'outfits', tenues: 'outfits',
   classes: 'classes', class: 'classes',
@@ -38,10 +42,14 @@ const LOCAL = {
   'm.tagCoop': ['Coopération', 'Co-op', 'Cooperativo', 'Koop', 'Cooperativo', 'Cooperativa'],
   'm.modeDesc.ffa': ['Chacun pour soi. Le premier à 20 éliminations gagne.', 'Every soldier for themselves. First to 20 eliminations wins.', 'Cada soldado por su cuenta. Gana el primero en lograr 20 eliminaciones.', 'Jeder für sich. Wer zuerst 20 Eliminierungen erzielt, gewinnt.', 'Cada um por si. Vence o primeiro a chegar às 20 eliminações.', 'Ognuno per sé. Vince il primo che arriva a 20 eliminazioni.'],
   'm.modeDesc.tdm': ['Deux équipes. La première à 40 éliminations gagne.', 'Two teams. First team to 40 eliminations wins.', 'Dos equipos. Gana el primero en lograr 40 eliminaciones.', 'Zwei Teams. Das erste Team mit 40 Eliminierungen gewinnt.', 'Duas equipas. Vence a primeira a chegar às 40 eliminações.', 'Due squadre. Vince la prima che arriva a 40 eliminazioni.'],
-  'm.modeDesc.dom': ['Capturez et tenez trois zones pour marquer des points.', 'Capture and hold three zones to score points.', 'Captura y mantén tres zonas para sumar puntos.', 'Erobert und haltet drei Zonen, um Punkte zu sammeln.', 'Captura e mantém três zonas para marcar pontos.', 'Conquista e mantieni tre zone per segnare punti.'],
+  'm.modeDesc.dom': ['Capture et tiens trois zones pour marquer des points.', 'Capture and hold three zones to score points.', 'Captura y mantén tres zonas para sumar puntos.', 'Erobert und haltet drei Zonen, um Punkte zu sammeln.', 'Captura e mantém três zonas para marcar pontos.', 'Conquista e mantieni tre zone per segnare punti.'],
   'm.modeDesc.bomb': ['Les attaquants posent la bombe, les défenseurs la désamorcent. Pas de réapparition pendant la manche.', 'Attackers plant the bomb, defenders defuse it. No respawns during a round.', 'Los atacantes colocan la bomba y los defensores la desactivan. Sin reapariciones durante la ronda.', 'Angreifer legen die Bombe, Verteidiger entschärfen sie. Kein Wiedereinstieg während der Runde.', 'Os atacantes plantam a bomba, os defensores desarmam-na. Sem reaparecimento durante a ronda.', 'Gli attaccanti piazzano la bomba, i difensori la disinnescano. Nessun rientro durante il round.'],
-  'm.modeDesc.zombie': ['Survivez à des vagues de plus en plus dures.', 'Survive increasingly tough waves.', 'Sobrevive a oleadas cada vez más duras.', 'Überlebe immer härtere Wellen.', 'Sobrevive a vagas cada vez mais duras.', 'Sopravvivi a ondate sempre più dure.'],
+  'm.modeDesc.zombie': ['Survis à des vagues de plus en plus dures.', 'Survive increasingly tough waves.', 'Sobrevive a oleadas cada vez más duras.', 'Überlebe immer härtere Wellen.', 'Sobrevive a vagas cada vez mais duras.', 'Sopravvivi a ondate sempre più dure.'],
   'm.modeDesc.zone': ['Une arme de poing, des caisses à fouiller, une zone qui se referme. Le dernier en vie gagne.', 'One sidearm, crates to search, a closing zone. Last one standing wins.', 'Una pistola, cajas que registrar, una zona que se cierra. Gana el último en pie.', 'Eine Pistole, Kisten zum Durchsuchen, eine schrumpfende Zone. Der Letzte gewinnt.', 'Uma pistola, caixas para revistar, uma zona a fechar. Vence o último de pé.', 'Una pistola, casse da frugare, una zona che si chiude. Vince l’ultimo in vita.'],
+  /* Zone en équipes (zone-squads.js) */
+  'm.modeDesc.zone2': ['La Zone en équipes de deux. À terre, ton coéquipier peut te relever. La dernière équipe debout gagne.', 'Zone in squads of two. Downed, your squadmate can revive you. Last squad standing wins.', 'La Zona en equipos de dos. Derribado, tu compañero puede levantarte. Gana el último equipo en pie.', 'Zone in Zweierteams. Am Boden kann dein Kamerad dich aufheben. Das letzte Team gewinnt.', 'A Zona em equipas de dois. Caído, o teu colega pode levantar-te. Vence a última equipa de pé.', 'La Zona in squadre da due. A terra, il compagno può rialzarti. Vince l’ultima squadra in piedi.'],
+  'm.modeDesc.zone3': ['La Zone en équipes de trois. À terre, un coéquipier peut te relever. La dernière équipe debout gagne.', 'Zone in squads of three. Downed, a squadmate can revive you. Last squad standing wins.', 'La Zona en equipos de tres. Derribado, un compañero puede levantarte. Gana el último equipo en pie.', 'Zone in Dreierteams. Am Boden kann ein Kamerad dich aufheben. Das letzte Team gewinnt.', 'A Zona em equipas de três. Caído, um colega pode levantar-te. Vence a última equipa de pé.', 'La Zona in squadre da tre. A terra, un compagno può rialzarti. Vince l’ultima squadra in piedi.'],
+  'm.modeDesc.zone4': ['La Zone en équipes de quatre. À terre, un coéquipier peut te relever. La dernière équipe debout gagne.', 'Zone in squads of four. Downed, a squadmate can revive you. Last squad standing wins.', 'La Zona en equipos de cuatro. Derribado, un compañero puede levantarte. Gana el último equipo en pie.', 'Zone in Viererteams. Am Boden kann ein Kamerad dich aufheben. Das letzte Team gewinnt.', 'A Zona em equipas de quatro. Caído, um colega pode levantar-te. Vence a última equipa de pé.', 'La Zona in squadre da quattro. A terra, un compagno può rialzarti. Vince l’ultima squadra in piedi.'],
   'm.mapDesc.depot': ['Base militaire du désert : hangar traversant, tranchées de sacs, tour de guet et longues lignes de tir.', 'Desert military base: a drive-through hangar, sandbag trenches, a watchtower and long firing lines.', 'Base militar del desierto: hangar pasante, trincheras de sacos, torre de vigilancia y largas líneas de tiro.', 'Militärbasis in der Wüste: durchgehender Hangar, Sandsackgräben, Wachturm und lange Schusslinien.', 'Base militar no deserto: hangar aberto dos dois lados, trincheiras de sacos, torre de vigia e longas linhas de tiro.', 'Base militare nel deserto: hangar passante, trincee di sacchi, torre di guardia e lunghe linee di tiro.'],
   'm.mapDesc.vieille-ville': ['Cité meurtrie : ruelles, arcades, cours, maisons à étages et passerelles entre les toits.', 'War-torn town: alleys, arcades, courtyards, multi-storey houses and walkways between rooftops.', 'Ciudad herida: callejones, soportales, patios, casas de varias plantas y pasarelas entre tejados.', 'Gezeichnete Stadt: Gassen, Arkaden, Höfe, mehrstöckige Häuser und Stege zwischen den Dächern.', 'Cidade ferida: ruelas, arcadas, pátios, casas de vários andares e passadiços entre telhados.', 'Città ferita: vicoli, portici, cortili, case a più piani e passerelle tra i tetti.'],
   'm.mapDesc.port': ['Docks au crépuscule : labyrinthe de conteneurs, entrepôt traversant, coursives et grues au-dessus de l’eau.', 'Docks at dusk: a container maze, a drive-through warehouse, gangways and cranes above the water.', 'Muelles al atardecer: laberinto de contenedores, almacén pasante, pasarelas y grúas sobre el agua.', 'Docks in der Dämmerung: Containerlabyrinth, durchgehende Lagerhalle, Laufstege und Kräne über dem Wasser.', 'Docas ao crepúsculo: labirinto de contentores, armazém aberto dos dois lados, passadiços e gruas sobre a água.', 'Banchine al tramonto: labirinto di container, magazzino passante, camminamenti e gru sopra l’acqua.'],
@@ -79,11 +87,11 @@ const LOCAL = {
   'm.createHint': ['Le salon utilisera le mode et la carte sélectionnés.', 'The room will use the selected mode and map.', 'La sala usará el modo y el mapa seleccionados.', 'Der Raum verwendet den gewählten Modus und die gewählte Karte.', 'A sala usará o modo e o mapa selecionados.', 'La stanza userà la modalità e la mappa selezionate.'],
   'm.join': ['Rejoindre', 'Join', 'Unirse', 'Beitreten', 'Entrar', 'Entra'],
   'm.codeHelp': ['6 lettres', '6 letters', '6 letras', '6 Buchstaben', '6 letras', '6 lettere'],
-  'm.share': ['Hôte : donnez l’adresse de cette page et le code du salon aux joueurs connectés au même réseau.', 'Host: give the address of this page and the room code to players on the same network.', 'Anfitrión: da la dirección de esta página y el código de la sala a los jugadores de la misma red.', 'Host: Gib die Adresse dieser Seite und den Raumcode an Spieler im selben Netzwerk weiter.', 'Anfitrião: dá o endereço desta página e o código da sala aos jogadores da mesma rede.', 'Host: comunica l’indirizzo di questa pagina e il codice della stanza ai giocatori sulla stessa rete.'],
-  'm.shareLocal': ['Cette adresse locale ne fonctionne que sur cet ordinateur : remplacez le nom d’hôte par l’adresse IP de cet ordinateur sur le réseau (par exemple 192.168.1.20).', 'This local address only works on this computer: replace the host name with this computer’s IP address on the network (for example 192.168.1.20).', 'Esta dirección local solo funciona en este ordenador: sustituye el nombre del host por la dirección IP de este ordenador en la red (por ejemplo 192.168.1.20).', 'Diese lokale Adresse funktioniert nur auf diesem Computer: Ersetze den Hostnamen durch die IP-Adresse dieses Computers im Netzwerk (zum Beispiel 192.168.1.20).', 'Este endereço local só funciona neste computador: substitui o nome do anfitrião pelo endereço IP deste computador na rede (por exemplo 192.168.1.20).', 'Questo indirizzo locale funziona solo su questo computer: sostituisci il nome host con l’indirizzo IP di questo computer sulla rete (ad esempio 192.168.1.20).'],
+  'm.share': ['Hôte : donne l’adresse de cette page et le code du salon aux joueurs connectés au même réseau.', 'Host: give the address of this page and the room code to players on the same network.', 'Anfitrión: da la dirección de esta página y el código de la sala a los jugadores de la misma red.', 'Host: Gib die Adresse dieser Seite und den Raumcode an Spieler im selben Netzwerk weiter.', 'Anfitrião: dá o endereço desta página e o código da sala aos jogadores da mesma rede.', 'Host: comunica l’indirizzo di questa pagina e il codice della stanza ai giocatori sulla stessa rete.'],
+  'm.shareLocal': ['Cette adresse locale ne fonctionne que sur cet ordinateur : remplace le nom d’hôte par l’adresse IP de cet ordinateur sur le réseau (par exemple 192.168.1.20).', 'This local address only works on this computer: replace the host name with this computer’s IP address on the network (for example 192.168.1.20).', 'Esta dirección local solo funciona en este ordenador: sustituye el nombre del host por la dirección IP de este ordenador en la red (por ejemplo 192.168.1.20).', 'Diese lokale Adresse funktioniert nur auf diesem Computer: Ersetze den Hostnamen durch die IP-Adresse dieses Computers im Netzwerk (zum Beispiel 192.168.1.20).', 'Este endereço local só funciona neste computador: substitui o nome do anfitrião pelo endereço IP deste computador na rede (por exemplo 192.168.1.20).', 'Questo indirizzo locale funziona solo su questo computer: sostituisci il nome host con l’indirizzo IP di questo computer sulla rete (ad esempio 192.168.1.20).'],
   'm.copyAddr': ['Copier l’adresse', 'Copy address', 'Copiar dirección', 'Adresse kopieren', 'Copiar endereço', 'Copia indirizzo'],
   'm.addrCopied': ['Adresse copiée', 'Address copied', 'Dirección copiada', 'Adresse kopiert', 'Endereço copiado', 'Indirizzo copiato'],
-  'm.copyFail': ['Copie impossible : sélectionnez le texte.', 'Could not copy: select the text.', 'No se pudo copiar: selecciona el texto.', 'Kopieren nicht möglich: Text markieren.', 'Não foi possível copiar: seleciona o texto.', 'Copia non riuscita: seleziona il testo.'],
+  'm.copyFail': ['Copie impossible : sélectionne le texte.', 'Could not copy: select the text.', 'No se pudo copiar: selecciona el texto.', 'Kopieren nicht möglich: Text markieren.', 'Não foi possível copiar: seleciona o texto.', 'Copia non riuscita: seleziona il testo.'],
   'm.unassigned': ['Répartition automatique', 'Auto-assigned', 'Reparto automático', 'Automatische Zuteilung', 'Distribuição automática', 'Assegnazione automatica'],
   'm.setReady': ['Je suis prêt', 'I am ready', 'Estoy listo', 'Ich bin bereit', 'Estou pronto', 'Sono pronto'],
   'm.cancelReady': ['Annuler « prêt »', 'Cancel ready', 'Cancelar «listo»', 'Bereitschaft aufheben', 'Cancelar «pronto»', 'Annulla «pronto»'],
@@ -97,9 +105,9 @@ const LOCAL = {
   'm.reconnect': ['Reconnecter', 'Reconnect', 'Reconectar', 'Neu verbinden', 'Religar', 'Riconnetti'],
   'm.retry': ['Réessayer', 'Retry', 'Reintentar', 'Erneut versuchen', 'Tentar de novo', 'Riprova'],
   'm.inRoom': ['Salon {code}', 'Room {code}', 'Sala {code}', 'Raum {code}', 'Sala {code}', 'Stanza {code}'],
-  'm.errConnect': ['Connexion au serveur impossible. Vérifiez que le serveur de jeu est lancé et que cette page est ouverte depuis son adresse.', 'Could not reach the server. Check that the game server is running and that this page was opened from its address.', 'No se pudo conectar con el servidor. Comprueba que el servidor del juego está en marcha y que esta página se abrió desde su dirección.', 'Server nicht erreichbar. Prüfe, ob der Spielserver läuft und diese Seite über seine Adresse geöffnet wurde.', 'Não foi possível ligar ao servidor. Verifica se o servidor do jogo está a correr e se esta página foi aberta a partir do seu endereço.', 'Impossibile raggiungere il server. Verifica che il server di gioco sia avviato e che questa pagina sia aperta dal suo indirizzo.'],
+  'm.errConnect': ['Connexion au serveur impossible. Vérifie que le serveur de jeu est lancé et que cette page est ouverte depuis son adresse.', 'Could not reach the server. Check that the game server is running and that this page was opened from its address.', 'No se pudo conectar con el servidor. Comprueba que el servidor del juego está en marcha y que esta página se abrió desde su dirección.', 'Server nicht erreichbar. Prüfe, ob der Spielserver läuft und diese Seite über seine Adresse geöffnet wurde.', 'Não foi possível ligar ao servidor. Verifica se o servidor do jogo está a correr e se esta página foi aberta a partir do seu endereço.', 'Impossibile raggiungere il server. Verifica che il server di gioco sia avviato e che questa pagina sia aperta dal suo indirizzo.'],
   'm.errCode': ['Code invalide : il faut 6 lettres.', 'Invalid code: 6 letters are required.', 'Código no válido: se necesitan 6 letras.', 'Ungültiger Code: 6 Buchstaben erforderlich.', 'Código inválido: são necessárias 6 letras.', 'Codice non valido: servono 6 lettere.'],
-  'm.errRate': ['Trop de demandes. Patientez quelques secondes.', 'Too many requests. Wait a few seconds.', 'Demasiadas solicitudes. Espera unos segundos.', 'Zu viele Anfragen. Warte ein paar Sekunden.', 'Demasiados pedidos. Aguarda alguns segundos.', 'Troppe richieste. Attendi qualche secondo.'],
+  'm.errRate': ['Trop de demandes. Patiente quelques secondes.', 'Too many requests. Wait a few seconds.', 'Demasiadas solicitudes. Espera unos segundos.', 'Zu viele Anfragen. Warte ein paar Sekunden.', 'Demasiados pedidos. Aguarda alguns segundos.', 'Troppe richieste. Attendi qualche secondo.'],
   'm.waking': ['Le serveur se réveille, cela peut prendre jusqu’à une minute…', 'The server is waking up, this can take up to a minute…', 'El servidor se está despertando, puede tardar hasta un minuto…', 'Der Server wird geweckt, das kann bis zu einer Minute dauern…', 'O servidor está a acordar, pode demorar até um minuto…', 'Il server si sta svegliando, può richiedere fino a un minuto…'],
   'm.errServerFull': ['Le serveur est complet.', 'The server is full.', 'El servidor está lleno.', 'Der Server ist voll.', 'O servidor está cheio.', 'Il server è pieno.'],
   'm.errGeneric': ['Erreur du serveur ({code}).', 'Server error ({code}).', 'Error del servidor ({code}).', 'Serverfehler ({code}).', 'Erro do servidor ({code}).', 'Errore del server ({code}).'],
@@ -116,7 +124,7 @@ const LOCAL = {
   'm.reloadTime': ['Rechargement', 'Reload', 'Recarga', 'Nachladen', 'Recarga', 'Ricarica'],
   'm.sidearmNote': ['Toujours équipée', 'Always equipped', 'Siempre equipada', 'Immer ausgerüstet', 'Sempre equipada', 'Sempre equipaggiata'],
   /* arsenal : emplacements, catégories et caractéristiques propres à chaque type d’arme */
-  'm.arsenalNote': ['Composez votre équipement : une arme principale, une arme secondaire et un équipement à lancer.', 'Build your loadout: one primary weapon, one sidearm and one piece of throwable gear.', 'Compón tu equipo: un arma principal, un arma secundaria y un equipo arrojadizo.', 'Stell deine Ausrüstung zusammen: eine Primärwaffe, eine Zweitwaffe und ein Wurfgerät.', 'Compõe o teu equipamento: uma arma principal, uma arma secundária e um equipamento de arremesso.', 'Componi il tuo equipaggiamento: un’arma primaria, un’arma secondaria e un equipaggiamento da lancio.'],
+  'm.arsenalNote': ['Compose ton équipement :une arme principale, une arme secondaire et un équipement à lancer.', 'Build your loadout: one primary weapon, one sidearm and one piece of throwable gear.', 'Compón tu equipo: un arma principal, un arma secundaria y un equipo arrojadizo.', 'Stell deine Ausrüstung zusammen: eine Primärwaffe, eine Zweitwaffe und ein Wurfgerät.', 'Compõe o teu equipamento: uma arma principal, uma arma secundária e um equipamento de arremesso.', 'Componi il tuo equipaggiamento: un’arma primaria, un’arma secondaria e un equipaggiamento da lancio.'],
   'm.slot0': ['Principale', 'Primary', 'Principal', 'Primär', 'Principal', 'Primaria'],
   'm.slot1': ['Secondaire', 'Secondary', 'Secundaria', 'Sekundär', 'Secundária', 'Secondaria'],
   'm.slot2': ['Équipement', 'Gear', 'Equipo', 'Ausrüstung', 'Equipamento', 'Equipaggiamento'],
@@ -274,7 +282,7 @@ background:radial-gradient(1100px 620px at 84% -8%,rgba(232,166,40,.13),transpar
 .fzm-cr b{font-size:25px;font-weight:700;line-height:1.1;color:var(--amber);font-variant-numeric:tabular-nums}
 .fzm-cr span{font-size:17px;font-weight:600;color:var(--dim)}
 
-.fzm-main{position:relative;flex:1;min-height:0;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:rgba(201,185,143,.3) transparent}
+.fzm-main{position:relative;flex:1;min-height:0;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:rgba(201,185,143,.3) transparent;scroll-padding-bottom:120px}
 .fzm-main--flush{overflow:hidden}
 .fzm-wrap{max-width:1680px;margin:0 auto;padding:clamp(16px,2.2vw,34px) var(--pad) clamp(20px,3vw,44px)}
 .fzm-enter{animation:fzm-in .18s ease-out both}
@@ -715,7 +723,7 @@ export function createMenu(rootEl, deps = {}) {
   /* ---------- textes ---------- */
   const lang = () => (i18n && LANGS.includes(i18n.lang) ? i18n.lang : 'fr');
   const T = (key, params) => (i18n ? i18n.t(key, params) : key);
-  const hasKey = key => !!i18n && i18n.t(key) !== key;
+  const hasKey = key => !!i18n && typeof key === 'string' && i18n.t(key) !== key;       // rc8: no key (a mode without a MODE_KEY, e.g. zone2) = not translated, not ''
   const L = (key, params) => {
     const row = LOCAL[key];
     if (!row) return T(key, params);
@@ -727,10 +735,9 @@ export function createMenu(rootEl, deps = {}) {
   const modeName = m => (m && hasKey(MODE_KEY[m.id]) ? T(MODE_KEY[m.id]) : (m && (m.name || m.id)) || '');
   const modeDesc = m => {
     if (!m) return '';
-    if (lang() === 'fr' && m.desc) return m.desc;
-    return LOCAL['m.modeDesc.' + m.id] ? L('m.modeDesc.' + m.id) : (m.desc || '');
+    return LOCAL['m.modeDesc.' + m.id] ? L('m.modeDesc.' + m.id) : (m.desc || '');       // rc8: the menu's own French ("tu"), not data.js
   };
-  const modeTag = m => (m && m.coop ? ['coop', L('m.tagCoop')] : m && m.teams ? ['team', L('m.tagTeams')] : ['ffa', L('m.tagFfa')]);
+  const modeTag = m => (m && m.coop ? ['coop', L('m.tagCoop')] : m && (m.teams || m.squad) ? ['team', L('m.tagTeams')] : ['ffa', L('m.tagFfa')]);       // m.squad: Zone Duo / Trio / Quatuor
   const mapOf = id => byId(MAPS, id);
   const mapName = id => {
     if (id === 'random') return L('m.random');
@@ -756,6 +763,7 @@ export function createMenu(rootEl, deps = {}) {
     screen: 'play', playMode: 'solo', mode: MODES[0].id, map: MAPS[0].id, bots: 7, difficulty: 'normal',
     room: null, pending: null, netError: null, joinCode: '', lastCode: null, lastIntent: null, leaving: false,
     deploying: false, lastCfg: null, end: null,
+    flow: 'hub', back: null,       // menu-flow.js: hub | solo | friends | quick | loadout; back = where RETOUR leads from a top tab
   };
   try {
     const raw = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
@@ -771,7 +779,7 @@ export function createMenu(rootEl, deps = {}) {
     try { localStorage.setItem(PREFS_KEY, JSON.stringify({ mode: st.mode, map: st.map, bots: st.bots, difficulty: st.difficulty, playMode: st.playMode })); } catch { /* stockage indisponible */ }
   };
 
-  let visible = false, destroyed = false, shownKey = null, settingsOff = null, dialog = null;
+  let visible = false, destroyed = false, shownKey = null, settingsOff = null, dialog = null, flow = null, wardrobe = null, wardrobeLoad = null;       // wardrobe-ui.js: the TENUES screen (rc8)
   let pointerDown = false, renderPending = false, toastTimer = 0, deployTimer = 0, connTimer = 0, endGuardUntil = 0, sentLoadout = '', xpAtHide = null, muteProfile = false;
   const endTimers = [];
   const offs = [];
@@ -918,10 +926,11 @@ export function createMenu(rootEl, deps = {}) {
     const inside = active && root.contains(active) && !(dialog && dialog.layer.contains(active));
     const fid = inside ? active.getAttribute('data-fid') : null;
     const caret = fid && active.tagName === 'INPUT' && active.type === 'text' ? [active.selectionStart, active.selectionEnd] : null;
-    const key = st.screen === 'play' ? `play:${st.playMode}:${st.playMode === 'multi' && st.room ? 'lobby' : 'pick'}` : st.screen;
+    const key = st.screen === 'play' ? (flow ? (st.room && st.flow !== 'loadout' ? 'play:lobby' : `play:${st.flow}`) : `play:${st.playMode}:${st.playMode === 'multi' && st.room ? 'lobby' : 'pick'}`) : st.screen;
     const entering = key !== shownKey;
     const scroll = entering ? 0 : main.scrollTop;
     shownKey = key;
+    if (wardrobe && st.screen !== 'outfits') { try { wardrobe.leave(); } catch (err) { console.warn('[menu] wardrobe', err); } }       // its 3D studio lives only while TENUES is open
 
     const isEnd = st.screen === 'end';
     top.hidden = isEnd;
@@ -935,12 +944,14 @@ export function createMenu(rootEl, deps = {}) {
         main.append(box);
         try { settingsOff = settings && typeof settings.mount === 'function' ? settings.mount(box) : null; } catch (err) { console.error('[menu] settings.mount', err); }
         if (!settingsOff) settingsOff = () => {};
+        if (flow) flowPart('tab', box, 'settings');       // RETOUR over the settings header
       }
     } else {
       unmountSettings();
       main.className = 'fzm-main';
       const view = st.screen === 'arsenal' ? viewArsenal() : st.screen === 'outfits' ? viewOutfits() : st.screen === 'classes' ? viewClasses()
         : isEnd ? viewEnd() : viewPlay();
+      if (flow && !isEnd && st.screen !== 'play') flowPart('tab', view, st.screen);       // RETOUR + where you are, on the top tabs
       if (entering) view.classList.add('fzm-enter');
       main.textContent = '';
       main.append(view);
@@ -985,9 +996,10 @@ export function createMenu(rootEl, deps = {}) {
   }
   /* Boutique : son propre écran (shop-ui.js), chargé au premier clic. Une erreur ici ne touche jamais le menu. */
   let shopBusy = false;
-  async function openStore() {
+  async function openStore(focus) {       // focus (rc8, wardrobe VOIR EN BOUTIQUE): { tab: 'outfits', id }
     if (shopBusy) return; shopBusy = true;
-    try { const m = await import('./shop-ui.js'); await m.openShop({ engine, profile, i18n, settings, sfx, weaponType, outfitName, onChange: () => { if (st.room) syncLoadout(st.room); scheduleRender(); }, onClose: () => { shopBusy = false; scheduleRender(); } }); }
+    if (wardrobe) wardrobe.leave();       // one 3D studio at a time
+    try { const m = await import('./shop-ui.js'); await m.openShop({ engine, profile, i18n, settings, sfx, weaponType, outfitName, focus: focus || undefined, onChange: () => { if (st.room) syncLoadout(st.room); scheduleRender(); }, onClose: () => { shopBusy = false; scheduleRender(); } }); }
     catch (err) { shopBusy = false; console.error('[menu] shop', err); }
   }
   function renderTop() {
@@ -996,7 +1008,7 @@ export function createMenu(rootEl, deps = {}) {
     for (const [id, key] of NAV) {
       nav.append(h('button', {
         type: 'button', class: 'fzm-tab', 'data-fid': `nav:${id}`, 'aria-current': st.screen === id ? 'page' : null,
-        onclick: () => { if (id === 'shop') { sfx('ui'); openStore(); return; } if (id === 'pass') { sfx('ui'); openSeasonPass(); return; } if (st.screen !== id) { sfx('ui'); go(id); } },
+        onclick: () => { if (id === 'shop') { sfx('ui'); openStore(); return; } if (id === 'pass') { sfx('ui'); openSeasonPass(); return; } if (flow && flowPart('tabClick', id)) return; if (st.screen !== id) { sfx('ui'); go(id); } },
       }, h('span', tx(key)), id === 'play' && st.room ? h('i', { class: 'fzm-tab-dot', title: L('m.inRoom', { code: st.room.code }) }) : null));
     }
     nav.addEventListener('keydown', e => {
@@ -1017,12 +1029,13 @@ export function createMenu(rootEl, deps = {}) {
           h('div', { class: 'fzm-xp', role: 'progressbar', 'aria-label': L('m.xp'), 'aria-valuemin': '0', 'aria-valuemax': String(XP_PER_LEVEL), 'aria-valuenow': String(into) },
             h('i', { style: `width:${(into / XP_PER_LEVEL) * 100}%` })),
           h('div', { class: 'fzm-xp-text', text: `${num(into)} / ${num(XP_PER_LEVEL)} XP` })),
-        h('div', { class: 'fzm-cr', 'aria-label': `${T('end.credits')} : ${num(P.cr)}` }, h('b', { text: num(P.cr) }), h('span', { text: '₡' }))),
+        h('div', { class: 'fzm-cr', 'aria-label': `${T('end.credits')} : ${num(P.cr)}` }, h('b', { text: num(P.cr) }), h('span', { text: '₡' })),
+        h('div', { class: 'fzm-acct' })),       // account chip, filled by account-ui.js
     );
   }
 
   /* ---------- accueil / jouer ---------- */
-  const modesFor = multi => { const list = MODES.filter(m => (multi ? m.online !== false && !(m.id === 'zone' && net && net.connected && net.zoneOk === false) : m.solo !== false)); return list.length ? list : MODES; };       // an older server does not know the Zone mode
+  const modesFor = multi => { const list = MODES.filter(m => (multi ? m.online !== false && !(m.id === 'zone' && net && net.connected && net.zoneOk === false) && !(m.squad && net && net.connected && !net.sqOk) : m.solo !== false)); return list.length ? list : MODES; };       // squads: only on a server that has them       // an older server does not know the Zone mode
   const botRange = () => (st.mode === 'zombie' ? { min: 0, max: 3 } : { min: 1, max: 11 });
   const botCount = () => { const r = botRange(); return clamp(st.bots, r.min, r.max); };
   const randomMap = () => MAPS[Math.floor(Math.random() * MAPS.length)].id;
@@ -1035,12 +1048,16 @@ export function createMenu(rootEl, deps = {}) {
       h('div', null, h('small', { text: L('m.loadout') }),
         h('span', { class: 'fzm-load-text', text: T('menu.loadout', { cls: className(cls), weapon: weapon ? weapon.name : '', outfit: outfitName(outfit) }) }),
         extra ? h('span', { class: 'fzm-load-sub', 'data-fid-info': 'loadout-extra', text: extra }) : null),
+      (flow && flowPart('loadoutBtn')) ||       // ÉQUIPEMENT: the loadout screen (menu-flow.js)
       h('button', { type: 'button', class: 'fzm-link', 'data-fid': 'play:edit', onclick: () => { sfx('ui'); go('arsenal'); } }, L('m.edit')));
   }
 
   function viewPlay() {
     const multi = st.playMode === 'multi';
-    if (multi && st.room) return viewLobby();
+    if (multi && st.room && !flow) return viewLobby();
+    if (flow && st.flow === 'loadout') { const v = flowPart('loadout'); if (v) return v; }       // also from the room
+    if (flow && st.room) return viewLobby();       // in a room, JOUER is the room
+    if (flow && st.flow === 'hub') { const v = flowPart('hub'); if (v) return v; }
     const modes = modesFor(multi);
     if (!modes.some(m => m.id === st.mode)) st.mode = modes[0].id;
     const mode = byId(MODES, st.mode), mapEnv = st.map === 'random' ? 'random' : (mapOf(st.map) || {}).env;
@@ -1063,6 +1080,7 @@ export function createMenu(rootEl, deps = {}) {
       h('div', null, h('span', { class: 'fzm-sum-map', text: mapName(st.map) }), h('span', { class: 'fzm-sum-mode', text: `${modeName(mode)} · ${tagText}` })),
       h('p', { class: 'fzm-sum-desc', text: mapDesc(st.map) }));
 
+    if (flow) { const v = flowPart('screen', st.flow, { modePicker, mapPicker, summary, multi }); if (v) return v; }       // Solo / Entre amis / Partie rapide
     return h('div', { class: multi ? 'fzm-wrap fzm-play fzm-play--multi' : 'fzm-wrap fzm-play' },
       h('div', { class: 'fzm-play-head' },
         radios('playmode', `${T('mode.solo')} / ${T('mode.multiplayer')}`, st.playMode, [
@@ -1083,7 +1101,7 @@ export function createMenu(rootEl, deps = {}) {
     slider.addEventListener('input', () => setBots(Number(slider.value)));
     return h('div', { class: 'fzm-panel' },
       heading(L('m.brief')), summary,
-      st.mode === 'zone' ? null : h('div', { class: 'fzm-field' },       // Zone sizes the match from the map
+      /^zone/.test(st.mode) ? null : h('div', { class: 'fzm-field' },       // Zone (and its squads) sizes the match from the map
         h('div', { class: 'fzm-label' }, h('span', { text: st.mode === 'zombie' ? L('m.allies') : L('m.bots') }), out),
         h('div', { class: 'fzm-step' },
           h('button', { type: 'button', 'data-fid': 'play:bots-', 'aria-label': L('m.less'), onclick: () => { sfx('ui'); setBots(st.bots - 1); } }, '−'),
@@ -1205,6 +1223,10 @@ export function createMenu(rootEl, deps = {}) {
   function extPart(name, ...args) {
     try { const f = api.ext && api.ext[name]; return typeof f === 'function' ? f(...args) || null : null; } catch (err) { console.warn('[menu] ext', name, err); return null; }
   }
+  /* menu-flow.js parts (hub, sub-screens, RETOUR bars). A failure there gives the rc7 layout for that render. */
+  function flowPart(name, ...args) {
+    try { const f = flow && flow[name]; return typeof f === 'function' ? f(...args) || null : null; } catch (err) { console.warn('[menu] flow', name, err); return null; }
+  }
   function alertBox() {
     if (!st.netError) return null;
     const code = st.netError.code, canRetry = ['connect_failed', 'lost', 'not_connected'].includes(code) && (st.lastCode || st.lastIntent);
@@ -1228,12 +1250,20 @@ export function createMenu(rootEl, deps = {}) {
     } catch { fallback(); }
   }
 
-  function multiPanel(summary) {
-    if (!net) return h('div', { class: 'fzm-panel' }, heading(T('mode.multiplayer')), h('div', { class: 'fzm-alert', role: 'alert', text: errorText('no_net') }));
-    const busy = !!st.pending;
+  /* name, connection status and join-by-code: built here, placed by multiPanel (rc7 layout) or by menu-flow.js (Entre amis, Partie rapide) */
+  function nameField() {
     const name = h('input', { class: 'fzm-input', type: 'text', id: `${uid}-name`, 'data-fid': 'multi:name', maxlength: '16', autocomplete: 'off', spellcheck: 'false',
       value: profile.data.name || '', placeholder: L('m.namePh') });
     name.addEventListener('change', () => commitName(name));
+    name.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); commitName(name); } });
+    return h('div', { class: 'fzm-field' }, h('label', { class: 'fzm-label', for: `${uid}-name` }, h('span', tx('lobby.name'))), name);
+  }
+  function busyLine() {
+    return st.pending ? h('div', { class: 'fzm-status', role: 'status' }, h('i', { class: 'fzm-spin' }), h('span', tx('lobby.connecting')),
+      document.querySelector('meta[name="fz-server"]') ? h('small', { class: 'fzm-wake', text: L('m.waking') }) : null) : null;
+  }
+  function joinField() {
+    const busy = !!st.pending;
     const code = h('input', { class: 'fzm-input fzm-input--code', type: 'text', id: `${uid}-code`, 'data-fid': 'multi:code', maxlength: '6', autocomplete: 'off', autocapitalize: 'characters',
       spellcheck: 'false', value: st.joinCode, 'aria-describedby': `${uid}-codehelp`, 'data-i18n-attr': 'placeholder:lobby.codePlaceholder', placeholder: T('lobby.codePlaceholder') });
     code.addEventListener('input', () => {
@@ -1243,17 +1273,19 @@ export function createMenu(rootEl, deps = {}) {
     });
     const join = () => joinRoom(code.value);
     code.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); join(); } });
-    name.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); commitName(name); } });
+    return h('div', { class: 'fzm-field' },
+      h('label', { class: 'fzm-label', for: `${uid}-code` }, h('span', tx('lobby.code')), h('small', { id: `${uid}-codehelp`, text: L('m.codeHelp') })),
+      h('div', { class: 'fzm-joinrow' }, code, button('', 'multi:join', L('m.join'), join, { disabled: busy, 'aria-label': T('lobby.join') })));
+  }
+  function multiPanel(summary) {
+    if (!net) return h('div', { class: 'fzm-panel' }, heading(T('mode.multiplayer')), h('div', { class: 'fzm-alert', role: 'alert', text: errorText('no_net') }));
     return h('div', { class: 'fzm-panel' },
       heading(T('mode.multiplayer')), summary,
-      h('div', { class: 'fzm-field' }, h('label', { class: 'fzm-label', for: `${uid}-name` }, h('span', tx('lobby.name'))), name),
+      nameField(),
       alertBox(),
-      busy ? h('div', { class: 'fzm-status', role: 'status' }, h('i', { class: 'fzm-spin' }), h('span', tx('lobby.connecting')),
-        document.querySelector('meta[name="fz-server"]') ? h('small', { class: 'fzm-wake', text: L('m.waking') }) : null) : null,
+      busyLine(),
       h('div', { class: 'fzm-or', text: L('m.or') }),
-      h('div', { class: 'fzm-field' },
-        h('label', { class: 'fzm-label', for: `${uid}-code` }, h('span', tx('lobby.code')), h('small', { id: `${uid}-codehelp`, text: L('m.codeHelp') })),
-        h('div', { class: 'fzm-joinrow' }, code, button('', 'multi:join', L('m.join'), join, { disabled: busy, 'aria-label': T('lobby.join') }))),
+      joinField(),
       loadoutLine());
   }
 
@@ -1275,7 +1307,7 @@ export function createMenu(rootEl, deps = {}) {
     const players = Array.isArray(room.players) ? room.players : [];
     const mode = byId(MODES, room.mode), teamMode = !!(mode && mode.teams), playing = room.state === 'playing';
     const others = players.filter(p => p.id !== room.hostId);
-    const needPlayers = room.mode !== 'zombie' && room.mode !== 'zone' && players.length < 2, notReady = others.some(p => !p.ready);
+    const needPlayers = room.mode !== 'zombie' && !/^zone/.test(room.mode) && players.length < 2, notReady = others.some(p => !p.ready);       // zone2-4: squads, bots fill
     const env = (mapOf(room.map) || {}).env;
 
     const row = p => (p.bot ? extPart('botRow', p) : null) || h('div', { class: `fzm-player${p.ready || p.id === room.hostId ? ' is-ready' : ''}${self && p.id === self.id ? ' is-you' : ''}` },       // an online bot: its own row (online-ui.js)
@@ -1337,8 +1369,8 @@ export function createMenu(rootEl, deps = {}) {
 
     return h('div', { class: 'fzm-wrap fzm-lobby' },
       h('div', { class: 'fzm-lobby-head' },
-        h('div', null, h('h2', { class: 'fzm-title', ...tx('lobby.title') }), h('p', { class: 'fzm-lobby-sub', text: `${modeName(mode) || room.mode} · ${mapName(room.map)}` })),
-        radios('playmode', `${T('mode.solo')} / ${T('mode.multiplayer')}`, st.playMode, [
+        h('div', null, flow ? flowPart('lobbyCrumb', room) : null, h('h2', { class: 'fzm-title', ...tx('lobby.title') }), h('p', { class: 'fzm-lobby-sub', text: `${modeName(mode) || room.mode} · ${mapName(room.map)}` })),
+        (flow && flowPart('lobbyAside', room, playing)) || radios('playmode', `${T('mode.solo')} / ${T('mode.multiplayer')}`, st.playMode, [
           { id: 'solo', kids: h('span', tx('mode.solo')) }, { id: 'multi', kids: h('span', tx('mode.multiplayer')) },
         ], id => { st.playMode = id; savePrefs(); render(); }, 'fzm-seg')),
       h('div', { class: 'fzm-lobby-grid' },
@@ -1465,7 +1497,15 @@ export function createMenu(rootEl, deps = {}) {
         h('div', { class: 'fzm-grid fzm-grid--guns' }, g.list.map(weaponCard)))));
   }
 
+  /* TENUES (rc8): the real wardrobe (wardrobe-ui.js, loaded on the first visit): every outfit, set and colourway, a 3D preview; the 6 camos
+     below stay as the fallback while it loads or if it fails */
+  function wardrobeView() {
+    if (wardrobe) { try { return wardrobe.view(); } catch (err) { console.warn('[menu] wardrobe', err); return null; } }
+    if (!wardrobeLoad) wardrobeLoad = import('./wardrobe-ui.js').then(m => { wardrobe = m.createWardrobe({ engine, profile, i18n, settings, sfx, outfitName, openStore: id => openStore({ tab: 'outfits', id }), onChange: () => { if (st.room) syncLoadout(st.room); } }); scheduleRender(); }).catch(err => console.warn('[menu] wardrobe unavailable', err));
+    return null;
+  }
   function viewOutfits() {
+    const w = wardrobeView(); if (w) return w;
     const P = profile.data;
     return h('div', { class: 'fzm-wrap' }, screenHead('nav.outfits', 'shop.outfitsNote'),
       h('div', { class: 'fzm-grid' }, OUTFITS.map(o => {
@@ -1618,6 +1658,7 @@ export function createMenu(rootEl, deps = {}) {
     if (e.key !== 'Escape' || e.defaultPrevented) return;
     if (dialog) { e.preventDefault(); closeDialog(); return; }
     if (st.screen === 'end') { if (performance.now() >= endGuardUntil) endBack(); return; }
+    if (flow && flowPart('escape', e)) return;       // one step back (sub-screen -> hub, tab -> where it was opened from)
     if (st.screen !== 'play') { sfx('ui'); go('play'); }
   });
 
@@ -1681,6 +1722,7 @@ export function createMenu(rootEl, deps = {}) {
       else if (target === 'end') st.screen = st.end ? 'end' : 'play';
       else if (target) { st.screen = target; if (asked === 'solo') st.playMode = 'solo'; }
       else if (st.screen === 'end') st.screen = 'play';
+      if (flow) flowPart('shown', asked, target);       // which sub-screen a show('multi'), show('solo')... lands on
       st.deploying = false;
       clearTimeout(deployTimer);
       reveal();
@@ -1695,6 +1737,7 @@ export function createMenu(rootEl, deps = {}) {
       closeDialog();
       unmountSettings();
       toastEl.classList.remove('is-on');
+      if (wardrobe) { try { wardrobe.leave(); } catch { /* already released */ } }
       shownKey = null;
       root.hidden = true;
       rootEl.style.display = 'none';
@@ -1710,6 +1753,11 @@ export function createMenu(rootEl, deps = {}) {
     kit: {
       h, button, radios, heading, tag, thumb, modeName, mapName, mapOf, L, T, tx, sfx, toast, st, MODES, MAPS, uid, joinRoom, render: () => scheduleRender(),
       pending(kind, retry) { if (!net || st.pending) return null; commitName(); st.netError = null; st.pending = kind; st.lastIntent = { type: kind, retry }; expectReply(); sfx('ui'); render(); return playerName(); },
+      /* menu-flow.js (rc8): the menu's own pieces, placed by the hub and the sub-screens */
+      root, main, profile, net, engine, camo, gun, stat, go, renderNow: () => render(), modeTag, modeDesc, mapDesc, className, classDesc, outfitName, weaponType, slotName, rankName, num,
+      soloPanel, soloCta, multiCta, nameField, joinField, busyLine, alertBox, loadoutLine, extPart, deploySolo, playerName, commitName, savePrefs,
+      syncLoadout: () => { if (st.room) syncLoadout(st.room); },
+      cancelPending() { if (!st.pending) return; st.pending = null; st.lastIntent = null; clearTimeout(connTimer); if (net && !st.room) { st.leaving = !!net.connected; try { net.disconnect(); } catch { /* already closed */ } } render(); },
     },
     showEnd(result) {
       if (destroyed) return;
@@ -1751,6 +1799,7 @@ export function createMenu(rootEl, deps = {}) {
     },
   };
 
+  try { flow = Flow && Flow.enabled() ? Flow.create(api, { settings, i18n, audio }) : null; } catch (err) { flow = null; console.warn('[menu] flow', err); }       // rc8 menu flow, or the rc7 layout
   api.show();
   return api;
 }

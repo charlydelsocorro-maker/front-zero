@@ -20,6 +20,10 @@ module.exports = function createRoomList(api) {
   try { Bots = require('./net-bots.js')(api); } catch (e) { Bots = null; console.warn('online bots unavailable:', e.message); }
   LIMITS.bt = [30, 45]; LIMITS.bp = [1, 4];
   const isBot = q => !!q && q.bot === true;
+  // bot outfits (bot-outfits-rules.js): each match deals outfits of the server's whitelist to its bots (room view `bf`); without it, the standard uniform
+  let BotFits = null;
+  try { BotFits = api.FIT_IDS ? require('./bot-outfits-rules.js') : null; } catch (e) { BotFits = null; console.warn('bot outfits unavailable:', e.message); }
+  const botFits = room => { if (!BotFits) return null; try { const bf = BotFits.roomFits(room, api.FIT_IDS, isBot); return bf ? { bf } : null; } catch (e) { console.error('bot outfits', e); return null; } };
 
   /* ---------- per-address buckets (list requests, room creation) ---------- */
   const byIp = new Map();
@@ -37,7 +41,7 @@ module.exports = function createRoomList(api) {
   const joinable = room => humans(room) < MAX_PLAYERS && (!room.match || LATE[room.mode] !== false);
   function item(room) {
     const n = humans(room), h = room.players.get(room.hostId), m = room.match;
-    const o = { c: room.code, m: room.mode, map: room.map, n, b: room.players.size - n, max: MAX_PLAYERS, st: m ? 'playing' : room.flow ? 'flow' : 'lobby',
+    const o = { c: room.code, m: room.mode === 'zone' && room.sq > 1 ? 'zone' + room.sq : room.mode, map: room.map, n, b: room.players.size - n, max: MAX_PLAYERS, st: m ? 'playing' : room.flow ? 'flow' : 'lobby',
       bo: room.botsOn ? 1 : 0, bz: Bots ? Bots.sizeOf(room) : 0, j: joinable(room) ? 1 : 0, h: h && !isBot(h) ? h.name : '' };
     if (m && room.mode === 'bomb' && m.round) o.r = m.round;
     return o;
@@ -121,7 +125,7 @@ module.exports = function createRoomList(api) {
   function onConfig(room) { if (Bots) Bots.fit(room); cache.at = 0; }
   /** What the room messages carry for this feature (older clients ignore it). */
   function view(room) {
-    return { pub: room.pub ? 1 : 0, bo: room.botsOn ? 1 : 0, bz: Bots ? Bots.sizeOf(room) : 0, bs: Bots ? Bots.simOf(room) : null, bm: Bots ? Object.keys(Bots.SIZE) : [] };
+    return { pub: room.pub ? 1 : 0, bo: room.botsOn ? 1 : 0, bz: Bots ? Bots.sizeOf(room) : 0, bs: Bots ? Bots.simOf(room) : null, bm: Bots ? Object.keys(Bots.SIZE) : [], ...botFits(room) };
   }
 
   /* ---------- messages ---------- */
@@ -145,21 +149,23 @@ module.exports = function createRoomList(api) {
   /** Quick play: the best public room of that mode (most humans, a seat a bot can give up), else a new public room with bots. */
   function onQuick(p, m) {
     if (p.room) return reject(p, 'already_in_room');
-    const mode = typeof m.mode === 'string' && MODES.has(m.mode) ? m.mode : 'tdm';
+    const sqm = typeof m.mode === 'string' ? /^zone([234])$/.exec(m.mode) : null, sq = sqm ? +sqm[1] : 0;       // Zone Duo / Trio / Quatuor ('zone2'..'zone4', data.js): a 'zone' room with room.sq
+    if (sqm && m.sqv !== 1) return reject(p, 'client_outdated');
+    const mode = sqm ? 'zone' : typeof m.mode === 'string' && MODES.has(m.mode) ? m.mode : 'tdm';
     let pick = null, ps = -Infinity;
     for (const room of rooms.values()) {
-      if (!room.pub || room.mode !== mode || !room.players.size || !joinable(room)) continue;
+      if (!room.pub || room.mode !== mode || (room.sq > 1 ? room.sq : 0) !== sq || !room.players.size || !joinable(room)) continue;
       if (room.mode === 'zone' && !m.zv) continue;
       const n = humans(room), s = n * 10 + (room.match ? 0 : 4) + (room.players.size - n > 0 ? 2 : 0) - (room.flow ? 1 : 0);
       if (s > ps) { ps = s; pick = room; }
     }
-    const caps = { zv: m.zv === 1 ? 1 : 0, mf: m.mf === 1 ? 1 : 0, bc: m.bc === 1 ? 1 : 0 };
+    const caps = { zv: m.zv === 1 ? 1 : 0, mf: m.mf === 1 ? 1 : 0, bc: m.bc === 1 ? 1 : 0, sqv: m.sqv === 1 ? 1 : 0 };
     if (pick) {
       onJoin(p, { t: 'join', code: pick.code, name: m.name, ls: 1, ...caps });
       if (p.room === pick && !pick.match) { p.ready = true; sendRoom(pick); }      // came to play: ready at once
       return;
     }
-    onCreate(p, { t: 'create', mode, map: validMap(m.map) ? m.map : 'depot', name: m.name, pub: 1, bots: 1, quick: 1, ...caps });
+    onCreate(p, { t: 'create', mode: sqm ? m.mode : mode, map: validMap(m.map) ? m.map : 'depot', name: m.name, pub: 1, bots: 1, quick: 1, ...caps });
   }
 
   /* ---------- 4 Hz: late joiners' protection, quick-play start, simulator health ---------- */

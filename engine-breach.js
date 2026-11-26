@@ -14,7 +14,7 @@ const TXT = {
   weak: ['Paroi fragile : charge de brèche ou C4', 'Weak wall: breaching charge or C4', 'Pared frágil: carga de brecha o C4', 'Schwache Wand: Breschladung oder C4', 'Parede frágil: carga de brecha ou C4', 'Parete fragile: carica da breccia o C4'],
   hatch: ['Trappe fragile : charge de brèche ou C4', 'Weak hatch: breaching charge or C4', 'Trampilla frágil: carga de brecha o C4', 'Schwache Luke: Breschladung oder C4', 'Alçapão frágil: carga de brecha ou C4', 'Botola fragile: carica da breccia o C4'],
   planting: ['Pose de la charge…', 'Setting the charge…', 'Colocando la carga…', 'Ladung wird angebracht…', 'Colocando a carga…', 'Piazzando la carica…'],
-  aim: ['Visez une paroi fragile, de près', 'Aim at a weak wall, up close', 'Apunta a una pared frágil, de cerca', 'Ziele aus der Nähe auf eine schwache Wand', 'Mire de perto numa parede frágil', 'Mira da vicino una parete fragile'],
+  aim: ['Vise une paroi fragile, de près', 'Aim at a weak wall, up close', 'Apunta a una pared frágil, de cerca', 'Ziele aus der Nähe auf eine schwache Wand', 'Aponta de perto a uma parede frágil', 'Mira da vicino una parete fragile'],
   off: ['Brèches indisponibles dans cette partie', 'Breaching is off in this match', 'Brechas no disponibles en esta partida', 'Breschen in diesem Spiel nicht verfügbar', 'Brechas indisponíveis nesta partida', 'Brecce non disponibili in questa partita'],
   cancel: ['Pose interrompue', 'Plant interrupted', 'Colocación interrumpida', 'Anbringen abgebrochen', 'Colocação interrompida', 'Posa interrotta'],
 };
@@ -93,11 +93,14 @@ export function createBreach(c) {
     attr.needsUpdate = true;
   }
   function look(p, blown) { const r = ranges && ranges[p.id]; if (!r) return; p.lk = !!blown; showRange(r.b0, r.b1, !blown); showRange(r.r0, r.r1, blown); }
+  /** The minimap background is drawn once per map: after a panel opens (or the walls are restored) it is rebuilt, once for a burst of panels. */
+  let mapT = 0; const mapDirty = () => { if (mapT) return; mapT = setTimeout(() => { mapT = 0; try { if (hud && hud.setMap && world && world.solids) hud.setMap(world.solids, world.size); } catch { /* minimap is optional */ } }, 60); };
   const fold = p => { for (const s of p.solids) { s.y0 = AWAY - 1; s.y1 = AWAY; } };
   const unfold = p => { for (const s of p.solids) { s.y0 = s.bkY0; s.y1 = s.bkY1; } };
   /** Everything whole again: solids, look, nav strips cut. */
   function restoreAll() {
     try { if (nav.openZones) nav.openZones(); } catch { /* nav without breach support */ }
+    mapDirty();
     for (const p of panels) {
       p.broken = false; if (!p.ok) continue; unfold(p); look(p, false);
       if (p.spec.ax !== 'y') { try { nav.cutZone && nav.cutZone('bk' + p.id, ...p.zone); } catch { /* optional */ } }
@@ -108,7 +111,7 @@ export function createBreach(c) {
     const p = panels[id]; if (!p || p.broken) return false;
     p.broken = true; if (!p.ok) return false;
     try { log.push({ t: silent ? -1 : E().time, id }); if (log.length > 256) log.shift(); } catch { /* replay log is optional */ }
-    fold(p); look(p, true);
+    fold(p); look(p, true); mapDirty();
     try { if (p.spec.ax !== 'y') nav.openZone && nav.openZone('bk' + p.id); else nav.cutZone && nav.cutZone('bkh' + p.id, ...p.zone); } catch { /* optional */ }
     if (plantSt && plantSt.id === id) stopPlant(false);
     if (!silent) show(p, byId, how);

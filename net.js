@@ -53,7 +53,7 @@ export function createNet(url) {
   function onPong(m) {
     const now = clock(), rtt = now - m.c;
     if (rtt < 0) return;
-    pings.push({ rtt, offset: m.ts + rtt / 2 - now });
+    pings.push({ rtt, offset: m.ts + rtt / 2 - now, at: now });
     if (pings.length > 8) pings.shift();
     const best = pings.reduce((a, b) => (b.rtt < a.rtt ? b : a));
     offset = best.offset; n.rtt = rtt; lastPong = now;
@@ -122,6 +122,7 @@ export function createNet(url) {
   function attRead(players) { if (Array.isArray(players)) for (const q of players) { if (q && q.att && typeof q.att === 'object') attMap.set(q.id, q.att); if (q && q.fin && typeof q.fin === 'object') finMap.set(q.id, q.fin); if (q && typeof q.fit === 'string') fitMap.set(q.id, q.fit); } }
   const finMap = new Map();       // weapon finishes of the other players, same path as the attachments
   const fitMap = new Map();       // premium outfit of the other players (cosmetic, ids validated by the server)
+  const botFits = new Map();      // outfits the server dealt to the bots of this match (room view `bf`, bot-outfits-rules.js); kept until the next match starts
   let wire = null, lastPong = 0;
   function startWire(sock) {
     syncModule.then(mod => {
@@ -138,7 +139,7 @@ export function createNet(url) {
     switch (m.t) {
       case 'nc': if (wire) wire.onAck(m); return;
       case 'nd': if (wire) wire.onDict(m); return;
-      case 'welcome': if (m.nc >= 1) startWire(ev.target); n.lootOk = m.loot === 1; n.propsOk = m.props === 1; n.zoneOk = m.zone === 1; n.attOk = m.att === 1; n.finOk = m.fin === 1; n.fitOk = m.fit === 1; n.xwOk = m.xw === 1; n.gxOk = m.gx === 1; n.bkOk = m.bk === 1; n.flowOk = m.mf === 1; n.sgOk = m.sg === 1; n.pubOk = m.pub === 1; n.btOk = m.bt === 1; n.frontOk = m.front === 1; if (n.frontOk) emit('front', { op: 'hello' }); return;       // living front (front-ui.js answers with its identity)
+      case 'welcome': if (m.nc >= 1) startWire(ev.target); n.lootOk = m.loot === 1; n.propsOk = m.props === 1; n.zoneOk = m.zone === 1; n.sqOk = m.sq === 1; n.attOk = m.att === 1; n.finOk = m.fin === 1; n.fitOk = m.fit === 1; n.xwOk = m.xw === 1; n.gxOk = m.gx === 1; n.bkOk = m.bk === 1; n.flowOk = m.mf === 1; n.sgOk = m.sg === 1; n.pubOk = m.pub === 1; n.btOk = m.bt === 1; n.frontOk = m.front === 1; if (n.frontOk) emit('front', { op: 'hello' }); return;       // living front (front-ui.js answers with its identity)
       case 'att': if (typeof m.id === 'string' && m.w && typeof m.w === 'object') attMap.set(m.id, m.w); break;
       case 'fin': if (typeof m.id === 'string' && m.w && typeof m.w === 'object') finMap.set(m.id, m.w); break;
       case 'fit': if (typeof m.id === 'string') { if (typeof m.o === 'string') fitMap.set(m.id, m.o); else fitMap.delete(m.id); } return;
@@ -156,7 +157,7 @@ export function createNet(url) {
         n.room = m; pruneBuffers(m.players); attRead(m.players);
         break;
       case 'start':
-        attRead(m.players);
+        attRead(m.players); botFits.clear();
         n.room = m; buffers.clear(); outs.clear(); n.lastRound = null; n.lastScore = null; lootItems.clear(); n.life = m.life | 0;
         break;
       // The match's first 'round' and 'score' arrive while the client is still loading the map: keep the latest for a late replay.
@@ -280,7 +281,7 @@ export function createNet(url) {
     sendBoom({ x, y, z, weapon, pid }) { send({ t: 'boom', x, y, z, weapon, pid: pid || 0 }); },
     sendAction(type, data) { if (wire && wire.active && isOpen() && n.id && wire.sendAction(type, data)) return; send({ t: 'action', type, data }); },
     /** Connection quality for the HUD indicator. */
-    quality() { const now = clock(); let lo = Infinity, hi = 0; for (const p of pings) { if (p.rtt < lo) lo = p.rtt; if (p.rtt > hi) hi = p.rtt; } return { connected: n.connected, rtt: n.rtt, jitter: pings.length > 1 ? hi - lo : 0, pongAge: lastPong ? now - lastPong : 0, delay: delayS, binary: !!(wire && wire.active) }; },
+    quality() { const now = clock(); let lo = Infinity, hi = 0, hi2 = 0, k = 0; for (const p of pings) { if (p.at < n.qualSince) continue; k++; if (p.rtt < lo) lo = p.rtt; if (p.rtt > hi) { hi2 = hi; hi = p.rtt; } else if (p.rtt > hi2) hi2 = p.rtt; } return { connected: n.connected, rtt: n.rtt, jitter: k > 2 ? hi2 - lo : 0, pongAge: lastPong ? now - lastPong : 0, delay: delayS, binary: !!(wire && wire.active) }; },       // jitter leaves out the highest of the last 8 pings and the ones before n.qualSince (net-hud.js: the match start, after the load): a pong read late after a stalled frame is not jitter of the link
     // Loot (only when this server announced it in 'welcome'; an older server would count these as bad messages).
     lootOk: false, life: 0,
     sendInv(w, g) { if (n.lootOk && isOpen() && n.id) raw({ t: 'inv', l: n.life, w, g }); },
@@ -295,7 +296,7 @@ export function createNet(url) {
     // Premium outfit (only when this server announced it in 'welcome').
     fitOk: false,
     sendFit(o) { if (n.fitOk && isOpen() && n.id) raw({ t: 'fit', o: o || null }); },
-    fitOf(id) { return fitMap.get(id) || null; },
+    fitOf(id) { const bf = n.room && n.room.bf; if (bf && typeof bf === 'object' && typeof bf[id] === 'string') botFits.set(id, bf[id]); return fitMap.get(id) || botFits.get(id) || null; },
     finOf(id, weapon) { const m = finMap.get(id); return m && typeof m[weapon] === 'string' ? m[weapon] : null; },
     finIds() { const out = new Set(); for (const m of finMap.values()) for (const k of Object.keys(m)) if (typeof m[k] === 'string') out.add(m[k]); return [...out]; },
     // World props (doors, glass, drums): only when this server announced them in 'welcome'.

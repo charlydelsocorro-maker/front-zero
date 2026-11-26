@@ -33,7 +33,7 @@ export const TX = {
   breach: ['BRÈCHE', 'BREACH', 'BRECHA', 'BRESCHE', 'BRECHA', 'BRECCIA'],
   streak: ['SÉRIE DE {n}', '{n} IN A ROW', 'RACHA DE {n}', '{n} IN FOLGE', 'SEQUÊNCIA DE {n}', 'SERIE DI {n}'],
   kill: ['ÉLIMINATION', 'ELIMINATION', 'ELIMINACIÓN', 'AUSSCHALTUNG', 'ELIMINAÇÃO', 'ELIMINAZIONE'],
-  you: ['VOUS', 'YOU', 'TÚ', 'DU', 'TU', 'TU'],
+  you: ['TOI', 'YOU', 'TÚ', 'DU', 'TU', 'TU'],
   // settings (settings.js reads them through its own local table)
 };
 const li = i18n => Math.max(0, LANGS.indexOf((i18n && i18n.lang) || 'fr'));

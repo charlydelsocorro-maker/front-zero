@@ -5,6 +5,10 @@ import * as THREE from 'three';
 import './zone-rules.js';
 
 const R = globalThis.FZZoneRules;
+/** Squads (Zone Duo / Trio / Quatuor, zone-squads.js): loaded on its own, so a failure there leaves plain Zone untouched. */
+let SQM = null;
+import('./zone-squads.js').then(m => { SQM = m; }).catch(e => console.warn('[zone] squads unavailable', e));
+const squadSize = cfg => (SQM && cfg && SQM.valid(cfg.squad) ? cfg.squad : 0);
 const CAP = 60, OPEN_D = 2.6, OPEN_NEAR = 1.6, USE_D = 2.2, WALL_H = 46, DEPLOY = 4, BODY = 0.42, LID_OPEN = 1.95, LID_RATE = 5.5, HINGE_Y = 0.47, HINGE_Z = -0.31;
 const AMBER = '#e8a628', RED = '#ff5a4a', BLUE = '#4aa3ff';
 
@@ -170,8 +174,20 @@ function crateLid(o) {
 function medkit(o) { chamfered(o, 0.34, 0.15, 0.24, 0.025, 0, 0.075, 0, [0.62, 0.08, 0.06]); chamfered(o, 0.17, 0.006, 0.05, 0.001, 0, 0.152, 0, [0.9, 0.9, 0.86]); chamfered(o, 0.05, 0.006, 0.17, 0.001, 0, 0.152, 0, [0.9, 0.9, 0.86]); }
 function plate(o) { chamfered(o, 0.34, 0.07, 0.27, 0.03, 0, 0.035, 0, [0.09, 0.2, 0.42]); chamfered(o, 0.2, 0.012, 0.13, 0.004, 0, 0.074, 0, [0.42, 0.62, 0.86]); }
 
-/* ---------- world objects: instanced crates, two wall cylinders ---------- */
-function createWorldView(E) {
+/** Is the walkable ground mostly under a roof (an underground map)? Then how high the ceilings go (90th percentile + a margin). 240 upward rays, once per match. */
+export function lookOf(E) {
+  const I = E.internals, nav = I.nav, grid = I.grid, n = nav.nodes, o = { x: 0, y: 0, z: 0 }, tops = []; let roofed = 0, seen = 0;
+  for (let k = 0; k < 240 && n > 0; k++) {
+    nav.nodePos(Math.floor(Math.random() * n), o); seen++;
+    const d = grid.ray(o.x, o.y + 1, o.z, 0, 1, 0, 30); if (d < 30) { roofed++; tops.push(o.y + 1 + d); }
+  }
+  tops.sort((a, b) => a - b);
+  const frac = seen ? roofed / seen : 0, top = tops.length ? tops[Math.floor(tops.length * 0.9)] + 0.6 : WALL_H;
+  return { under: frac >= 0.75 && !E.world.levelAt, frac, top: Math.min(WALL_H, Math.max(3, top)) };       // maps with raised streets (levelAt) keep the open-air wall: their floors are not at y = 0
+}
+
+/* ---------- world objects: instanced crates, two wall cylinders (four underground: a floor line for each) ---------- */
+function createWorldView(E, look) {
   const I = E.internals, scene = I.scene, ZERO = new THREE.Matrix4().makeScale(0, 0, 0), M = new THREE.Matrix4(), T1 = new THREE.Matrix4(), T2 = new THREE.Matrix4();
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.58, metalness: 0.28 });
   const parts = [crateBody, crateLid, medkit, plate].map(fn => {
@@ -205,24 +221,59 @@ function createWorldView(E) {
   const wallGeo = new THREE.CylinderGeometry(1, 1, 1, 96, 1, true); wallGeo.translate(0, 0.5, 0);
   const wallMat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false, fog: false, toneMapped: false, forceSinglePass: true });
   const nextMat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.2, side: THREE.DoubleSide, depthWrite: false, fog: false, toneMapped: false, color: 0xffe0a0, forceSinglePass: true });
-  const wall = new THREE.Mesh(wallGeo, wallMat), next = new THREE.Mesh(wallGeo, nextMat);
-  for (const w of [wall, next]) { w.frustumCulled = false; w.castShadow = false; w.receiveShadow = false; w.renderOrder = 8; w.matrixAutoUpdate = false; scene.add(w); }
+  /* under a roof (bunker): the open-air wall is 46 m of gradient seen through 3 m corridors, so every view across it was one flat orange
+     wash and a player inside a small circle could not tell the safe side. Here the wall stands only as high as the ceilings, mostly clear
+     with 45-degree hazard stripes, plus a bright line along the floor where the boundary runs. */
+  const under = !!(look && look.under), H = under ? look.top : WALL_H, Y0 = under ? 0 : -1, STRIPE = 1.25;       // STRIPE: metres of wall per band period underground
+  let utex = null, ntex = null, band = null, nband = null, bandMat = null, nbandMat = null;
+  if (under) {
+    // one texture tile = STRIPE m wide x the whole wall height: 45-degree bands about 0.55 m wide, alpha 0.25 at the floor fading to almost nothing at 3 m
+    const TW = 64, TH = Math.max(64, Math.round(TW * H / STRIPE)), uc = document.createElement('canvas'); uc.width = TW; uc.height = TH; const u = uc.getContext('2d');
+    u.fillStyle = '#ff8038';
+    for (let k = -TH - TW; k < TW * 2; k += TW) { u.beginPath(); u.moveTo(k, TH); u.lineTo(k + TW * 0.45, TH); u.lineTo(k + TW * 0.45 + TH, 0); u.lineTo(k + TH, 0); u.closePath(); u.fill(); }
+    const fade = u.createLinearGradient(0, TH, 0, 0), at = m => Math.min(1, m / H);
+    fade.addColorStop(0, 'rgba(0,0,0,.25)'); fade.addColorStop(at(0.5), 'rgba(0,0,0,.13)'); fade.addColorStop(at(1.2), 'rgba(0,0,0,.06)'); fade.addColorStop(at(2.2), 'rgba(0,0,0,.025)'); fade.addColorStop(1, 'rgba(0,0,0,.012)');       // eye level (1.6 m): about 0.05
+    u.globalCompositeOperation = 'destination-in'; u.fillStyle = fade; u.fillRect(0, 0, TW, TH);
+    u.globalCompositeOperation = 'destination-over'; u.fillStyle = 'rgba(255,120,50,.03)'; u.fillRect(0, 0, TW, TH);       // a faint body between the bands
+    utex = new THREE.CanvasTexture(uc); utex.wrapS = THREE.RepeatWrapping; utex.wrapT = THREE.ClampToEdgeWrapping; utex.colorSpace = THREE.SRGBColorSpace; utex.generateMipmaps = false; utex.minFilter = THREE.LinearFilter;
+    ntex = utex.clone(); wallMat.map = utex; wallMat.opacity = 1; nextMat.map = ntex; nextMat.opacity = 0.45;
+    // the part of the wall near the eye fades out (gone under 1.5 m, 40 % at 3.4 m, full from 6 m): standing next to it does not paint the screen; the floor line stays
+    for (const m of [wallMat, nextMat]) {
+      m.customProgramCacheKey = () => 'fz-zone-under';
+      m.onBeforeCompile = sh => {
+        sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vFzW;').replace('#include <project_vertex>', '#include <project_vertex>\nvFzW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+        sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vFzW;').replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.a *= smoothstep(1.5, 6.0, distance(vFzW, cameraPosition));');
+      };
+    }
+    bandMat = new THREE.MeshBasicMaterial({ color: 0xff7a32, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false, fog: false, toneMapped: false, forceSinglePass: true });
+    nbandMat = new THREE.MeshBasicMaterial({ color: 0xfff0d0, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false, fog: false, toneMapped: false, forceSinglePass: true });
+    band = new THREE.Mesh(wallGeo, bandMat); nband = new THREE.Mesh(wallGeo, nbandMat);
+  }
+  const wall = new THREE.Mesh(wallGeo, wallMat), next = new THREE.Mesh(wallGeo, nextMat), meshes = [wall, next];
+  if (under) meshes.push(band, nband);
+  for (const w of meshes) { w.frustumCulled = false; w.castShadow = false; w.receiveShadow = false; w.renderOrder = 8; w.matrixAutoUpdate = false; scene.add(w); }
   wall.name = 'zone-wall'; next.name = 'zone-next';
-  const setCyl = (m, x, z, r) => { m.position.set(x, -1, z); m.scale.set(Math.max(0.2, r), WALL_H, Math.max(0.2, r)); m.updateMatrix(); m.matrixWorldNeedsUpdate = true; };
+  const setCyl = (m, x, z, r, y, h) => { m.position.set(x, y, z); m.scale.set(Math.max(0.2, r), h, Math.max(0.2, r)); m.updateMatrix(); m.matrixWorldNeedsUpdate = true; };
   let scroll = 0;
   return {
-    drawCrate, drawLid, drawSupply, flush, parts, wall, next,
+    drawCrate, drawLid, drawSupply, flush, parts, wall, next, under,
     setWall(C, dt) {
-      setCyl(wall, C.x, C.z, C.r);
+      setCyl(wall, C.x, C.z, C.r, Y0, H);
       const showNext = C.st === 0 && C.nr > 0.5; if (next.visible !== showNext) next.visible = showNext;
-      if (showNext) setCyl(next, C.nx, C.nz, C.nr);
-      scroll = (scroll + dt * 0.05) % 1; tex.offset.x = scroll;
-      tex.repeat.x = Math.max(4, Math.round(C.r * 0.42));
+      if (showNext) setCyl(next, C.nx, C.nz, C.nr, Y0, H);
+      scroll = (scroll + dt * 0.05) % 1;
+      if (!under) { tex.offset.x = scroll; tex.repeat.x = Math.max(4, Math.round(C.r * 0.42)); return; }
+      // stripes about 1.2 m wide whatever the radius; the floor line is a 22 cm band at the foot of the wall
+      utex.offset.x = scroll; utex.repeat.set(Math.max(3, Math.round(C.r * 6.2832 / STRIPE)), 1);
+      setCyl(band, C.x, C.z, C.r, 0.02, 0.22);
+      if (nband.visible !== showNext) nband.visible = showNext;
+      if (showNext) { ntex.repeat.set(Math.max(3, Math.round(C.nr * 6.2832 / STRIPE)), 1); setCyl(nband, C.nx, C.nz, C.nr, 0.02, 0.12); }
     },
     dispose() {
-      for (const m of [wall, next]) scene.remove(m);
+      for (const m of meshes) scene.remove(m);
       for (const m of parts) { scene.remove(m); m.geometry.dispose(); m.dispose(); }
       mat.dispose(); wallGeo.dispose(); wallMat.dispose(); nextMat.dispose(); tex.dispose();
+      if (under) { utex.dispose(); ntex.dispose(); bandMat.dispose(); nbandMat.dispose(); }
     },
   };
 }
@@ -252,12 +303,14 @@ function createPanel(E) {
 /* ---------- shared core: plan, circle, crates, HUD and the bot director ---------- */
 function createCore(c, H, net) {
   const { E } = c, I = E.internals, P = E.player, L = makeL(E), hud = E.hud, grid = I.grid, nav = I.nav, camera = I.camera;
-  const view = createWorldView(E), panel = createPanel(E);
+  const look = lookOf(E), view = createWorldView(E, look), panel = createPanel(E);
   const C = { i: 1, last: 1, st: 0, x: 0, z: 0, r: 1000, nx: 0, nz: 0, nr: 1000, left: 0, dps: 0 };
   const S = { plan: null, clock: -DEPLOY, crates: [], alive: 0, total: 0, phase: -1, st: -1, focus: null, wasDown: false, hudT: 0, promptT: 0, botT: 0, botI: 0, ended: false, leaving: false, useT: 0, lastPrompt: null, opening: [], grace: 62, endT: 300, pace: 0.8 + Math.random() * 0.2, lag: 0 };
   const camDir = new THREE.Vector3();
   const key = interactKey(E);
   const openText = L('open', { key }), leaveText = L('leave', { key });
+  /** Squads (zone-squads.js) plug in here: bot(a) takes a bot's order, hold(a) gives its waiting spot, busy() keeps the player off crates (downed or reviving), prompt() its own prompt, obj() the objective. */
+  const hooks = { bot: null, hold: null, busy: null, prompt: null, obj: null };
 
   hud.mapOverlay = (m, X, k) => {
     if (!S.plan) return;
@@ -314,7 +367,7 @@ function createCore(c, H, net) {
   }
 
   function pickFocus() {
-    S.focus = null; if (!P.alive || E.rules.frozen) return;
+    S.focus = null; if (!P.alive || E.rules.frozen || (hooks.busy && hooks.busy())) return;
     const p = P.pos; let best = null, bs = 1e9; camera.getWorldDirection(camDir);
     for (let i = 0; i < S.crates.length; i++) {
       const cr = S.crates[i]; if (cr.open || c.time < cr.wait) continue;
@@ -326,7 +379,7 @@ function createCore(c, H, net) {
     S.focus = best;
   }
   function supplies() {
-    if (!P.alive || c.time < S.useT) return;
+    if (!P.alive || c.time < S.useT || (hooks.busy && hooks.busy())) return;
     const p = P.pos;
     for (let i = 0; i < S.crates.length; i++) {
       const cr = S.crates[i]; if (!cr.open || !cr.s) continue;
@@ -338,7 +391,7 @@ function createCore(c, H, net) {
 
   function hudLine() {
     const st = C.st, last = C.i >= C.last;
-    if (S.clock < 0) { c.center(L('deploy')); c.timer(Math.max(0, Math.ceil(-S.clock))); panel.set(L('obj'), '#f1e7cd', 'rgba(232,166,40,.45)', null); return; }
+    if (S.clock < 0) { c.center(L('deploy')); c.timer(Math.max(0, Math.ceil(-S.clock))); panel.set(hooks.obj ? hooks.obj() : L('obj'), '#f1e7cd', 'rgba(232,166,40,.45)', null); return; }
     c.center(last ? L('last') : L('zone', { n: C.i, m: C.last - 1 }));
     c.timer(Math.ceil(C.left / 1000));
     c.objective(st === 0 ? L('wait') : L('shrink'));
@@ -348,8 +401,24 @@ function createCore(c, H, net) {
     if (out) { tx = C.x; tz = C.z; dist = dc - C.r; label = L('outside') + ' · -' + C.dps + '/s'; col = '#ff8a6a'; bd = RED; }
     else if (dn > C.nr) { tx = C.nx; tz = C.nz; dist = dn - C.nr; label = L('toNext'); col = '#f1e7cd'; bd = 'rgba(232,166,40,.65)'; }
     else { panel.set(L('inside'), '#b6e36a', 'rgba(140,200,90,.55)', null); return; }
+    // underground the straight line to the centre runs through rock: the arrow follows the walk (nav path) and the distance is the walk
+    if (view.under && walkGuide(px, P.pos.y, pz, tx, tz, out ? C.r : C.nr, out)) { tx = WG.x; tz = WG.z; dist = WG.d; }
     const vx = tx - px, vz = tz - pz, sn = Math.sin(P.yaw), cs = Math.cos(P.yaw), rel = Math.atan2(vx * cs - vz * sn, -vx * sn - vz * cs);
     panel.set(label + ' · ' + Math.max(1, Math.ceil(dist)) + ' m', col, bd, rel);
+  }
+  /** Walk from the player into the circle (cx, cz, r) along the nav graph, refreshed twice a second: WG.x/z = a point 3 m or more ahead on the way, WG.d = metres to walk. */
+  const WG = { x: 0, z: 0, d: 0, t: -1, out: null, ok: false };
+  function walkGuide(px, py, pz, cx, cz, r, out) {
+    if (c.time < WG.t && WG.out === out) return WG.ok;
+    WG.t = c.time + 0.5; WG.out = out; WG.ok = false;
+    const q = nav.nearest(cx, cz), p = nav.path(px, py, pz, q[0], q.length > 2 ? q[2] : 0, q[1]); if (!p || !p.length || !p.complete) return false;
+    let l = 0, ax = px, az = pz, aim = null;
+    for (let i = 0; i < p.length; i++) {
+      const w = p[i], sl = Math.hypot(w.x - ax, w.z - az), n = Math.max(1, Math.ceil(sl / 0.5));
+      for (let s = 1; s <= n; s++) { const t = s / n, x = ax + (w.x - ax) * t, z = az + (w.z - az) * t; if (Math.hypot(x - cx, z - cz) <= r) { WG.d = l + sl * t; WG.x = aim ? aim.x : x; WG.z = aim ? aim.z : z; WG.ok = true; return true; } }
+      l += sl; ax = w.x; az = w.z; if (!aim && Math.hypot(w.x - px, w.z - pz) >= 3) aim = w;
+    }
+    return false;
   }
 
   /* bot director: runs where the bots are simulated */
@@ -379,12 +448,15 @@ function createCore(c, H, net) {
     return best;
   }
   function decide(a) {
+    if (hooks.bot && hooks.bot(a)) return;       // squads: downed, reviving, going to revive, sticking to the leader
     const dat = a.data, ai = a.ai, px = a.pos.x, pz = a.pos.z, dc = Math.hypot(px - C.x, pz - C.z), dn = Math.hypot(px - C.nx, pz - C.nz), speed = Math.max(3, a.speed || 4.7);
     // pacing, one rule for every soldier (a human is fought exactly like a bot): the AI picks fights only within a reach that grows with
     // the match, and always answers whoever shoots at it (engine-ai.js: engageR, hitBy)
     const lag = S.lag, bold = !!dat.bold;
-    if (ai) ai.engageR = reach(bold, lag);
-    const urgent = dc > C.r - 0.8 || (dn > C.nr - 1 && (C.st === 1 || C.left / 1000 < (dn - C.nr) * 1.5 / speed + 12));
+    // build-up: the fights are as frequent all match long but the early ones are suppressive (wide aim, short bursts, long pauses, lighter hits), sharper as the match goes on;
+    // wider still while the field is thinner than the timeline planned, sharper while it is too crowded (the same against everyone); a hurt bot breaks off for cover, then heals at a crate
+    if (ai) { const k = S.clock / S.endT, early = k < 0.25 ? 3 : k < 0.85 ? 3 - (k - 0.25) * 3.33 : 1; ai.engageR = reach(bold, lag); ai.coverAt = k < 0.4 ? 0.8 : 0.65; const cq = k > 0.85 ? 0 : closeQ(); ai.fireK = (k < 0.3 ? 2.6 : k < 0.85 ? 1.5 : 1) * (1 + 0.5 * cq); ai.dmgK = (k < 0.3 ? 0.55 : k < 0.85 ? 0.55 + (k - 0.3) * 0.82 : 1) * (1 - 0.3 * cq); ai.aimK = k > 0.85 ? 1 : Math.min(8, Math.max(1, early * (1 + 1.5 * cq) * (lag >= 1.5 ? 0.85 : lag >= -0.5 ? 1 : lag >= -1.5 ? 1.8 : 2.8))); }       // cq: close quarters (bunker)
+    const urgent = dc > C.r - 0.8 - 2 * closeQ() || (dn > C.nr - 1 - 2 * closeQ() && (C.st === 1 || C.left / 1000 < (dn - C.nr) * 1.5 / speed + 12));
     if (urgent) {
       // already in the gas: run first. The AI stops to fight anything closer than 12 m, which would keep it outside until it dies
       if (dc > C.r + 0.5 && ai) { ai.target = null; ai.visible = false; ai.hitT = 0; ai.engageR = 0; ai.senseT = Math.max(ai.senseT, 0.5); ai.arrived = false; }
@@ -408,24 +480,31 @@ function createCore(c, H, net) {
       return;
     }
     // a fight within earshot: move in and take on whoever is left, from range (third party); only for a bold one
-    if (ai && bold && !ai.visible && S.clock >= S.grace && a.hp > 45) { const f = fightNear(a); if (f) { H.setOrder(a, 'goto', f.x, f.z, 3); return; } }
+    if (ai && bold && !ai.visible && S.clock >= calmEnd() && a.hp > 45) { const f = fightNear(a); if (f) { H.setOrder(a, 'goto', f.x, f.z, 3); return; } }
     if (S.clock > S.endT * 0.6 && bold && lag > 1) { H.setOrder(a, 'hunt'); return; }
-    pointInside(a); H.setOrder(a, 'hold', dat.zx, dat.zz, Math.max(3, Math.min(6, C.nr * 0.3)));
+    const hs = hooks.hold ? hooks.hold(a) : null; if (hs) { H.setOrder(a, 'hold', hs.x, hs.z, 4); return; }       // squads: wait by the leader
+    pointInside(a); H.setOrder(a, 'hold', dat.zx, dat.zz, Math.max(2, Math.min(6, C.nr * 0.3) * (1 - 0.5 * closeQ())));       // close quarters: keep well inside the small circles
   }
   /** A 'goto' order that carries its floor (a crate upstairs, in a car park, on a street above the ground level of the map). */
   function goAt(a, x, y, z, r) { const ai = a.ai; if (!ai) return; const o = ai.order; if (o && o.type === 'goto' && o.x === x && o.z === z && o.y === y && o.radius === r) return; ai.order = { type: 'goto', x, z, radius: r, y }; }
-  /** Soldiers still standing minus those this moment of the timeline planned (a curve that reaches one survivor at `pace` of it, drawn per match). */
-  function behind() { const q = Math.min(1, Math.max(0, S.clock) / (S.endT * S.pace)); return S.alive - Math.max(1, S.total * (1 - q * q)); }
-  /** Distance at which a bot starts a fight: none in the opening (it only answers), then growing with the match for the bold ones; the others only when they bump into someone. */
-  function reach(bold, lag) {
-    if (S.clock < S.grace) return 0;
-    const k = S.clock / S.endT, r = k < 0.45 ? 18 : k < 0.7 ? 28 : k < 0.85 ? 45 : 1e4;
-    return !bold ? 4 : lag > 1 ? r * 1.5 : r;
+  /** Soldiers still standing minus those this moment of the timeline planned (a straight line that reaches one survivor at `pace` of it, drawn per match: half the field around 40 %). */
+  function behind() { const q = Math.min(1, Math.max(0, S.clock) / (S.endT * S.pace)); return S.alive - Math.max(1, S.total * (1 - q)); }
+  /** End of the calm landing (about 15 s at the normal clock): until then a bot only answers whoever shoots at it. */
+  const calmEnd = () => S.grace * 0.25;
+  /** Close quarters, 0 (open map) to 1, measured once: mean free sight distance at eye height from random walkable spots (about 7.5 m in the bunker,
+   *  11 m in the old town, 17-27 m elsewhere; full effect at 7 m, none from 13 m). Contact is constant there, so its fights are wilder still. */
+  function closeQ() {
+    if (S.cq !== undefined) return S.cq;
+    const o = { x: 0, y: 0, z: 0 }, n = nav.nodes; let sum = 0, m = 0;
+    for (let k = 0; k < 96 && n > 0; k++) { nav.nodePos(Math.floor(Math.random() * n), o); for (let j = 0; j < 8; j++) { const a = j * 0.785; sum += Math.min(40, grid.ray(o.x, o.y + 1.5, o.z, Math.cos(a), 0, Math.sin(a), 40)); m++; } }
+    return (S.cq = m ? Math.min(1, Math.max(0, (13 - sum / m) / 6)) : 0);
   }
-  /** Who may start a fight at range (or join one it hears) right now: one bot per soldier the timeline is behind by, none while it is ahead; they take turns every 20 s. */
+  /** Distance at which a bot starts a fight: none during the calm landing (it only answers), then whoever it spots (the pacing is in the aim, bursts and damage, not in ignoring enemies). */
+  function reach(bold, lag) { return S.clock < calmEnd() ? 0 : 1e4; }
+  /** Who also hunts and joins the fights it hears: three or more while the field is as crowded as planned or more, one while it is thinner, none while far ahead; they take turns every 20 s. */
   function markBold(list) {
     S.lag = behind();
-    const len = list.length, off = Math.floor(Math.max(0, S.clock) / 20) % len; let n = S.clock < S.grace ? 0 : Math.ceil(S.lag + 0.5);
+    const len = list.length, off = Math.floor(Math.max(0, S.clock) / 20) % len; let n = S.clock < calmEnd() ? 0 : S.lag < -2 ? 0 : S.lag < 0 ? 1 : Math.max(3, Math.ceil(S.lag + 2.5));
     for (let k = 0; k < len; k++) { const a = list[(k + off) % len]; if (!a || !a.data) continue; a.data.bold = !!a.alive && !!a.ai && n > 0; if (a.data.bold) n--; }
   }
   /** A fight within earshot (someone fired in the last 1.5 s) inside the zone: a spot short of it, kept 5 s. */
@@ -479,7 +558,7 @@ function createCore(c, H, net) {
   function supply(a, s) { if (s === 'med') E.heal(a, R.MED); else if (s === 'arm') a.armor = Math.min(R.armorCap(0), (a.armor || 0) + R.ARMOR); }
 
   return {
-    S, C, L, view, panel, setCrates, crateById, markOpen, markUsed, driveBots, arm, supply, key,
+    S, C, L, view, panel, setCrates, crateById, markOpen, markUsed, driveBots, arm, supply, key, hooks,
     setPlan(plan) { S.plan = plan; S.grace = (plan.grace || 62000) / 1000; S.endT = Math.max(30, (plan.end || 300000) / 1000); R.circleAt(plan, Math.max(0, S.clock * 1000), C); view.setWall(C, 0); },
     /** Every frame. */
     update(dt) {
@@ -496,9 +575,10 @@ function createCore(c, H, net) {
       S.promptT -= dt;
       if (S.promptT <= 0) { S.promptT = 0.08; pickFocus(); supplies(); }
       const down = E.input.held('interact');
-      const wantPrompt = !P.alive && S.clock >= 0 ? leaveText : S.focus ? openText : null;
+      const sp = hooks.prompt ? hooks.prompt() : null;       // squads: revive a squadmate ('' = no prompt while downed)
+      const wantPrompt = sp !== null ? sp || null : !P.alive && S.clock >= 0 ? leaveText : S.focus ? openText : null;
       if (wantPrompt !== S.lastPrompt) { S.lastPrompt = wantPrompt; c.prompt(wantPrompt); }
-      if (down && !S.wasDown) {
+      if (down && !S.wasDown && sp === null) {
         if (!P.alive) { if (S.clock >= 0 && !S.leaving) { S.leaving = true; net.leave(); } }
         else if (S.focus && c.time >= S.focus.wait) { const cr = S.focus; cr.wait = c.time + 0.5; net.openCrate(cr); }
       }
@@ -514,7 +594,8 @@ const DASH = [5, 4];
 /* ====================================================================== */
 export function zoneOffline(c, H) {
   const { E, cfg } = c, P = E.player, I = E.internals;
-  const bots = [], ranks = new Map(); let core, nextDrop = 1000000, dmgT = 1, finished = false, winnerName = null;
+  const bots = [], ranks = new Map(); let core, nextDrop = 1000000, dmgT = 1, finished = false, winnerName = null, sq = null;       // sq: squads (zone-squads.js), null for Zone everyone-for-themselves
+  const over = () => (sq ? sq.over() : core.S.alive <= 1);
   const aliveCount = () => { let n = 0; for (let i = 0; i < E.actors.length; i++) { const a = E.actors[i]; if (a.alive && a.kind !== 'zombie') n++; } return n; };
   function dropItems(cr, list) {
     const items = [], s = R.dropSpot(cr.x, cr.z, P.pos.x, P.pos.z);       // on the opener's side, not inside the crate
@@ -544,22 +625,22 @@ export function zoneOffline(c, H) {
   };
   function refresh() {
     const S = core.S; S.alive = aliveCount();
-    c.score({ label: core.L('alive'), value: S.alive + ' / ' + S.total, color: AMBER }, { label: core.L('kills'), value: P.data.k | 0, color: BLUE });
+    c.score(sq ? sq.scoreLeft() : { label: core.L('alive'), value: S.alive + ' / ' + S.total, color: AMBER }, { label: core.L('kills'), value: P.data.k | 0, color: BLUE });
     const rows = [];
-    for (let i = 0; i < E.actors.length; i++) { const a = E.actors[i]; if (a.kind === 'zombie' || !a.data) continue; const row = [a === P ? c.t('hud.you') : a.name, a.data.k | 0, ranks.has(a) ? '#' + ranks.get(a) : '—']; row.me = a === P; row.alive = !!a.alive; rows.push(row); }
+    for (let i = 0; i < E.actors.length; i++) { const a = E.actors[i]; if (a.kind === 'zombie' || !a.data) continue; const rk = sq ? sq.placeOf(a) : ranks.get(a), row = [a === P ? c.t('hud.you') : a.name, a.data.k | 0, rk ? '#' + rk : '—']; row.me = a === P; row.alive = !!a.alive; if (sq) row.team = a.team; rows.push(row); }
     rows.sort((x, y) => (y.alive ? 1 : 0) - (x.alive ? 1 : 0) || y[1] - x[1]);
     E.hud.scoreboard({ columns: [c.t('l.player'), c.t('end.kills'), core.L('place')], rows });
   }
   function end() {
     if (finished) return; finished = true;
-    const S = core.S, place = ranks.get(P) || (P.alive ? 1 : S.alive + 1), won = place === 1;
+    const S = core.S, sr = sq ? sq.result() : null, place = sr ? sr.place : ranks.get(P) || (P.alive ? 1 : S.alive + 1), won = sr ? sr.won : place === 1;       // squads: the squad's placement
     const stats = c.baseStats();
-    stats.unshift({ label: core.L('place'), value: '#' + place + ' / ' + S.total });
-    if (!won && winnerName) stats.push({ label: core.L('winner'), value: winnerName });
-    c.finish(won, won ? core.L('won') : core.L('out', { n: place }), stats, won ? 150 : place <= 3 ? 80 : 40);
+    stats.unshift({ label: core.L('place'), value: '#' + place + ' / ' + (sr ? sr.of : S.total) });
+    if (!won && winnerName && !sq) stats.push({ label: core.L('winner'), value: winnerName });
+    c.finish(won, sq ? sq.title(won, place) : won ? core.L('won') : core.L('out', { n: place }), stats, won ? 150 : place <= 3 ? 80 : 40);
   }
   return {
-    get core() { return core; }, bots,
+    get core() { return core; }, get squads() { return sq; }, bots,
     start() {
       H.setRules(E, false, false);
       E.clearActors(); E.setTeam(P, null); H.ensureData(P);
@@ -569,10 +650,13 @@ export function zoneOffline(c, H) {
       core.S.clock = -DEPLOY;
       core.setPlan(R.buildPlan({ seed, size: setup.size, anchors: setup.anchors, scale: cfg.zoneScale || 1 }));
       core.setCrates(setup.crates.map((q, i) => ({ i, x: q[0], y: q[1], z: q[2], r: q[3], content: R.rollCrate(rnd) })));
-      const total = R.matchSize(setup.size), nb = total - 1;
+      const sqn = squadSize(cfg);
+      if (sqn) { try { sq = SQM.createSquads(c, H, core, { size: sqn }); } catch (e) { console.warn('[zone] squads', e); sq = null; } }       // a failure here: plain Zone
+      const total = sq ? SQM.total(R.matchSize(setup.size), sqn) : R.matchSize(setup.size), nb = sq ? 0 : total - 1;
+      if (sq) { sq.spawnOffline(setup.spawns, total, rnd, bots, cfg.difficulty); E.lethal = (a, o) => sq.lethal(a, o); }       // a squad lands together; downed instead of dead while a squadmate stands
       // the first points of the survey are the farthest apart: keep just as many as there are soldiers, then deal them at random
       const sp = setup.spawns.slice(0, total); for (let i = sp.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)), t = sp[i]; sp[i] = sp[j]; sp[j] = t; }
-      E.respawn(P, { at: sp[0], delay: 0 }); P.armor = 0;
+      if (!sq) { E.respawn(P, { at: sp[0], delay: 0 }); P.armor = 0; }
       for (let i = 0; i < nb; i++) {
         const a = E.addBot({ name: H.botName(i), team: null, weaponId: 'p9', difficulty: cfg.difficulty || 'normal', hp: 100, at: sp[(i + 1) % sp.length] });
         if (a) { H.ensureData(a); bots.push(a); H.setOrder(a, 'hunt'); }
@@ -585,6 +669,7 @@ export function zoneOffline(c, H) {
         if (k && k !== v && k.data) { k.data.k = (k.data.k | 0) + 1; k.data.s = (k.data.s | 0) + (e.head ? 125 : 100); }
         c.trackKill(e, 25, false);
         if (v.data && v.data.crate) { v.data.crate.claim = null; v.data.crate = null; }
+        if (sq) { core.S.alive = aliveCount(); sq.onKill(e); refresh(); return; }       // squads: the squad is placed when it is out
         const left = aliveCount(); ranks.set(v, left + 1); core.S.alive = left;
         if (left <= 1) { for (let i = 0; i < E.actors.length; i++) { const a = E.actors[i]; if (a.alive && a.kind !== 'zombie') { ranks.set(a, 1); winnerName = a === P ? null : a.name; } } }
         refresh();
@@ -594,9 +679,10 @@ export function zoneOffline(c, H) {
     update(dt) {
       const S = core.S, wasDeploy = S.clock < 0;
       core.update(dt);
+      if (sq) sq.update(dt);
       if (wasDeploy && S.clock >= 0) E.rules.frozen = false;
       if (S.clock < 0) return;
-      if (S.alive <= 1) { end(); return; }
+      if (over()) { end(); return; }
       core.driveBots(bots, dt);
       dmgT -= dt;
       if (dmgT <= 0) {
@@ -606,12 +692,12 @@ export function zoneOffline(c, H) {
           const dx = a.pos.x - C.x, dz = a.pos.z - C.z; if (dx * dx + dz * dz <= C.r * C.r) continue;
           if (a === P) { try { I.hud.hurt(null); E.audio.hurt(); } catch { /* optional */ } }
           a.hp -= C.dps;       // the gas ignores armour
-          if (a.hp <= 0) { a.hp = 0; E.kill(a, { by: null, weaponId: 'zone' }); if (S.alive <= 1) break; }
+          if (a.hp <= 0 && !(sq && sq.lethal(a, { by: null, weaponId: 'zone' }))) { a.hp = 0; E.kill(a, { by: null, weaponId: 'zone' }); if (over()) break; }
         }
-        if (S.alive <= 1) end();
+        if (over()) end();
       }
     },
-    stop() { if (core) core.dispose(); },
+    stop() { if (sq) { E.lethal = null; try { sq.dispose(); } catch (e) { console.warn('[zone] squads', e); } } if (core) core.dispose(); },
   };
 }
 
@@ -621,15 +707,16 @@ export function zoneOffline(c, H) {
 export function zoneOnline(c, H) {
   const { E, cfg } = c, P = E.player, B = H.onlineBase(c), net = cfg.net;
   const bots = new Map(), botList = [], outShots = [], outHits = [], outBooms = [], sbuf = [], proj = E.projectiles, rawSpawn = proj.spawn;
-  let core, sim = false, tickT = 0, spawned = false, finalMsg = null, lastBoard = null, finished = false, setupSent = false, botUse = false;
+  let core, sim = false, tickT = 0, spawned = false, finalMsg = null, lastBoard = null, finished = false, setupSent = false, botUse = false, sq = null;       // sq: squads (zone-squads.js)
   const idOf = a => (a === P ? B.me : a ? a.id : null);
+  const botTeam = b => (sq && b.team ? sq.engineTeam(b.team) : null);
   const isBot = id => typeof id === 'string' && /^b\d{1,3}$/.test(id);
   function refreshList() { botList.length = 0; for (const a of bots.values()) botList.push(a); }
   function addBotActor(b) {
     if (bots.has(b.id)) return;
     let a;
-    if (sim) { a = E.addBot({ id: b.id, name: b.name, team: null, weaponId: b.weapon || 'p9', difficulty: cfg.difficulty || 'normal', hp: 100, at: [b.x, b.z, b.y || 0] }); if (a) { H.ensureData(a); if (typeof b.hp === 'number' && b.hp > 0) a.hp = b.hp; H.setOrder(a, 'hunt'); } }
-    else { a = E.addRemote({ id: b.id, name: b.name, team: null, weaponId: b.weapon || 'p9' }); if (a) { if (!a.data) a.data = {}; a.data.bot = 1; } }
+    if (sim) { a = E.addBot({ id: b.id, name: b.name, team: botTeam(b), weaponId: b.weapon || 'p9', difficulty: cfg.difficulty || 'normal', hp: 100, at: [b.x, b.z, b.y || 0] }); if (a) { H.ensureData(a); if (typeof b.hp === 'number' && b.hp > 0) a.hp = b.hp; H.setOrder(a, 'hunt'); } }
+    else { a = E.addRemote({ id: b.id, name: b.name, team: botTeam(b), weaponId: b.weapon || 'p9' }); if (a) { if (!a.data) a.data = {}; a.data.bot = 1; } }
     if (!a) return;
     if (!b.alive) { a.alive = false; a.hp = 0; a.ghost = false; if (a.sol && a.sol.setVisible) a.sol.setVisible(false); }
     bots.set(b.id, a);
@@ -638,6 +725,7 @@ export function zoneOnline(c, H) {
   function takeOver(list) {       // this client becomes the bots' simulator
     for (const [id, a] of [...bots]) { bots.delete(id); E.removeActor(a); }
     sim = true; syncBots(list);
+    if (sq) for (const b of list || []) if (b.down && b.alive) sq.downById(b.id, b.hp);       // squads: its downed bots crawl here now
   }
   function showBoard(m) {
     lastBoard = m.board || lastBoard;
@@ -649,7 +737,7 @@ export function zoneOnline(c, H) {
     for (const q of lastBoard) { if (q.id === B.me) mine = q.k; const row = [q.id === B.me ? c.t('hud.you') : q.name, q.k, q.place ? '#' + q.place : '—']; row.me = q.id === B.me; row.alive = !!q.alive; rows.push(row); }
     rows.sort((x, y) => (y.alive ? 1 : 0) - (x.alive ? 1 : 0) || y[1] - x[1]);
     E.hud.scoreboard({ columns: [c.t('l.player'), c.t('end.kills'), core.L('place')], rows });
-    c.score({ label: core.L('alive'), value: S.alive + ' / ' + S.total, color: AMBER }, { label: core.L('kills'), value: mine, color: BLUE });
+    c.score(sq ? sq.scoreLeft() : { label: core.L('alive'), value: S.alive + ' / ' + S.total, color: AMBER }, { label: core.L('kills'), value: mine, color: BLUE });
   }
   function myPlace() {
     const list = (finalMsg && finalMsg.board) || lastBoard || [];
@@ -659,14 +747,14 @@ export function zoneOnline(c, H) {
   function finish(won, place) {
     if (finished) return; finished = true;
     const S = core.S, stats = c.baseStats();
-    if (place) stats.unshift({ label: core.L('place'), value: '#' + place + ' / ' + S.total });
-    if (finalMsg && finalMsg.name && finalMsg.winner !== B.me) stats.push({ label: core.L('winner'), value: finalMsg.name });
+    if (place) stats.unshift({ label: core.L('place'), value: '#' + place + ' / ' + (sq && sq.S.list.length ? sq.S.list.length : S.total) });       // squads: out of the squads
+    if (finalMsg && finalMsg.name && finalMsg.winner !== B.me && !(sq && sq.isMine(finalMsg.winner))) stats.push({ label: core.L('winner'), value: finalMsg.name });
     if (!won && !spawned && !place) {       // joined as a spectator: it did not play, so no result and no reward
       c.ended = true; c.prompt(null); c.progress(null);
       E.endMatch({ won: null, title: core.L('watched'), stats, credits: 0, xp: 0 });
       return;
     }
-    const title = won ? core.L('won') : place ? core.L('out', { n: place }) : c.t('end.defeat');
+    const title = sq && (won || place) ? sq.title(won, place) : won ? core.L('won') : place ? core.L('out', { n: place }) : c.t('end.defeat');
     c.finish(won, title, stats, won ? 150 : place && place <= 3 ? 80 : 40);
   }
   const link = {
@@ -681,6 +769,7 @@ export function zoneOnline(c, H) {
   };
   function onZone(m) {
     const S = core.S;
+    if (sq && m.op !== 'sync' && m.op !== 'final' && sq.onZone(m)) return;       // squads: down, up, revives, pings, squads out
     switch (m.op) {
       case 'sync': {
         if (typeof m.el === 'number') S.clock = m.el / 1000; else S.clock = -DEPLOY;
@@ -688,6 +777,7 @@ export function zoneOnline(c, H) {
         if (Array.isArray(m.crates) && (!S.crates.length || m.crates.length !== S.crates.length)) core.setCrates(m.crates);
         else if (Array.isArray(m.crates)) for (const q of m.crates) { const cr = core.crateById(q.i); if (cr && q.o && !cr.open) core.markOpen(cr, q.s); else if (cr && cr.open && cr.s && !q.s) core.markUsed(cr); }
         sim = m.sim === B.me; syncBots(m.bots); botUse = m.bu === 1;
+        if (sq) sq.sync(m);       // squads: who is with whom, who is down
         if (m.spawn && !spawned && P.alive) { spawned = true; E.respawn(P, { at: m.spawn, delay: 0 }); P.armor = 0; }
         E.rules.frozen = !m.live;
         showBoard(m);
@@ -724,12 +814,14 @@ export function zoneOnline(c, H) {
   }
   const rd = v => Math.round(v * 100) / 100;
   return {
-    get core() { return core; }, bots, base: B,
+    get core() { return core; }, get squads() { return sq; }, bots, base: B,
     start() {
       B.init();
       E.rules.playerLoadout = false; P.weaponId = 'p9';
       if (P.alive) { E.respawn(P, { at: [P.pos.x, P.pos.z, P.pos.y], delay: 0 }); P.armor = 0; }
       core = createCore(c, H, link);
+      const sqn = squadSize(cfg);       // squads: the server referees downs and revives, this client shows them (and drives its bots if it simulates them)
+      if (sqn) { try { sq = SQM.createSquads(c, H, core, { size: sqn, online: true, B, bots, sim: () => sim }); E.lethal = (a, o) => sq.lethal(a, o); } catch (e) { console.warn('[zone] squads', e); sq = null; } }
       E.rules.frozen = true;
       c.netOn('zone', m => { if (!c.ended) onZone(m); });
       c.netOn('score', s => { if (!c.ended) { B.score(s); if (lastBoard) showBoard({}); } });
@@ -741,7 +833,7 @@ export function zoneOnline(c, H) {
       c.netOn('end', e => {
         if (c.ended) return;
         if (e.players) B.score(e);
-        const place = myPlace(), won = e.winner === B.me;
+        const place = myPlace(), won = sq ? sq.isMine(e.winner) : e.winner === B.me;
         finish(won, won ? 1 : place);
       });
       c.on('kill', e => {
@@ -781,11 +873,12 @@ export function zoneOnline(c, H) {
     },
     update(dt) {
       core.update(dt);
+      if (sq) sq.update(dt);
       if (!sim || core.S.clock < 0) return;
       core.driveBots(botList, dt);
       tickT -= dt;
       if (tickT <= 0) { tickT = 0.1; sendTick(); }
     },
-    stop() { if (proj.spawn !== rawSpawn) proj.spawn = rawSpawn; if (core) core.dispose(); },
+    stop() { if (proj.spawn !== rawSpawn) proj.spawn = rawSpawn; if (sq) { E.lethal = null; try { sq.dispose(); } catch (e) { console.warn('[zone] squads', e); } } if (core) core.dispose(); },
   };
 }

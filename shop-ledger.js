@@ -47,6 +47,16 @@ export function attachLedger(p, ctx) {
     return 1;
   };
   const levelOkFor = (kind, id) => TEST || ctx.level() >= levelNeed(kind, id);
+  // rc8: what the player really owns (bought, earned, given at start, free), TEST_UNLOCK_ALL aside: the shop's « Possédé » label and filter
+  const realList = k => (real && Array.isArray(real[k]) ? real[k] : []);
+  const realOut = id => (isBase(id) ? realList('outfits').includes(id) : d.cos.out.includes(id)), realFin = id => d.cos.fin.includes(id);
+  const mineOf = (kind, id, set) => {
+    if (kind === 'weapon') return realList('weapons').includes(id);
+    if (kind === 'gear') { const it = gearItem(id); return !!it && it.live === true && (it.price === 0 || (d.gxOwned || []).includes(id)); }
+    if (kind === 'finish') return isFinish(id) && realFin(id);
+    if (kind === 'outfit') return !!outfitOf(id) && realOut(id);
+    return kind === 'set' && !!set && setQuote(set, realOut, realFin, outfitOf).complete;
+  };
 
   /** What buying this costs right now and whether it can be bought. */
   function quote(kind, id, set) {
@@ -59,7 +69,7 @@ export function attachLedger(p, ctx) {
     else known = false;
     const lvlNeed = kind === 'set' && set ? Math.max(levelNeed('outfit', set.outfit), ...set.finishes.map(f => levelNeed('finish', f))) : levelNeed(kind, id);
     const levelOk = TEST || ctx.level() >= lvlNeed, missing = Math.max(0, cost - d.cr);
-    return { kind, id, known, cost, price: { credits: cost }, owned, levelOk, level: lvlNeed, missing, can: known && !ns && !owned && levelOk && missing === 0 && !TEST, test: TEST, set: setInfo, notSold: ns, passTier };
+    return { kind, id, known, cost, price: { credits: cost }, owned, mine: TEST ? mineOf(kind, id, set) : owned, levelOk, level: lvlNeed, missing, can: known && !ns && !owned && levelOk && missing === 0 && !TEST, test: TEST, set: setInfo, notSold: ns, passTier };
   }
   function grant(kind, id, set) {
     if (kind === 'weapon') { d.weapons.push(id); if (!real.weapons.includes(id)) real.weapons.push(id); }

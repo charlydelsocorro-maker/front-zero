@@ -90,7 +90,7 @@ html.fz2 #hud [data-h="zone"]{top:calc(var(--fz-obj-top) + clamp(30px,3.4vh,36px
 html.fz2 #hud [data-h="net"]{gap:6px!important;height:clamp(19px,2.1vh,23px);padding:0 9px 0 7px!important;font:700 var(--f-mi)/1 'Barlow Condensed','Arial Narrow',Arial,sans-serif!important;letter-spacing:.08em;background:linear-gradient(to top left,transparent calc(50% - .75px),var(--g-hair2) calc(50% - .75px) calc(50% + .75px),transparent calc(50% + .75px)) 100% 100%/6px 6px no-repeat border-box,var(--g-bg)!important;border:1px solid var(--g-hair)!important;box-shadow:none!important;clip-path:polygon(0 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%);text-shadow:0 1px 1px rgba(0,0,0,.8)}
 html.fz2 #hud [data-h="net"]::before{content:"";flex:none;width:10px;height:9px;background:linear-gradient(currentColor,currentColor) 0 100%/2px 40% no-repeat,linear-gradient(currentColor,currentColor) 4px 100%/2px 70% no-repeat,linear-gradient(currentColor,currentColor) 8px 100%/2px 100% no-repeat}
 /* ---------- minimap ---------- */
-html.fz2 #hud .fzm{box-shadow:0 0 0 1px rgba(0,0,0,.5),0 0 0 3px rgba(9,11,10,.35),0 6px 18px rgba(0,0,0,.3)}
+html.fz2 #hud .fzmm{box-shadow:0 0 0 1px rgba(0,0,0,.5),0 0 0 3px rgba(9,11,10,.35),0 6px 18px rgba(0,0,0,.3)}
 /* ---------- kill feed ---------- */
 html.fz2 #hud [data-h="feed"]{right:var(--fz-pad);top:var(--fz-pad);gap:3px;font-size:var(--f-sm);max-width:min(34vw,calc(50vw - var(--fzc-w)/2 - var(--fz2-wing) - var(--fz2-gap) - var(--fz-pad) - 14px))}
 html.fz2.fzt-nocompass #hud [data-h="feed"]{max-width:30vw}
@@ -622,7 +622,7 @@ export function install({ engine: E, settings, i18n, hudRoot, theme }) {
       let x = (pe[0] * vx + pe[4] * vy + pe[8] * vz + pe[12]) * iw, y = (pe[1] * vx + pe[5] * vy + pe[9] * vz + pe[13]) * iw;
       const dist = Math.hypot(m.x - px, (m.y || 0) - py, m.z - pz);
       if (vz > -0.1) { if (small) continue; x = -x; y = -1; const q = Math.max(Math.abs(x), 0.001); if (q < 1) x /= q; }
-      if (small && (x > 1 || x < -1 || y > 1 || y < -1 || dist > 70)) continue;
+      if (small && (x > 1 || x < -1 || y > 1 || y < -1 || dist > 120)) continue;       // same reach as engine-hud.js (ally tags out to 120 m)
       x = x < -0.94 ? -0.94 : x > 0.94 ? 0.94 : x; y = y < -0.86 ? -0.86 : y > 0.86 ? 0.86 : y;
       const sx = (x * 0.5 + 0.5) * w, sy = (-y * 0.5 + 0.5) * h;
       e.on = true; e.small = small; e.dist = dist;
@@ -636,6 +636,10 @@ export function install({ engine: E, settings, i18n, hudRoot, theme }) {
       for (let t = 0; t < tries.length && !ok; t++) {
         dy = tries[t]; ok = true;
         for (let j = 0; j < i; j++) { const o = ORD[j]; if (o.pfade) continue; if (e.x0 < o.x1 + 2 && e.x1 > o.x0 - 2 && e.y0 + dy < o.y1 + o.pdy && e.y1 + dy > o.y0 + o.pdy) { ok = false; break; } }
+      }
+      if (!ok && e.small) {       // an ally tag is never dimmed by an objective marker (outfits carry no team colour: the tag is the team cue); only by another tag
+        dy = 0; ok = true;
+        for (let j = 0; j < i; j++) { const o = ORD[j]; if (o.pfade || !o.small) continue; if (e.x0 < o.x1 + 2 && e.x1 > o.x0 - 2 && e.y0 < o.y1 + o.pdy && e.y1 > o.y0 + o.pdy) { ok = false; break; } }
       }
       e.pdy = ok ? dy : 0; e.pfade = !ok;
     }

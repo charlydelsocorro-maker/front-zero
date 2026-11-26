@@ -8,7 +8,8 @@
      store.flushSync(obj)           best effort, synchronous (process exit); external stores cannot, they return false
      await store.close()
    Choice at start (front-war.js): FZ_FRONT_STORE = memory | json-file | external (default json-file), FZ_FRONT_FILE = path of the JSON file
-   (default: .front-state.json next to this file; a dot file, so the game server never serves it), FZ_FRONT_ADAPTER = module path for external.
+   (default: .front-state.json next to this file; a dot file, so the game server never serves it; with FZ_DATA_DIR set, the default is
+   <FZ_DATA_DIR>/front-state.json, moved there once from the old file: migrateToDataDir below), FZ_FRONT_ADAPTER = module path for external.
 
    !! RENDER FREE: its disk is wiped at every restart, deploy and wake-up from sleep. There, json-file only lasts while the instance is
    awake. A public launch needs either a paid instance with a persistent disk (json-file on that disk) or an external database behind
@@ -110,7 +111,31 @@ function createStore(opts = {}) {
     return externalStore(ad);
   }
   if (kind !== 'json-file') throw new Error('unknown front store kind: ' + kind);
-  return jsonFileStore(opts.file || env.FZ_FRONT_FILE || path.join(__dirname, '.front-state.json'));
+  const legacy = path.join(__dirname, '.front-state.json');
+  return jsonFileStore(opts.file || env.FZ_FRONT_FILE || (env.FZ_DATA_DIR ? migrateToDataDir(path.join(path.resolve(String(env.FZ_DATA_DIR)), 'front-state.json'), legacy) : legacy));
+}
+
+/* FZ_DATA_DIR (the persistent disk, also used by the accounts: account-store.js) -> <FZ_DATA_DIR>/front-state.json.
+   One-time move: when that file does not exist yet and the old one (.front-state.json next to this file, or its .bak) does, its content
+   is copied there (temp file, fsync, rename) and the old file is renamed *.migrated, so the move never runs twice.
+   If the copy fails, this run keeps the old path (nothing is lost) and the next start tries again. */
+function migrateToDataDir(file, legacy) {
+  try {
+    if (fs.existsSync(file) || fs.existsSync(file + '.bak')) return file;
+    const src = [legacy, legacy + '.bak'].find(f => { try { const o = JSON.parse(fs.readFileSync(f, 'utf8')); return !!o && typeof o === 'object'; } catch { return false; } });
+    if (!src) return file;
+    const text = fs.readFileSync(src, 'utf8');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const tmp = `${file}.tmp-${process.pid}-migrate`, fd = fs.openSync(tmp, 'w');
+    try { fs.writeSync(fd, text); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+    fs.renameSync(tmp, file);
+    for (const f of [legacy, legacy + '.bak']) { try { if (fs.existsSync(f)) fs.renameSync(f, f + '.migrated'); } catch { /* the copy is done; the old file just stays */ } }
+    console.log(`[front] state moved to ${file} (from ${path.basename(src)})`);
+    return file;
+  } catch (e) {
+    console.error('[front] could not move the state to FZ_DATA_DIR, keeping the old file this time:', e.message);
+    return legacy;
+  }
 }
 
 module.exports = { createStore, memoryStore, jsonFileStore, externalStore };

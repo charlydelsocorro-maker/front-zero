@@ -51,6 +51,7 @@ export function createEngine(opts) {
   vm.group.traverse(o => { if (o.isPointLight) vmLights.push(o); }); for (const l of vmLights) { camera.add(l); l.position.set(0.12, -0.08, -0.75); }
   // Weapon light: one spot light on the camera, in the scene from the start with intensity 0 when off, so the light count never changes (no shader rebuild on toggle).
   // It sits ahead of the weapon (so the viewmodel is not washed out) and slides back to the eye near a wall (a light without shadows must not end up behind the surface it lights).
+  let torchN = 1;
   const TORCH_I = 85, torch = new THREE.SpotLight(0xfff0d6, 0, 38, THREE.MathUtils.degToRad(16), 0.55, 1.25);
   torch.castShadow = false; torch.position.set(0.1, -0.1, -0.75); torch.target.position.set(0.02, -0.02, -9); camera.add(torch); camera.add(torch.target);
   const grid = createGrid(4), mover = createMover(grid), nav = createNav(grid);
@@ -123,6 +124,11 @@ export function createEngine(opts) {
   const wornFit = () => { try { const o = profile.specialOutfit && profile.specialOutfit(); return o && fitMod && fitMod.outfitById(o.id) ? o.id : null; } catch { return null; } };
   const wornOutfit = base => { try { const id = wornFit(), fp = id ? fitMod.fpArms(id) : null; return fp ? { ...base, fp, fitId: id } : base; } catch { return base; } };
   function syncFit() { if (!online || !net || !net.sendFit || !net.fitOk) return; const id = wornFit(); if (id === fitSent) return; fitSent = id; try { net.sendFit(id); } catch (e) { console.warn('[outfit] send', e); } }
+  /* bot outfits (bot-outfits.js): each match deals a few outfits of the catalogue to its bots, built behind the loading screen; without the module the bots keep the standard uniform */
+  let botFit = null;
+  const botFitPlan = async () => { try { if (!botFit) botFit = await import('./bot-outfits.js'); return fitMod ? botFit.plan(cfg, fitMod, online ? net || cfg.net : null, !!E.warmOutfits, settings.get('graphics.preset')) : null; } catch (e) { console.warn('[bot-outfit] unavailable', e && e.message); return null; } };
+  const botFitFor = a => { try { return botFit ? botFit.forBot(a, actors, online ? net : null) : null; } catch (e) { console.warn('[bot-outfit]', e); return null; } };
+  const remoteFit = id => { try { return net && net.fitOf ? net.fitOf(id) : null; } catch { return null; } };
   function buildSoldier(a) {
     if (a.isPlayer) return;
     if (a.sol) { a.sol.dispose(); a.sol = null; }
@@ -236,7 +242,7 @@ export function createEngine(opts) {
     a.hp -= dm; if (!a.isPlayer) a.regenT = 6;
     const dir = o && o.dir; feedback(a, by, amount, head, dir ? (dir.x ?? dir[0]) : undefined, dir ? (dir.z ?? dir[1]) : undefined);
     emitDamage(by, a, amount, head);
-    if (a.hp <= 0) { kill(a, o); return true; }
+    if (a.hp <= 0) { if (E.lethal) { let held = false; try { held = E.lethal(a, o); } catch (e) { console.warn('[engine] lethal', e); } if (held) return false; } kill(a, o); return true; }       // E.lethal (zone-squads.js): a mode may down a soldier instead
     return false;
   }
   function kill(a, o) {
@@ -559,7 +565,7 @@ export function createEngine(opts) {
     P.land = Math.max(0, P.land - dt * 5); P.landS = (P.landS || 0) + (P.land - (P.landS || 0)) * (1 - Math.exp(-30 * dt));       // the landing dip eases in instead of jumping
     { // one head dip per footfall, driven by the distance really covered: no bobbing or footsteps while pushing against a wall
       const gs = Math.min(sp, Math.hypot(a.vx, a.vz)), on = b.grounded && P.slide <= 0 && gs > 0.5;
-      if (on) { if ((P.bobA || 0) < 0.02) P.bob = Math.PI; P.bob += gs * dt / (P.sprinting ? 2.5 : 2.15) * Math.PI * 2; if (P.bob >= Math.PI * 2) { P.bob -= Math.PI * 2; sndOwnStep.run = sp > 6; try { audio.step(surfaceOf(b), sndOwnStep); } catch { /* optional */ } } }
+      if (on) { if ((P.bobA || 0) < 0.02) P.bob = Math.PI; P.bob += gs * dt / (P.sprinting ? 2.5 : 2.15) * Math.PI * 2; if (P.bob >= Math.PI * 2) { P.bob -= Math.PI * 2; sndOwnStep.run = sp > 6; sndOwnStep.vol = P.crouched ? 0.45 : P.sprinting ? 1.2 : 1; try { audio.step(surfaceOf(b), sndOwnStep); } catch { /* optional */ } } }       // crouched: soft, not silent
       P.bobA = (P.bobA || 0) + ((on ? clamp(gs / 4.7, 0.35, 1) : 0) - (P.bobA || 0)) * (1 - Math.exp(-10 * dt));
     }
     if (rules.regen && !online && a.hp < a.maxHp) { a.regenT -= dt; if (a.regenT <= 0) a.hp = Math.min(a.maxHp, a.hp + dt * (P.cls.regen ? 34 : 17)); }
@@ -605,6 +611,8 @@ export function createEngine(opts) {
     { const want = P.torch && a.alive ? 1 : 0; if (P.torchK !== want) { P.torchK = want > P.torchK ? Math.min(1, P.torchK + dt * 9) : Math.max(0, P.torchK - dt * 9); torch.intensity = TORCH_I * P.torchK * P.torchK; } if (P.torchK > 0) torch.position.z = -0.12 - 0.63 * (1 - P.vmBlock); }
     camera.getWorldDirection(v1); const wallT = a.alive ? grid.ray(camera.position.x, camera.position.y, camera.position.z, v1.x, v1.y, v1.z, 1.15) : 1.15;
     P.vmBlock += (clamp((1.15 - wallT) / 0.75, 0, 1) - P.vmBlock) * Math.min(1, dt * 14);
+    // Flashlight on a near wall: the beam is a point-like spot (I / d^1.25), so a wall at 0.6 m got ~25x the light of one at 10 m and clipped to white. Cap the illuminance at what a wall 10 m away gets; the reach beyond 10 m is untouched. One extra grid ray, only while the lamp is on.
+    if (P.torchK > 0) { const wl = grid.ray(camera.position.x, camera.position.y, camera.position.z, v1.x, v1.y, v1.z, 10.8) + torch.position.z; const nk = wl >= 10 ? 1 : Math.pow(Math.max(0.15, wl) / 10, 1.25); torchN += (nk - torchN) * Math.min(1, dt * 14); torch.intensity = TORCH_I * P.torchK * P.torchK * torchN; }
     vmSt.ads = P.ads; vmSt.speed = sp; vmSt.grounded = b.grounded; vmSt.sliding = P.slide > 0; vmSt.yawDelta = wrap(a.yaw - P.yawPrev); vmSt.pitchDelta = a.pitch - P.pitchPrev; vmSt.blocked = P.vmBlock; vmSt.dead = !a.alive;
     P.yawPrev = a.yaw; P.pitchPrev = a.pitch;
     vm.update(dt, vmSt); hud.scope(vm.scoped && a.alive);
@@ -736,7 +744,7 @@ export function createEngine(opts) {
       }
       a.px = a.pos.x; a.pz = a.pos.z;
       const dx = a.pos.x - cp.x, dz = a.pos.z - cp.z, d2 = dx * dx + dz * dz, sp = Math.hypot(a.vx, a.vz);
-      if (!a.sol && d2 < 900 && b.grounded && sp > 1.5) { a.stepD += sp * dt; if (a.stepD > 2.3) { a.stepD = 0; sndStep.x = a.pos.x; sndStep.y = a.pos.y; sndStep.z = a.pos.z; sndStep.run = sp > 3.5; try { audio.step(surfaceOf(b), sndStep); } catch { /* optional */ } } }
+      if (!a.sol && d2 < (a.crouch > 0.5 ? 9 : 900) && b.grounded && sp > 1.5) { a.stepD += sp * dt; if (a.stepD > 2.3) { a.stepD = 0; sndStep.x = a.pos.x; sndStep.y = a.pos.y; sndStep.z = a.pos.z; sndStep.run = sp > 3.5; sndStep.vol = a.crouch > 0.5 ? 0.25 : sp > 8.4 ? 1.25 : 1; try { audio.step(surfaceOf(b), sndStep); } catch { /* optional */ } } }
       if (a.tag) { a.tag.x = a.pos.x; a.tag.y = a.pos.y + 2.05 * a.hScale; a.tag.z = a.pos.z; }
       const s = a.sol; if (!s) continue;
       s.root.position.set(a.pos.x, a.pos.y - b.stepOff, a.pos.z);
@@ -744,7 +752,7 @@ export function createEngine(opts) {
       const sh = d2 < 55 * 55; if (a.shadow !== sh) { a.shadow = sh; s.mesh.castShadow = sh; }
       const front = dx * fxv + dz * fzv > -3, lod = d2 > 60 * 60 ? 3 : d2 > 30 * 30 || !front ? 2 : 1;
       a.lodAcc += dt; if (++a.lodN >= lod) { solSt.vx = a.vx; solSt.vz = a.vz; solSt.yaw = a.yaw; solSt.aimPitch = a.pitch; solSt.grounded = b.grounded; solSt.crouch = a.crouch; solSt.y = a.pos.y; s.update(a.lodAcc, solSt); solSt.y = NaN; a.lodAcc = 0; a.lodN = 0;
-        if (s.contacts !== a.ctN) { a.ctN = s.contacts; if (d2 < 900 && b.grounded && sp > 0.8) { sndStep.x = a.pos.x; sndStep.y = a.pos.y; sndStep.z = a.pos.z; sndStep.run = sp > 3.5; try { audio.step(surfaceOf(b), sndStep); } catch { /* optional */ } } } }       // the footstep plays when the foot touches down
+        if (s.contacts !== a.ctN) { a.ctN = s.contacts; if (d2 < (a.crouch > 0.5 ? 9 : 900) && b.grounded && sp > 0.8) { sndStep.x = a.pos.x; sndStep.y = a.pos.y; sndStep.z = a.pos.z; sndStep.run = sp > 3.5; sndStep.vol = a.crouch > 0.5 ? 0.25 : sp > 8.4 ? 1.25 : 1; try { audio.step(surfaceOf(b), sndStep); } catch { /* optional */ } } } }       // the footstep plays when the foot touches down
     }
     // soft separation between living bodies (bots yield to the player)
     for (let i = 0; i < actors.length; i++) {
@@ -847,6 +855,7 @@ export function createEngine(opts) {
     emit('pause', v);
   }
   const isPaused = () => paused || menuOpen;
+  const DOWN_BLOCK = new Set(['grenade', 'tactical', 'medical', 'reload', 'weapon1', 'weapon2', 'nextWeapon', 'inspect', 'slide', 'jump']);
   function onPress(name) {
     switch (name) {
       case 'pause': setPause(!isPaused()); if (!isPaused()) lock(); return;
@@ -854,6 +863,7 @@ export function createEngine(opts) {
       case 'toggleFps': settings.set('graphics.showFps', !settings.get('graphics.showFps')); return;
     }
     if (blocked()) return;
+    if (DOWN_BLOCK.has(name) && player.data && player.data.down) return;       // Zone in squads, downed (zone-squads.js): no gear, weapon or jump whatever the input (keyboard, mouse, gamepad, touch all end here)
     switch (name) {
       case 'jump': P.jumpBuf = 0.12; break;
       case 'reload': startReload(); break;
@@ -894,8 +904,12 @@ export function createEngine(opts) {
   addEventListener('blur', () => { for (const k in held) held[k] = false; P.aim = false; keyTurn.l = keyTurn.r = keyTurn.u = keyTurn.d = false; focused = false; applyAudio(); });
   addEventListener('focus', () => { focused = true; applyAudio(); });
   document.documentElement.addEventListener('mouseleave', () => { mouseIn = false; });
+  // A tap on a phone also fires a compatibility mousemove at the finger. It must never count as a mouse resting at the screen edge:
+  // the edge turn of the frame would then fight the touch look all match long (player report, 26/11: "the camera won't move until I leave the page").
+  let touchT = -1e9; addEventListener('touchstart', () => { touchT = performance.now(); mouseIn = false; }, { capture: true, passive: true });
   document.addEventListener('pointerlockerror', () => { if (running && !isPaused()) hud.api.message(t('hud.mouseNotLocked'), { kind: 'bad', dur: 1.6 }); });
   document.addEventListener('mousemove', e => {
+    if (performance.now() - touchT < 1500 || (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents)) { mouseIn = false; return; }
     mx0 = e.clientX; my0 = e.clientY; mouseIn = true; if (blocked()) return;
     const scope = P.ws.length && wNow().def.scope, s = 0.0021 * mouseSens * (1 - P.ads * (1 - mouseAds * (scope ? 0.3 : 0.85)));
     player.yaw -= clamp(e.movementX || 0, -900, 900) * s; player.pitch = clamp(player.pitch - clamp(e.movementY || 0, -900, 900) * s * mouseInv, -1.5, 1.5);
@@ -1096,6 +1110,7 @@ export function createEngine(opts) {
   function startMatch(c) {
     if (loading) return loadP;
     if (running) stopMatch();
+    if (c && /^zone[234]$/.test(c.mode)) c = Object.assign({}, c, { mode: 'zone', squad: +c.mode[4] });       // Zone Duo / Trio / Quatuor (data.js MODES): Zone in squads of 2-4 (zone-squads.js)
     return (loadP = runLoad(c));
   }
   async function runLoad(c) {
@@ -1124,7 +1139,8 @@ export function createEngine(opts) {
       for (let i = P.ws.length - 1; i >= 0; i--) { await brk(); vm.equip(P.ws[i].def, P.outfit); }        // one viewmodel per slice, the current weapon last
       loadProgress(0.04, 'map'); await brk();
       temps.push(createSoldier(scene, {}));                 // stands in for every soldier and ragdoll until the mode has created its own
-      if (fitMod && (online || E.warmOutfits)) { try { await fitMod.prepareOutfits(brk); gate(); for (const wid of fitMod.WARM_IDS || [fitMod.OUTFIT_SETS[0].id]) for (let l = 0; l < 3; l++) { await brk(); temps.push(createSoldier(scene, { outfit: wid, outfitLod: l })); } } catch (e) { if (e === LOAD_ABORT) throw e; console.warn('[outfit] prepare', e); } }       // someone may wear one: geometry and shaders are ready before the first frame
+      const bfp = await botFitPlan(); gate();       // bot outfits of this match: { ids to build, warm (one per set) } or null
+      if (fitMod && (online || E.warmOutfits || bfp)) { try { await fitMod.prepareOutfits(brk, bfp ? bfp.ids : undefined); gate(); for (const wid of (bfp && bfp.warm) || fitMod.WARM_IDS || [fitMod.OUTFIT_SETS[0].id]) for (let l = 0; l < 3; l++) { await brk(); temps.push(createSoldier(scene, { outfit: wid, outfitLod: l })); } } catch (e) { if (e === LOAD_ABORT) throw e; console.warn('[outfit] prepare', e); } }       // someone may wear one: geometry and shaders are ready before the first frame
       await finLoad(temps, brk);
       await bkLoad(); gate();
       if (world.id !== cfg.map) {
@@ -1249,7 +1265,7 @@ export function createEngine(opts) {
   /* ---------- frame ---------- */
   let slowT = 0, idle = 0, simMs = 0, renderMs = 0, playCls = false, skipRender = false;
   const setPlayClass = on => { if (on !== playCls) { playCls = on; document.body.classList.toggle('play', on); } };
-  const classify = a => { if (a.ghost) return null; if (a.kind === 'zombie') { const d = Math.hypot(a.pos.x - player.pos.x, a.pos.z - player.pos.z); return d < 32 ? '#9ad04a' : null; } if (!isEnemy(player, a)) return '#7fb2e6'; return a.shotT > 0 || Math.hypot(a.pos.x - player.pos.x, a.pos.z - player.pos.z) < 24 ? '#e0492f' : null; };
+  const classify = a => { if (a.ghost) return null; if (a.kind === 'zombie') { const d = Math.hypot(a.pos.x - player.pos.x, a.pos.z - player.pos.z); return d < 32 ? '#9ad04a' : null; } if (!isEnemy(player, a)) return '#7fb2e6'; return a.shotT > 0 || (!(a.crouch > 0.5) && Math.hypot(a.pos.x - player.pos.x, a.pos.z - player.pos.z) < 24) ? '#e0492f' : null; };       // a crouched enemy shows only when it fires
   const defaultBoard = () => ({ columns: [t('player'), t('kills'), t('deaths')], rows: actors.filter(a => a.kind !== 'zombie').sort((a, b) => b.kills - a.kills).map(a => { const r = [a === player ? t('hud.you') : a.name, a.kills, a.deaths]; r.me = a === player; r.team = a.team; r.alive = a.alive; return r; }) });
   function slowHud() {
     const a = player, w = wNow();
@@ -1332,6 +1348,7 @@ export function createEngine(opts) {
     addBot(o = {}) {
       const a = makeActor({ id: o.id || 'bot' + (++idSeq), name: o.name || CALL[botSeq % CALL.length], team: o.team, weaponId: byId(WEAPONS, o.weaponId) ? o.weaponId : 'ar', hp: o.hp || 100 });
       a.palI = botSeq++; a.ai = newBotAI(o.difficulty || cfg?.difficulty || 'normal', botSeq); a.maxArmor = 0; a.speed = 4.7 * a.wdef.mob;
+      a.fit = botFitFor(a);       // an outfit of this match's pool (bot-outfits.js), null = the standard uniform
       return addActor(a, o.at);
     },
     addZombie(o = {}) {
@@ -1344,7 +1361,7 @@ export function createEngine(opts) {
     setOutfit(a, id) { if (!a || a.isPlayer || a.kind !== 'soldier') return false; a.fit = id || null; return a.sol ? a.sol.setOutfit(a.fit, { team: a.team }) : true; },
     addRemote(o = {}) {
       let a = actorById(o.id); if (a && a !== player) { if (o.name) a.name = o.name; if (o.team !== undefined) setTeam(a, o.team); if (o.weaponId) setWeapon(a, o.weaponId); return a; }
-      a = makeActor({ id: o.id, name: o.name || t('player'), team: o.team, weaponId: byId(WEAPONS, o.weaponId) ? o.weaponId : 'ar', hp: 100, isRemote: true }); a.palI = botSeq++;
+      a = makeActor({ id: o.id, name: o.name || t('player'), team: o.team, weaponId: byId(WEAPONS, o.weaponId) ? o.weaponId : 'ar', hp: 100, isRemote: true }); a.palI = botSeq++; a.fit = remoteFit(o.id);       // built in its outfit at once (the bots this client then simulates keep it)
       a.ghost = online;       // not there yet: hidden and untouchable until its first state arrives (that client may still be loading)
       return addActor(a, o.at);
     },

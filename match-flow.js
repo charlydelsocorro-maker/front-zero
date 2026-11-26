@@ -4,7 +4,7 @@
 import { rewardBlock } from './attachments-ui.js';
 
 const XP_PER_LEVEL = 1000, TICK_MS = 120;
-const MODE_KEY = { ffa: 'mode.deathmatch', tdm: 'mode.teams', dom: 'mode.domination', bomb: 'mode.bomb', zombie: 'mode.zombies', zone: 'mode.zone' };
+const MODE_KEY = { ffa: 'mode.deathmatch', tdm: 'mode.teams', dom: 'mode.domination', bomb: 'mode.bomb', zombie: 'mode.zombies', zone: 'mode.zone', zone2: 'mode.zone2', zone3: 'mode.zone3', zone4: 'mode.zone4' };       // zone2-4: Zone in squads (zone-squads.js)
 const HOW_KEY = { votes: 'flow.howVotes', tie: 'flow.howTie', none: 'flow.howNone', random: 'flow.howRandom' };
 const WHY_KEY = { host: 'flow.msgHost', players: 'flow.msgPlayers', compat: 'flow.msgCompat', error: 'flow.msgError' };
 const CLOCK_KEY = { results: 'flow.clockResults', vote: 'flow.clockVote', winner: 'flow.clockWinner' };

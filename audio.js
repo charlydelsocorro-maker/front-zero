@@ -34,7 +34,11 @@ function hashStr(str) {
 
 const SURFACES = ['sand', 'concrete', 'metal', 'wood', 'snow'];
 const surfaceOf = (s) => (SURFACES.includes(s) ? s : 'concrete');
-const CAPS = { gunOwn: 6, gun: 12, step: 6, foley: 8, reload: 4, impact: 10, whizz: 3, casing: 4, hud: 3, ui: 3, amb: 10, boom: 4, rumble: 3, debris: 3, launch: 4, melee: 4 };
+const CAPS = { gunOwn: 6, gun: 12, step: 6, foley: 8, reload: 4, impact: 10, whizz: 3, casing: 4, hud: 3, ui: 3, amb: 10, boom: 4, rumble: 3, debris: 3, launch: 4, melee: 4, prop: 6 };
+// World-prop levels (recorded takes, sounds/props/), set by offline renders through the master chain against a footstep and a shot.
+// Measured at 3 m: a door opening sits between a walking and a running step, a slam 4 dB over a running step, a pane break 10 dB under
+// a rifle shot at the same distance, a steel door slam about as loud as a rifle shot at 10 m.
+const PROP_MIX = { glass: .9, doorOpen: .51, doorSlam: .7, heavyOpen: .34, heavySlam: .32, gasHiss: .08, fire: .7 };
 
 // ---------------------------------------------------------------------------
 // Weapon designs
@@ -1279,6 +1283,20 @@ export function createAudio() {
     if (s.atten < .008) return true;
     return smp.fire(play, 'launch', id, s, { when: now + s.delay, gain: gain * s.atten, pan: s.pan, lp: s.lp, rate: rand(.97, 1.02), send: send * (1 + s.far * 2), echo: echo * (1 + s.far) }, now, o);
   }
+  // World props (engine-props.js: panes, doors, gas bottles, fire): only the recorded bank (sounds/props/, CC0 BigSoundBank and
+  // OpenGameArt takes). Silent until decoded, never a synthesized stand-in. Heard where it happens, a random take, ±4 % pitch.
+  let glassWindow = 0, glassCount = 0;
+  function propRec(name, o, gain, ref, roll, send, rate = 1) {
+    if (!smp || typeof smp.prop !== 'function' || !o || typeof o !== 'object') return false;
+    const p = spatial(o, ref, roll, !!o.occluded);
+    if (p.atten < .008) return false;
+    return smp.prop(play, name, { when: ctx.currentTime + p.delay, gain: gain * p.atten, pan: p.pan, lp: p.lp, rate: rate * rand(.96, 1.04), send: send * (1 + p.far * 2), echo: p.far * .05 }, 'prop');
+  }
+  // A heavy steel door (o.size > 1.2) uses its own takes, or the wooden ones a fifth lower when the manifest has none.
+  function doorRec(role, o, ref, roll, send) {
+    const heavy = finite(o && o.size, 1) > 1.2, hk = 'heavy' + role, own = heavy && smp && smp.hasWorld && smp.hasWorld(hk), name = own ? hk : 'door' + role;
+    return propRec(name, o, PROP_MIX[name] * (heavy && !own ? 1.2 : 1), ref, roll, send, heavy && !own ? .8 : 1);
+  }
 
   // Public API
   function unlock() {
@@ -1402,11 +1420,11 @@ export function createAudio() {
     // Shouldering the weapon: a light cloth movement (for game.js to call when aiming starts).
     aim: guard(() => { if (once('aim:own', .25)) rec('aim', undefined, .4, 'foley', .015); }),
     step: guard((surface, o = {}) => {
-      const s = surfaceOf(surface), run = !!o.run, buf = B.step(s, run);
-      if (isOwn(o)) { play('step', buf, { gain: (run ? .25 : .17) * rand(.86, 1.08), rate: rand(.93, 1.07), send: .025 * E().ownWet }); return; }
+      const s = surfaceOf(surface), run = !!o.run, buf = B.step(s, run), v = o.vol > 0 ? o.vol : 1;       // vol: a crouched step is quieter (game.js)
+      if (isOwn(o)) { play('step', buf, { gain: (run ? .25 : .17) * v * rand(.86, 1.08), rate: rand(.93, 1.07), send: .025 * E().ownWet }); return; }
       const p = spatial(o, 2.5, 1.35, !!o.occluded);
       if (p.d > 42 || p.atten < .02) return;
-      play('step', buf, { when: ctx.currentTime + p.delay, gain: (run ? .42 : .3) * p.atten * rand(.86, 1.08), pan: p.pan, lp: Math.min(p.lp, 9000), rate: rand(.93, 1.07), send: .05 + p.far * .05 });
+      play('step', buf, { when: ctx.currentTime + p.delay, gain: (run ? .42 : .3) * v * p.atten * rand(.86, 1.08), pan: p.pan, lp: Math.min(p.lp, 9000), rate: rand(.93, 1.07), send: .05 + p.far * .05 });
     }),
     land: guard((surface) => { play('foley', B.land(surfaceOf(surface)), { gain: .46, rate: rand(.94, 1.05), send: .05 * E().ownWet }); }),
     slide: guard((surface) => { play('foley', B.slide(surfaceOf(surface)), { gain: .3, rate: rand(.94, 1.06), send: .05 * E().ownWet }); }),
@@ -1537,6 +1555,20 @@ export function createAudio() {
       rec('throw', o, .52, 'foley', .02, undefined, mine(o) && since('pin:own') < .06 ? { when: ctx.currentTime + .16 } : undefined);
     }),
     click: guard(() => { rec('click', undefined, .34, 'ui', 0); }),
+    // ---- world props (engine-props.js calls these by name with {x, y, z, size}) ----------------------------------------------------
+    // A window pane breaking. A blast or a burst of remote 'gl' messages can break sixteen at once: at most three per 60 ms are heard.
+    glass: guard((o) => {
+      const now = ctx.currentTime;
+      if (now - glassWindow > .06) { glassWindow = now; glassCount = 0; }
+      if (++glassCount > 3) return;
+      propRec('glass', o, PROP_MIX.glass, 4, 1, .1);
+    }),
+    // A door starting to open (played once, when it is unlatched), and a door reaching its frame (once, when the swing ends).
+    doorOpen: guard((o) => { doorRec('Open', o, 3, 1.2, .06); }),
+    doorSlam: guard((o) => { doorRec('Slam', o, 3, 1.1, .08); }),
+    // A gas bottle venting and a fire catching when a barrel is set alight.
+    gasHiss: guard((o) => { propRec('gasHiss', o, PROP_MIX.gasHiss, 3, 1.2, .04); }),
+    fire: guard((o) => { propRec('fire', o, PROP_MIX.fire, 3, 1.2, .05); }),
     // Flamethrower: no recording fits, so a quiet shaped-noise roar (the only new synthetic sound of the arsenal). Called on each tick of the jet, thinned here.
     flame: guard((o) => {
       if (!running()) return; const now = ctx.currentTime, own = mine(o), key = own ? 'own' : 'far'; if (now - (flameAt[key] || -1) < .17) return; flameAt[key] = now;

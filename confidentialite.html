@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Confidentialité · FRONT ZÉRO</title>
+<meta name="description" content="Ce que FRONT ZÉRO enregistre quand tu crées un compte, pourquoi, où, combien de temps, et comment l’exporter ou le supprimer.">
+<meta name="robots" content="index,follow">
+<meta name="theme-color" content="#f0ae2e">
+<link rel="icon" type="image/png" sizes="192x192" href="map-shots/icon-192.png">
+<style>
+:root{--bg:#0d0f0b;--panel:#15180f;--line:rgba(201,185,143,.22);--text:#e2d8bd;--dim:#a5a18a;--white:#f4ecd8;--amber:#e8a628}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+a{color:var(--amber)}
+a:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+header{position:sticky;top:0;z-index:2;display:flex;flex-wrap:wrap;align-items:center;gap:8px 20px;padding:12px 16px;border-bottom:1px solid var(--line);background:rgba(13,15,11,.96)}
+header b{font:800 22px/1 "Barlow Condensed","Arial Narrow",Arial,sans-serif;letter-spacing:.08em;color:var(--white)}
+header b span{color:var(--amber)}
+header nav{display:flex;flex-wrap:wrap;gap:6px 16px;margin-left:auto;font-size:15px}
+main{max-width:860px;margin:0 auto;padding:12px 16px 64px}
+section{scroll-margin-top:64px}
+section+section{margin-top:56px;padding-top:24px;border-top:2px solid var(--line)}
+h1{margin:20px 0 4px;font:800 34px/1.1 "Barlow Condensed","Arial Narrow",Arial,sans-serif;letter-spacing:.04em;text-transform:uppercase;color:var(--white)}
+h2{margin:30px 0 8px;font:700 24px/1.2 "Barlow Condensed","Arial Narrow",Arial,sans-serif;letter-spacing:.05em;text-transform:uppercase;color:var(--white)}
+.date{margin:0 0 18px;color:var(--dim);font-size:15px}
+.box{padding:12px 16px;border:1px solid var(--line);border-left:4px solid var(--amber);background:var(--panel)}
+.box ul{margin:0;padding-left:20px}
+.table{overflow-x:auto;margin:8px 0}
+table{width:100%;min-width:560px;border-collapse:collapse;font-size:15.5px}
+th,td{padding:8px 10px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}
+th{color:var(--white);font-weight:700;background:var(--panel)}
+code{font-size:.92em;color:var(--white)}
+footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--dim);font-size:15px}
+</style>
+</head>
+<body>
+<header>
+  <b>FRONT <span>ZÉRO</span></b>
+  <nav aria-label="Langue / Language"><a href="#fr" lang="fr">Français</a><a href="#en" lang="en">English</a><a href="mentions-legales.html">Mentions légales</a><a href="./">Retour au jeu</a></nav>
+</header>
+<main>
+<!-- ===================================================== FRANÇAIS ===================================================== -->
+<section id="fr" lang="fr">
+<h1>Politique de confidentialité</h1>
+<p class="date">Dernière mise à jour : 25 novembre 2026</p>
+
+<div class="box">
+<ul>
+<li>Tu peux jouer <strong>sans compte</strong>. Ta progression reste alors dans ton navigateur.</li>
+<li>Avec un compte (connexion avec Google), nous gardons <strong>un pseudo, ta progression de jeu et une empreinte de ton identifiant Google</strong>. Jamais ton adresse e-mail, ton nom ni ta photo.</li>
+<li>Dans le jeu, le panneau Compte permet à tout moment de <strong>télécharger tes données</strong> ou de <strong>supprimer ton compte</strong>.</li>
+<li>Pas de publicité, pas de revente de données, pas d’outil de mesure d’audience.</li>
+</ul>
+</div>
+
+<h2>1. Qui est responsable</h2>
+<p>Le jeu FRONT ZÉRO est publié à titre non professionnel par un particulier (voir les <a href="mentions-legales.html">mentions légales</a>). C’est lui qui décide de ce qui est enregistré et qui en répond. Pour toute question : <a href="mentions-legales.html#contact">formulaire de contact</a>.</p>
+
+<h2>2. Ce que nous enregistrons, et pourquoi</h2>
+<div class="table"><table>
+<thead><tr><th>Donnée</th><th>Pourquoi</th><th>Durée</th></tr></thead>
+<tbody>
+<tr><td>Empreinte de ton identifiant Google (calcul HMAC-SHA256 avec une clé secrète propre au serveur)</td><td>Te reconnaître quand tu reviens. Elle ne permet pas de retrouver ton compte Google ni ton e-mail.</td><td>Tant que le compte existe</td></tr>
+<tr><td>Pseudo (choisi par toi)</td><td>Ton nom visible par les autres joueurs</td><td>Tant que le compte existe</td></tr>
+<tr><td>Progression : crédits, expérience, armes, tenues et équipements possédés ou choisis, accessoires, finitions, statistiques par arme</td><td>Retrouver ta progression sur tous tes appareils</td><td>Tant que le compte existe</td></tr>
+<tr><td>Dates de création, de dernière mise à jour et de dernière connexion</td><td>Fonctionnement du compte, suppression des comptes abandonnés</td><td>Tant que le compte existe</td></tr>
+<tr><td>Sessions de connexion (le serveur ne garde que l’empreinte SHA-256 du jeton ; le jeton lui-même reste dans ton navigateur)</td><td>Rester connecté sans repasser par Google</td><td>90 jours au plus</td></tr>
+<tr><td>Adresse IP</td><td>Limiter les abus (nombre de requêtes, de comptes créés)</td><td>Gardée en mémoire seulement, quelques minutes (24 h pour la limite de création de comptes) ; jamais écrite par le jeu</td></tr>
+<tr><td>Messages envoyés par le formulaire de contact, et le moyen de réponse que tu y indiques si tu le souhaites</td><td>Te répondre</td><td>12 mois</td></tr>
+</tbody>
+</table></div>
+<p>Nous n’enregistrons <strong>pas</strong> : ton adresse e-mail, ton nom, ta photo, ton identifiant Google en clair, ta date de naissance, ni aucune donnée de paiement (le jeu ne vend rien aujourd’hui).</p>
+<p><strong>Pendant une partie en ligne</strong>, le serveur reçoit en direct ce qu’il faut pour faire jouer tout le monde ensemble (position, tirs, pseudo, équipement visible). Ces informations ne sont pas conservées après la partie.</p>
+<p><strong>Le Front</strong> (la guerre de territoires) utilise un identifiant aléatoire créé par ton navigateur, sans lien avec ton identité, avec ton camp et tes points de saison.</p>
+<p><strong>Sur ton appareil</strong>, le jeu utilise le stockage local du navigateur (pas de cookie) pour tes réglages, ta progression et, si tu es connecté, ton jeton de session. Tu peux tout effacer depuis les réglages de ton navigateur.</p>
+
+<h2>3. Base légale</h2>
+<p>Le compte est le service que tu demandes en le créant : nous traitons ces données pour te le fournir (article 6.1.b du RGPD). La limitation des abus repose sur notre intérêt légitime à protéger le jeu et ses joueurs (article 6.1.f).</p>
+
+<h2>4. La connexion avec Google</h2>
+<p>Le service de connexion de Google (<code>accounts.google.com</code>) n’est chargé que lorsque tu ouvres le panneau Compte. Google sait alors que tu te connectes à FRONT ZÉRO et peut utiliser ses propres cookies, selon <a href="https://policies.google.com/privacy" rel="noopener">sa politique de confidentialité</a>. Google transmet au jeu un jeton signé qui contient notamment ton identifiant, ton e-mail, ton nom et ta photo : notre serveur vérifie ce jeton, en garde uniquement l’empreinte de l’identifiant et oublie tout le reste aussitôt.</p>
+
+<h2>5. Où sont les données</h2>
+<ul>
+<li><strong>Serveur du jeu et comptes</strong> : Render (Render Services, Inc.), dans sa région Union européenne de <strong>Francfort (Allemagne)</strong>, sur un disque réservé au jeu.</li>
+<li><strong>Pages du jeu</strong> : GitHub Pages (GitHub, Inc.). Comme tout hébergeur web, GitHub reçoit ton adresse IP quand tu ouvres les pages.</li>
+<li><strong>Connexion</strong> : Google.</li>
+</ul>
+<p>Ces sociétés sont établies aux États-Unis. Quand des données y sont transférées, c’est dans le cadre des garanties qu’elles proposent (cadre de protection des données UE–États-Unis ou clauses contractuelles types de la Commission européenne).</p>
+
+<h2>6. Combien de temps</h2>
+<ul>
+<li>Compte et progression : jusqu’à ce que tu le supprimes. Un compte sans aucune connexion pendant <strong>3 ans</strong> est supprimé automatiquement.</li>
+<li>Sessions : 90 jours au plus ; une session utilisée régulièrement est renouvelée.</li>
+<li>Les sauvegardes automatiques de l’hébergeur peuvent garder une copie quelques jours de plus avant d’être remplacées.</li>
+<li>Messages de contact : 12 mois.</li>
+</ul>
+
+<h2>7. Tes droits</h2>
+<ul>
+<li><strong>Accès et portabilité</strong> : dans le jeu, panneau Compte, bouton « Télécharger mes données » (un fichier JSON lisible avec tout ce que nous gardons sur ton compte).</li>
+<li><strong>Effacement</strong> : bouton « Supprimer mon compte ». Le compte, sa progression et toutes ses sessions sont effacés du serveur immédiatement.</li>
+<li><strong>Rectification</strong> (par exemple ton pseudo), <strong>limitation</strong>, <strong>opposition</strong> : par le <a href="mentions-legales.html#contact">formulaire de contact</a>. Nous répondons dans un délai d’un mois.</li>
+<li><strong>Réclamation</strong> : tu peux saisir la CNIL (<a href="https://www.cnil.fr" rel="noopener">cnil.fr</a>).</li>
+</ul>
+
+<h2>8. Mineurs</h2>
+<p>Le jeu peut se jouer sans compte, à tout âge. Créer un compte passe par un compte Google, avec l’âge minimum que Google fixe dans chaque pays. <strong>En France, si tu as moins de 15 ans, il faut l’accord d’un parent</strong> (ou d’un autre titulaire de l’autorité parentale) avant de créer un compte. Un parent peut demander la suppression du compte de son enfant par le <a href="mentions-legales.html#contact">formulaire de contact</a>, ou la faire lui-même depuis le jeu.</p>
+
+<h2>9. Sécurité</h2>
+<p>Les échanges avec le serveur sont chiffrés (HTTPS et WSS). Les jetons de session sont des nombres aléatoires de 256 bits dont le serveur ne garde que l’empreinte. Chaque compte est enregistré dans son propre fichier, écrit de façon atomique. Le jeu ne contient aucune donnée de paiement.</p>
+
+<h2>10. Modifications</h2>
+<p>Si cette politique change, la date en haut de page change aussi. Un changement important sera annoncé dans le jeu.</p>
+</section>
+
+<!-- ===================================================== ENGLISH ===================================================== -->
+<section id="en" lang="en">
+<h1>Privacy policy</h1>
+<p class="date">Last updated: 25 November 2026</p>
+
+<div class="box">
+<ul>
+<li>You can play <strong>without an account</strong>. Your progress then stays in your browser.</li>
+<li>With an account (sign-in with Google), we keep <strong>a nickname, your game progress and a fingerprint of your Google account id</strong>. Never your email address, your name or your picture.</li>
+<li>In the game, the Account panel lets you <strong>download your data</strong> or <strong>delete your account</strong> at any time.</li>
+<li>No advertising, no sale of data, no audience-measurement tool.</li>
+</ul>
+</div>
+
+<h2>1. Who is responsible</h2>
+<p>FRONT ZÉRO is published on a non-professional basis by a private individual (see the <a href="mentions-legales.html#en">legal notice</a>), who decides what is recorded and answers for it. Questions: <a href="mentions-legales.html#contact">contact form</a>.</p>
+
+<h2>2. What we record, and why</h2>
+<div class="table"><table>
+<thead><tr><th>Data</th><th>Why</th><th>How long</th></tr></thead>
+<tbody>
+<tr><td>Fingerprint of your Google account id (HMAC-SHA256 with a secret key held by the server)</td><td>To recognise you when you come back. It cannot be turned back into your Google account or your email.</td><td>As long as the account exists</td></tr>
+<tr><td>Nickname (chosen by you)</td><td>The name other players see</td><td>As long as the account exists</td></tr>
+<tr><td>Progress: credits, experience, weapons, outfits and equipment owned or selected, attachments, finishes, per-weapon statistics</td><td>To give you your progress on every device</td><td>As long as the account exists</td></tr>
+<tr><td>Dates of creation, last update and last sign-in</td><td>Running the account, removing abandoned accounts</td><td>As long as the account exists</td></tr>
+<tr><td>Sign-in sessions (the server keeps only the SHA-256 fingerprint of the token; the token itself stays in your browser)</td><td>Staying signed in without going through Google again</td><td>90 days at most</td></tr>
+<tr><td>IP address</td><td>Limiting abuse (number of requests, of accounts created)</td><td>Held in memory only, for a few minutes (24 h for the account-creation limit); never written by the game</td></tr>
+<tr><td>Messages sent through the contact form, and the way to reply you give there if you choose to</td><td>To answer you</td><td>12 months</td></tr>
+</tbody>
+</table></div>
+<p>We do <strong>not</strong> record your email address, your name, your picture, your plain Google account id, your date of birth, or any payment data (the game sells nothing today).</p>
+<p><strong>During an online match</strong>, the server receives live what it needs to let everyone play together (position, shots, nickname, visible equipment). This is not kept after the match.</p>
+<p><strong>The Front</strong> (the territory war) uses a random identifier made by your browser, not linked to your identity, together with your side and season points.</p>
+<p><strong>On your device</strong>, the game uses the browser’s local storage (no cookies) for your settings, your progress and, when signed in, your session token. You can clear it all from your browser settings.</p>
+
+<h2>3. Legal basis</h2>
+<p>The account is the service you ask for when you create it: we process this data to provide it (Article 6(1)(b) GDPR). Abuse limits rest on our legitimate interest in protecting the game and its players (Article 6(1)(f)).</p>
+
+<h2>4. Signing in with Google</h2>
+<p>Google’s sign-in service (<code>accounts.google.com</code>) is only loaded when you open the Account panel. Google then knows you are signing in to FRONT ZÉRO and may use its own cookies, under <a href="https://policies.google.com/privacy" rel="noopener">its privacy policy</a>. Google hands the game a signed token that includes your account id, email, name and picture: our server checks the token, keeps only the fingerprint of the id and forgets the rest straight away.</p>
+
+<h2>5. Where the data is</h2>
+<ul>
+<li><strong>Game server and accounts</strong>: Render (Render Services, Inc.), in its European Union region of <strong>Frankfurt (Germany)</strong>, on a disk reserved for the game.</li>
+<li><strong>Game pages</strong>: GitHub Pages (GitHub, Inc.). Like any web host, GitHub receives your IP address when you open the pages.</li>
+<li><strong>Sign-in</strong>: Google.</li>
+</ul>
+<p>These companies are based in the United States. Where data is transferred there, it is under the safeguards they offer (EU–US Data Privacy Framework or the European Commission’s standard contractual clauses).</p>
+
+<h2>6. How long</h2>
+<ul>
+<li>Account and progress: until you delete it. An account with no sign-in for <strong>3 years</strong> is deleted automatically.</li>
+<li>Sessions: 90 days at most; a session in regular use is renewed.</li>
+<li>The host’s automatic backups may keep a copy for a few more days before being overwritten.</li>
+<li>Contact messages: 12 months.</li>
+</ul>
+
+<h2>7. Your rights</h2>
+<ul>
+<li><strong>Access and portability</strong>: in the game, Account panel, “Download my data” (a readable JSON file with everything we keep on your account).</li>
+<li><strong>Erasure</strong>: “Delete my account”. The account, its progress and all its sessions are erased from the server at once.</li>
+<li><strong>Correction</strong> (your nickname, for instance), <strong>restriction</strong>, <strong>objection</strong>: through the <a href="mentions-legales.html#contact">contact form</a>. We answer within one month.</li>
+<li><strong>Complaints</strong>: you may contact your data protection authority (in France, the CNIL: <a href="https://www.cnil.fr" rel="noopener">cnil.fr</a>).</li>
+</ul>
+
+<h2>8. Children</h2>
+<p>The game can be played without an account, at any age. Creating an account requires a Google account, with the minimum age Google sets in each country. <strong>In France, if you are under 15, a parent (or another holder of parental authority) must agree</strong> before you create an account. A parent can ask for their child’s account to be deleted through the <a href="mentions-legales.html#contact">contact form</a>, or delete it from the game.</p>
+
+<h2>9. Security</h2>
+<p>Traffic with the server is encrypted (HTTPS and WSS). Session tokens are 256-bit random numbers of which the server keeps only a fingerprint. Each account is saved in its own file, written atomically. The game holds no payment data.</p>
+
+<h2>10. Changes</h2>
+<p>If this policy changes, the date at the top changes too. Any important change will be announced in the game.</p>
+</section>
+</main>
+<footer><a href="mentions-legales.html">Mentions légales · Legal notice</a> · <a href="./">FRONT ZÉRO</a></footer>
+</body>
+</html>

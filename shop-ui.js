@@ -32,6 +32,15 @@ position:fixed;inset:0;z-index:60;display:flex;flex-direction:column;min-width:0
 .fzs-chip{min-height:34px;padding:0 12px;background:var(--pan);border:1px solid var(--line);font-size:15px!important;font-weight:600!important;color:var(--dim)!important;cursor:pointer;white-space:nowrap}
 .fzs-chip:hover{border-color:var(--line2);color:var(--white)!important}.fzs-chip[aria-pressed=true]{background:rgba(232,166,40,.14);border-color:var(--amber);color:var(--white)!important}
 .fzs-sep{width:1px;background:var(--line);margin:3px 4px}
+.fzs-filters{flex-direction:column;flex-wrap:nowrap;gap:9px}.fzs-frow{display:flex;align-items:flex-start;gap:6px}.fzs-chips{flex:1;min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.fzs-flabel{flex:none;min-width:96px;line-height:34px;font-size:12.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}.fzs-seg{display:inline-flex;border:1px solid var(--line2);background:rgba(0,0,0,.3)}
+.fzs-seg button{min-height:34px;padding:0 16px;background:none;border:0;border-left:1px solid var(--line);font-size:15px!important;font-weight:700!important;color:var(--dim)!important;cursor:pointer;white-space:nowrap}
+.fzs-seg button:first-child{border-left:0}.fzs-seg button:hover{color:var(--white)!important;background:rgba(255,255,255,.04)}.fzs-seg button[aria-pressed=true]{background:var(--amber);color:#17140a!important}
+.fzs-count{margin-left:auto;padding-left:8px;font-size:14px;color:var(--dim);white-space:nowrap}
+.fzs-list .fzs-empty{display:flex;flex-direction:column;align-items:center;gap:14px;padding:36px 12px}.fzs-empty p{margin:0;max-width:46ch;font-size:16.5px;line-height:1.35;color:var(--white)}
+.fzs-reset{min-height:40px;padding:0 22px;background:rgba(232,166,40,.12);border:1px solid var(--amber);font-size:15px!important;font-weight:700!important;letter-spacing:.08em;text-transform:uppercase;color:var(--white)!important;cursor:pointer}.fzs-reset:hover{background:rgba(232,166,40,.24)}
+@media (pointer:coarse){.fzs-seg button,.fzs-chip,.fzs-reset{min-height:44px}}
+@media (max-width:820px){.fzs-frow{flex-direction:column;align-items:stretch;gap:5px}.fzs-flabel{line-height:1.2}.fzs-frow.is-cat .fzs-chips{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin:0 -16px;padding:0 16px 2px}.fzs-frow.is-cat .fzs-chips::-webkit-scrollbar{display:none}.fzs-chips .fzs-chip{flex:none}.fzs-seg{flex:1 1 100%}.fzs-seg button{flex:1;padding:0 8px}.fzs-count{margin-left:0;padding-left:0}}
 .fzs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(176px,1fr));gap:9px}
 .fzs-card{position:relative;display:flex;flex-direction:column;min-width:0;padding:0;text-align:left;background:var(--pan);border:1px solid var(--line);border-left:3px solid var(--r,#6c7264);cursor:pointer;transition:background .12s,border-color .12s,transform .12s}
 .fzs-card:hover{background:var(--pan2);transform:translateY(-1px)}.fzs-card[aria-pressed=true]{background:#262a1e;border-color:var(--amber);border-left-color:var(--r,var(--amber));box-shadow:inset 0 0 0 1px rgba(232,166,40,.45)}
@@ -166,14 +175,29 @@ export function createStudio(renderer, canvas, opts = {}) {
   const blitMat = new THREE.ShaderMaterial({ uniforms: { t: { value: hdr.texture }, uStage: { value: stage ? 1 : 0 }, uLines: { value: fancy ? 1 : 0 }, uTime: { value: 0 }, uTint: { value: ringCol.clone() }, uAspect: { value: W / H } }, depthTest: false, depthWrite: false, toneMapped: false,
     vertexShader: 'varying vec2 vUv;void main(){vUv=vec2(uv.x,1.-uv.y);gl_Position=vec4(position.xy,0.,1.);}', fragmentShader: BLIT_FS });
   const blitScene = new THREE.Scene(), blitCam = new THREE.Camera(), blitGeo = new THREE.PlaneGeometry(2, 2), blit = new THREE.Mesh(blitGeo, blitMat); blit.frustumCulled = false; blitScene.add(blit);
-  const pixels = new Uint8ClampedArray(W * H * 4), image = new ImageData(pixels, W, H), _c = new THREE.Color();
+  let RW = W, RH = H, pixels = new Uint8ClampedArray(W * H * 4), image = new ImageData(pixels, W, H);       // RW x RH: the render size, raised while zoomed (rescale)
+  const _c = new THREE.Color();
+  let pending = null;
   let alive = true, raf = 0, last = 0, yaw = Math.PI - .55, pitch = stage ? .12 : .06, hold = 0, dirty = true, tickFn = null, ready = false, cy = 0, dist = 3, clock = 0;
+  /* zoom (rc8): from the full framing to about 3.5x tighter on `focus` (head and chest of a soldier), damped; at high zoom a vertical drag pans
+     along the body, clamped to the framed height; the near plane follows so the camera never cuts into the model or the pedestal */
+  const ZMAX = 3.5, SMAX = Math.max(1, Math.min(1.6, 1100 / W));
+  let zoom = 1, zoomT = 1, pan = 0, panT = 0, fH = 2, fR = 1, fFocus = 0, scale = 1, nearZ = 0;
+  const viewY = () => { if (zoom <= 1.0005) return cy; const k = (zoom - 1) / (ZMAX - 1), half = fH / (2 * zoom) * .92, lo = cy - fH / 2 + half, hi = cy + fH / 2 - half; return lo > hi ? cy : Math.max(lo, Math.min(hi, cy + (fFocus - cy) * k + pan)); };
+  const fitNear = () => { if (nearZ === zoom) return; nearZ = zoom; const d = dist / zoom; cam.near = Math.max(.02, d - fR * 2.2); cam.far = d + fR * 2.2 + 4; cam.updateProjectionMatrix(); };
+  function rescale() {       // sharper close-ups: up to 1.6x the pixels at full zoom (never above 1100 px wide), resized only once the zoom has settled
+    const want = Math.max(1, Math.min(SMAX, 1 + .6 * (zoom - 1) / (ZMAX - 1)));
+    if (Math.abs(want - scale) < .12 && !(want === 1 && scale !== 1)) return;
+    scale = want; RW = Math.round(W * scale); RH = Math.round(H * scale);
+    canvas.width = RW; canvas.height = RH; hdr.setSize(RW, RH); ldr.setSize(RW, RH); pixels = new Uint8ClampedArray(RW * RH * 4); image = new ImageData(pixels, RW, RH); dirty = true;
+  }
   const draw = () => {
     const prev = renderer.getRenderTarget(), ac = renderer.autoClear, ca = renderer.getClearAlpha(); renderer.getClearColor(_c);
     try {
-      pivot.rotation.set(0, yaw, 0); cam.position.set(0, cy + Math.sin(pitch) * dist, Math.cos(pitch) * dist); cam.lookAt(0, cy, 0);       // the camera orbits: the pedestal never tilts
+      fitNear(); const ty = viewY(), d = dist / zoom;
+      pivot.rotation.set(0, yaw, 0); cam.position.set(0, ty + Math.sin(pitch) * d, Math.cos(pitch) * d); cam.lookAt(0, ty, 0);       // the camera orbits: the pedestal never tilts
       blitMat.uniforms.uTime.value = clock;
-      renderer.autoClear = true; renderer.setClearColor(0, 0); renderer.setRenderTarget(hdr); renderer.render(scene, cam); renderer.setRenderTarget(ldr); renderer.render(blitScene, blitCam); renderer.readRenderTargetPixels(ldr, 0, 0, W, H, pixels);
+      renderer.autoClear = true; renderer.setClearColor(0, 0); renderer.setRenderTarget(hdr); renderer.render(scene, cam); renderer.setRenderTarget(ldr); renderer.render(blitScene, blitCam); renderer.readRenderTargetPixels(ldr, 0, 0, RW, RH, pixels);
     } finally { renderer.setRenderTarget(prev); renderer.autoClear = ac; renderer.setClearColor(_c, ca); }
     ctx2d.putImageData(image, 0, 0);
   };
@@ -181,6 +205,14 @@ export function createStudio(renderer, canvas, opts = {}) {
   const tick = now => {
     if (!alive) return; raf = requestAnimationFrame(tick); if (!ready || document.hidden || now - last < 40) return;
     const dt = Math.min(.1, (now - last) / 1000); last = now;
+    if (document.activeElement === canvas && navigator.getGamepads) {       // gamepad while the preview has focus: RT zooms in, LT out, right stick up/down too
+      for (const g of navigator.getGamepads()) { if (!g || !g.connected) continue; const b = i => (g.buttons[i] ? g.buttons[i].value : 0), ry = Math.abs(g.axes[3] || 0) > .2 ? g.axes[3] : 0, v = (b(7) - b(6)) * 1.8 - ry * 1.5; if (v) { zoomT = Math.max(1, Math.min(ZMAX, zoomT * Math.exp(v * dt))); hold = now + 2600; } break; }
+    }
+    if (zoomT !== zoom || panT !== pan) {
+      const a = 1 - Math.exp(-dt * 12); zoom += (zoomT - zoom) * a; pan += (panT - pan) * a;
+      if (Math.abs(zoomT - zoom) < .003) zoom = zoomT; if (Math.abs(panT - pan) < .002) pan = panT;
+      dirty = true; if (zoom === zoomT) rescale();
+    }
     if (autoOn && now > hold) { yaw += dt * .42; dirty = true; } if (autoOn && tickFn) { tickFn(dt); dirty = true; } if (autoOn && fancy) clock += dt;
     if (!dirty || gl.isContextLost()) return; dirty = false;
     const t0 = performance.now(); draw(); spent += performance.now() - t0; if (++frames === 24) { avg = spent / frames; if (avg > 22) autoOn = false; frames = 0; spent = 0; }
@@ -189,23 +221,60 @@ export function createStudio(renderer, canvas, opts = {}) {
     pivot, scene,
     /** Average draw time of the last 24 frames (ms) and whether the idle motion still runs. */
     get stats() { return { avg: +avg.toFixed(2), autoOn, stage, fancy, W, H }; },
-    frame(height, centerY, radius) { cy = centerY; const vf = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2)); dist = Math.max(height / (2 * vf), radius * 2 / (2 * vf * cam.aspect)) * 1.12; cam.near = Math.max(.02, dist - radius * 2.2); cam.far = dist + radius * 2.2 + 4; cam.updateProjectionMatrix(); },
+    frame(height, centerY, radius, focus) { cy = centerY; fH = height; fR = radius; fFocus = focus ?? centerY; nearZ = 0; const vf = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2)); dist = Math.max(height / (2 * vf), radius * 2 / (2 * vf * cam.aspect)) * 1.12; cam.near = Math.max(.02, dist - radius * 2.2); cam.far = dist + radius * 2.2 + 4; cam.updateProjectionMatrix(); },
+    /** Zoom (1 = the full framing, up to 3.5): by a factor, to a value, or back to the full framing. */
+    zoomBy(f) { zoomT = Math.max(1, Math.min(ZMAX, zoomT * f)); if (zoomT <= 1.02) { zoomT = 1; panT = 0; } hold = performance.now() + 2600; dirty = true; },
+    setZoom(z) { zoomT = Math.max(1, Math.min(ZMAX, z)); if (zoomT === 1) panT = 0; dirty = true; },
+    resetView() { zoomT = 1; panT = 0; dirty = true; },
+    /** Resolves once the shaders started by start() are linked (or gave up): dispose what the scene holds only then (rc8). */
+    get settled() { return pending || Promise.resolve(); },
+    get zoomLevel() { return { zoom: +zoom.toFixed(3), target: zoomT, pan: +pan.toFixed(3), scale, size: [RW, RH] }; },
     onTick(fn) { tickFn = fn; },
     /** The neon colour (rarity of the item shown). */
     setRing(hex) { ringCol.set(hex); if (neonMat) neonMat.color.copy(ringCol).multiplyScalar(2.6); for (const m of glows) if (m.uniforms.uMode.value === 0 || m.uniforms.uMode.value === 4 || (m.uniforms.uMode.value === 1 && m.uniforms.uR1.value > 1)) m.uniforms.uColor.value.copy(ringCol); if (stage) { rim.color.copy(ringCol); hemi.groundColor.copy(ringCol).multiplyScalar(.55); if (under) under.color.copy(ringCol); } blitMat.uniforms.uTint.value.copy(ringCol); dirty = true; },
     async start() {
       const prev = renderer.getRenderTarget(); let wait;
       try { renderer.setRenderTarget(hdr); wait = renderer.compileAsync ? renderer.compileAsync(scene, cam) : null; renderer.setRenderTarget(ldr); renderer.compile(blitScene, blitCam); } finally { renderer.setRenderTarget(prev); }
-      if (wait) await Promise.race([wait, new Promise(r => setTimeout(r, 6000))]);
+      if (wait) { pending = Promise.race([wait, new Promise(r => setTimeout(r, 6000))]).catch(() => {}); await pending; pending = null; }
       if (!alive || gl.isContextLost()) return false;
       draw(); ready = true; last = performance.now(); raf = requestAnimationFrame(tick); return true;
     },
-    rotate(dx, dy) { yaw += dx; pitch = Math.max(-.3, Math.min(.6, pitch + dy)); hold = performance.now() + 2600; dirty = true; },
+    rotate(dx, dy) { yaw += dx; if (zoomT > 1.05) panT = Math.max(-fH / 2, Math.min(fH / 2, panT + dy * .85 / zoomT)); else pitch = Math.max(-.3, Math.min(.6, pitch + dy)); hold = performance.now() + 2600; dirty = true; },       // zoomed: vertical drag pans along the body
     /** Draws one frame now (captures reuse one studio). False if the context is lost. */
     render() { if (!alive || gl.isContextLost()) return false; draw(); return true; },
     get lost() { return gl.isContextLost(); },
-    dispose() { if (!alive) return; alive = false; cancelAnimationFrame(raf); for (const o of own) o.dispose(); blitGeo.dispose(); blitMat.dispose(); hdr.dispose(); ldr.dispose(); key.dispose(); rim.dispose(); hemi.dispose(); if (back) back.dispose(); if (spot) spot.dispose(); if (under) under.dispose(); },
+    dispose() {
+      if (!alive) return; alive = false; cancelAnimationFrame(raf);
+      const free = () => { for (const o of own) o.dispose(); blitGeo.dispose(); blitMat.dispose(); hdr.dispose(); ldr.dispose(); key.dispose(); rim.dispose(); hemi.dispose(); if (back) back.dispose(); if (spot) spot.dispose(); if (under) under.dispose(); };
+      if (pending) pending.then(free); else free();       // rc8: three's compileAsync polls each material's program; freeing one before it is linked throws in its timer
+    },
   };
+}
+
+/* ---------- zoom inputs of a studio preview (rc8; the shop and the wardrobe, wardrobe-ui.js) ----------
+   wheel and trackpad pinch (ctrl+wheel), two-finger pinch, double-click or double-tap to reset, + / − / reset buttons in a corner. get() = the live studio or null. */
+const ZOOM_CSS = `.fzz{position:absolute;right:10px;top:10px;z-index:3;display:flex;gap:6px}
+.fzz button{display:grid;place-items:center;width:40px;height:40px;padding:0;font:800 22px/1 'Barlow Condensed','Arial Narrow',Arial,sans-serif;color:#f4ecd8;background:rgba(12,14,10,.78);border:1px solid rgba(236,226,198,.32);clip-path:polygon(0 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%);cursor:pointer}
+.fzz button:hover{border-color:#e8a628;color:#fff}.fzz button:focus-visible{outline:2px solid #e8a628;outline-offset:-3px}
+@media (pointer:coarse){.fzz button{width:44px;height:44px}}`;
+export const zoomHint = T => { let coarse = false; try { coarse = matchMedia('(pointer: coarse)').matches; } catch { /* desktop */ } return T(coarse ? 'store.dragHintPinch' : 'store.dragHintZoom'); };
+export function attachZoom(view, canvas, get, T) {
+  if (!document.getElementById('fzz-style')) { const s = document.createElement('style'); s.id = 'fzz-style'; s.textContent = ZOOM_CSS; document.head.append(s); }
+  canvas.style.touchAction = 'none';
+  const run = fn => { const s = get(); if (s && s.zoomBy) fn(s); };
+  const b = (fid, label, key, fn) => el('button', { type: 'button', 'data-fid': fid, 'aria-label': T(key), title: T(key), onclick: e => { e.stopPropagation(); run(fn); } }, label);
+  view.append(el('div', { class: 'fzz' }, b('zoom:in', '+', 'store.zoomIn', s => s.zoomBy(1.4)), b('zoom:out', '−', 'store.zoomOut', s => s.zoomBy(1 / 1.4)), b('zoom:reset', '⟲', 'store.zoomReset', s => s.resetView())));
+  canvas.addEventListener('wheel', e => { const s = get(); if (!s || !s.zoomBy) return; e.preventDefault(); s.zoomBy(Math.exp(-e.deltaY * (e.ctrlKey ? .01 : .0015))); }, { passive: false });
+  canvas.addEventListener('dblclick', () => run(s => s.resetView()));
+  const pts = new Map(); let pinch = 0, lastTap = 0;
+  const spread = () => { const a = [...pts.values()]; return a.length < 2 ? 0 : Math.hypot(a[0][0] - a[1][0], a[0][1] - a[1][1]); };
+  canvas.addEventListener('pointerdown', e => { pts.set(e.pointerId, [e.clientX, e.clientY]); if (pts.size === 2) { pinch = spread(); canvas.dataset.pinch = '1'; } });
+  canvas.addEventListener('pointermove', e => { if (!pts.has(e.pointerId)) return; pts.set(e.pointerId, [e.clientX, e.clientY]); if (pts.size >= 2 && pinch > 0) { const d = spread(); if (d > 0) run(s => s.zoomBy(d / pinch)); pinch = d; } });
+  const up = e => {
+    pts.delete(e.pointerId); if (pts.size < 2) { pinch = 0; if (!pts.size) delete canvas.dataset.pinch; }
+    if (e.type === 'pointerup' && e.pointerType === 'touch' && !canvas.dataset.pinch) { const t = performance.now(); if (t - lastTap < 320) { run(s => s.resetView()); lastTap = 0; } else lastTap = t; }
+  };
+  canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
 }
 
 /* ---------- the screen ---------- */
@@ -247,11 +316,12 @@ export async function openShop(deps) {
   let closed = false, cur = null, curKey = '', load = 0, dlg = null, toastT = 0, offLoad = null, previewTimer = 0;
 
   /* ---------- preview ---------- */
-  const canvas = el('canvas', { role: 'img', tabindex: '0', 'aria-label': T('store.preview'), 'data-fid': 'shop:preview' }), fallback = el('img', { alt: '' }), view = el('div', { class: 'fzs-view' }, fallback, canvas, el('span', { class: 'fzs-hint', text: T('store.dragHint') }));
-  const dropPreview = () => { const p = cur; cur = null; curKey = ''; if (p) { try { p.obj.dispose(); } catch (e) { console.warn('[shop] preview', e); } if (p.extra) try { p.extra(); } catch { /* ignore */ } } canvas.classList.remove('is-on'); };
+  const canvas = el('canvas', { role: 'img', tabindex: '0', 'aria-label': T('store.preview'), 'data-fid': 'shop:preview' }), fallback = el('img', { alt: '' }), view = el('div', { class: 'fzs-view' }, fallback, canvas, el('span', { class: 'fzs-hint', text: zoomHint(T) }));
+  attachZoom(view, canvas, () => (cur && cur.obj && cur.obj.zoomBy ? cur.obj : null), T);       // rc8: zoom on the outfit and equipment studio (the weapon preview of guns.js has none)
+  const dropPreview = () => { const p = cur; cur = null; curKey = ''; if (p) { try { p.obj.dispose(); } catch (e) { console.warn('[shop] preview', e); } if (p.extra) { const ex = p.extra; (p.obj.settled || Promise.resolve()).then(() => { try { ex(); } catch { /* ignore */ } }); } } canvas.classList.remove('is-on'); };       // rc8: the soldier is freed once its shaders are linked
   let dragId = null, dragX = 0, dragY = 0;
   canvas.addEventListener('pointerdown', e => { dragId = e.pointerId; dragX = e.clientX; dragY = e.clientY; try { canvas.setPointerCapture(dragId); } catch { /* synthetic */ } });
-  canvas.addEventListener('pointermove', e => { if (e.pointerId !== dragId || !cur) return; cur.obj.rotate((e.clientX - dragX) * .011, (e.clientY - dragY) * .007); dragX = e.clientX; dragY = e.clientY; });
+  canvas.addEventListener('pointermove', e => { if (e.pointerId !== dragId || !cur || canvas.dataset.pinch) return; cur.obj.rotate((e.clientX - dragX) * .011, (e.clientY - dragY) * .007); dragX = e.clientX; dragY = e.clientY; });
   const endDrag = e => { if (e.pointerId === dragId) dragId = null; }; canvas.addEventListener('pointerup', endDrag); canvas.addEventListener('pointercancel', endDrag);
   canvas.addEventListener('keydown', e => { if (!cur) return; const k = { ArrowLeft: [-.18, 0], ArrowRight: [.18, 0], ArrowUp: [0, -.1], ArrowDown: [0, .1] }[e.key]; if (k) { e.preventDefault(); cur.obj.rotate(k[0], k[1]); } });
   const onLost = () => { load++; clearTimeout(previewTimer); dropPreview(); }, onBack = () => { if (!closed) syncPreview(); };       // lost: the card's picture stays; restored: the 3D comes back
@@ -297,10 +367,10 @@ export async function openShop(deps) {
       } else {
         const o = outfitById(w.outfit), s = createStudio(R, canvas, { stage: true, fancy: !lowFx(), motion: !lowFx() && !stillFx(), ring: ringColorOf(outfitRarity(o)) }); p = { obj: s }; cur = p;
         if (o && o.colorway && deps.prepOutfits) { try { await deps.prepOutfits(() => new Promise(r => setTimeout(r, 0)), [o.id]); } catch (e) { console.warn('[shop] outfit', e); } if (tok !== load) { if (cur === p) dropPreview(); return; } }
-        const sol = createSoldier(s.pivot, { palette: paletteOf(o), weaponId: w.weaponId, outfit: o && o.colorway ? o.id : undefined });
+        const sol = createSoldier(s.pivot, { palette: paletteOf(o), weaponId: w.weaponId, outfit: o && o.colorway ? o.id : undefined, outfitLod: 0 });       // rc8: the finest outfit level (the zoom gets close)
         soldierFinish(sol, w.fin); p.extra = () => sol.dispose();
         const pose = { vx: 0, vz: 0, yaw: 0, aimPitch: -.08, grounded: true, crouch: 0, y: 0 }; sol.update(1 / 60, pose);
-        s.frame(2.55, .8, 1.1); s.onTick(dt => sol.update(dt, pose));
+        s.frame(2.55, .8, 1.1, 1.5); s.onTick(dt => sol.update(dt, pose));       // zoom focus: head and chest
         if (!(await s.start()) || tok !== load) { if (cur === p) dropPreview(); return; }
       }
       if (tok === load && cur === p) canvas.classList.add('is-on');
@@ -331,10 +401,22 @@ export async function openShop(deps) {
     return [['eclipse', 'ÉCLIPSE', it => it.set.family === 'eclipse'], ['base', T('store.fBase'), it => it.set.family !== 'eclipse']];
   };
   const isOn = it => it.kind === 'weapon' ? [profile.data.primary, profile.data.secondary].includes(it.id) : it.kind === 'gear' ? profile.data.gx[it.g.slot] === it.id : it.kind === 'finish' ? profile.data.cos.w[st.target] === it.id : it.kind === 'outfit' ? profile.outfitWorn(it.id) : profile.outfitWorn(it.set.outfit) && it.set.finishes.includes(profile.data.cos.w[profile.data.primary]);
-  const visible = () => {
-    const all = tabIds().map(id => itemOf(st.tab, id)).filter(Boolean), f = filters().find(x => x[0] === st.filter);
-    return all.filter(it => (!f || f[2](it)) && (st.status === 'all' || (st.status === 'owned' ? it.q.owned : st.status === 'buy' ? (!it.q.owned || it.q.test) && it.q.levelOk && it.q.missing === 0 : true)));
-  };
+  // rc8: « Possédé » (label and filter) = really owned; the TEST_UNLOCK_ALL unlocks are not « owned » (q.mine from shop-ledger.js)
+  const mine = q => (q.mine === undefined ? q.owned && !q.test : !!q.mine);
+  const buyable = q => !mine(q) && !q.notSold && q.known !== false && q.levelOk && q.missing === 0;
+  const inCat = () => { const all = tabIds().map(id => itemOf(st.tab, id)).filter(Boolean), f = filters().find(x => x[0] === st.filter); return f ? all.filter(it => f[2](it)) : all; };
+  const visible = () => inCat().filter(it => st.status === 'owned' ? mine(it.q) : st.status === 'buy' ? buyable(it.q) : true);
+  /** Why the list is empty, and the way out (Tout afficher). */
+  function emptyWhy() {
+    const items = inCat();
+    if (st.status === 'owned') return T('store.emptyOwned');
+    if (st.status !== 'buy' || !items.length) return T('store.noResult');
+    const left = items.filter(it => !mine(it.q) && !it.q.notSold && it.q.known !== false);
+    if (!left.length) return items.every(it => mine(it.q)) ? T('store.emptyAllOwned') : T('store.emptyPassOnly');
+    const cheapOk = left.filter(it => it.q.missing === 0);
+    if (cheapOk.length) return T('store.emptyBuyLvl', { n: Math.min(...cheapOk.map(it => it.q.level || 1)) });
+    return T('store.emptyBuy', { cr: num(profile.data.cr), n: num(Math.min(...left.map(it => it.q.missing))) });
+  }
 
   /* ---------- drawing ---------- */
   const tabsEl = el('div', { class: 'fzs-tabs', role: 'tablist', 'aria-label': T('store.title') }), balEl = el('div', { class: 'fzs-bal' }), listEl = el('div', { class: 'fzs-list', role: 'tabpanel' }), detailEl = el('div', { class: 'fzs-detail' });
@@ -364,12 +446,12 @@ export async function openShop(deps) {
   }
   function card(it) {
     const q = it.q, on = isOn(it), key = st.tab === 'weekly' ? it.key : it.id, selectedNow = st.sel[st.tab] === key, r = it.rarity ? rarityOf(it.rarity).color : null, feat = st.tab === 'weekly' && key === week.featured;
-    const stateEl = on ? el('span', { class: 'fzs-state on', text: T('store.equipped') }) : q.owned && !q.test ? el('span', { class: 'fzs-state own', text: T('store.owned') }) : !q.levelOk ? el('span', { class: 'fzs-state lock', text: T('store.lvlShort', { n: q.level }) }) : q.level > 1 ? el('span', { class: 'fzs-state', text: T('store.lvlShort', { n: q.level }) }) : null;
+    const stateEl = on ? el('span', { class: 'fzs-state on', text: T('store.equipped') }) : mine(q) ? el('span', { class: 'fzs-state own', text: T('store.owned') }) : !q.levelOk ? el('span', { class: 'fzs-state lock', text: T('store.lvlShort', { n: q.level }) }) : q.level > 1 ? el('span', { class: 'fzs-state', text: T('store.lvlShort', { n: q.level }) }) : null;
     const pic = picture(it); if (st.tab === 'weekly' && fresh.has(key)) pic.append(el('span', { class: 'fzs-new', text: T('store.new') }));
     return el('button', { type: 'button', class: `fzs-card${feat ? ' feat' : ''}`, style: r ? `--r:${r}` : null, 'aria-pressed': selectedNow ? 'true' : 'false', 'data-fid': `shop:item:${it.kind}:${it.id}`, onclick: () => pick(key) },
-      feat ? el('span', { class: 'fzs-flag', text: T('store.featured') }) : null, q.test && q.cost > 0 && !q.notSold ? el('span', { class: 'fzs-mark', text: T('store.testMark') }) : null, pic,
+      feat ? el('span', { class: 'fzs-flag', text: T('store.featured') }) : null, q.test && q.cost > 0 && !q.notSold && !mine(q) ? el('span', { class: 'fzs-mark', text: T('store.testMark') }) : null, pic,
       el('span', { class: 'fzs-info' }, el('span', { class: 'fzs-name', text: it.name }), el('span', { class: 'fzs-sub', text: it.sub }),
-        el('span', { class: 'fzs-row' }, el('span', { class: `fzs-price${q.notSold ? ' fzs-pass' : !q.owned && q.missing > 0 ? ' is-short' : ''}`, text: q.notSold ? priceText(q) : q.owned && !q.test ? '' : priceText(q) }), stateEl)));
+        el('span', { class: 'fzs-row' }, el('span', { class: `fzs-price${q.notSold ? ' fzs-pass' : !mine(q) && q.missing > 0 ? ' is-short' : ''}`, text: q.notSold ? priceText(q) : mine(q) ? '' : priceText(q) }), stateEl)));
   }
   function drawTabs() {
     tabsEl.replaceChildren(...TABS.map(([id, key]) => el('button', { type: 'button', class: 'fzs-tab', role: 'tab', 'aria-selected': st.tab === id ? 'true' : 'false', 'data-fid': `shop:tab:${id}`, onclick: () => { if (st.tab !== id) { st.tab = id; st.filter = 'all'; st.status = 'all'; sfx('ui'); draw(); syncPreview(); } } }, T(key))));
@@ -379,14 +461,23 @@ export async function openShop(deps) {
     balEl.replaceChildren(el('span', { class: 'fzs-lvl', text: T('store.level', { n: profile.level }) }), el('span', { class: 'fzs-cr', 'data-fid': 'shop:credits' }, el('small', { text: T('store.balance') }), el('b', { text: `${num(profile.data.cr)} ₡` })));
   }
   function drawList() {
-    const top = listEl.scrollTop, chips = [['all', T('store.all')], ...filters().map(f => [f[0], f[1]])];
-    const chip = (group, id, label) => el('button', { type: 'button', class: 'fzs-chip', 'aria-pressed': st[group] === id ? 'true' : 'false', 'data-fid': `shop:${group}:${id}`, onclick: () => { st[group] = id; sfx('ui'); drawList(); } }, label);
-    const items = visible();
+    // rc8: two labelled controls (Catégorie: chips | Afficher: a segmented switch with the count) and an empty state that says why, with Tout afficher
+    const top = listEl.scrollTop, cats = filters(), sx = listEl.querySelector('.is-cat .fzs-chips')?.scrollLeft || 0;
+    const again = fid => { drawList(); listEl.querySelector(`[data-fid="${fid}"]`)?.focus({ preventScroll: true }); };       // the pressed control keeps the focus (keyboard, pad)
+    const chip = (group, id, label) => el('button', { type: 'button', class: 'fzs-chip', 'aria-pressed': st[group] === id ? 'true' : 'false', 'data-fid': `shop:${group}:${id}`, onclick: () => { st[group] = id; sfx('ui'); again(`shop:${group}:${id}`); } }, label);
+    const seg = (id, label) => el('button', { type: 'button', 'aria-pressed': st.status === id ? 'true' : 'false', 'data-fid': `shop:status:${id}`, onclick: () => { st.status = id; sfx('ui'); again(`shop:status:${id}`); } }, label);
+    const items = visible(), reset = () => { st.filter = 'all'; st.status = 'all'; sfx('ui'); drawList(); listEl.querySelector('[data-fid="shop:status:all"]')?.focus({ preventScroll: true }); };
+    const bar = el('div', { class: 'fzs-filters' },
+      ...(cats.length ? [el('div', { class: 'fzs-frow is-cat', role: 'group', 'aria-label': T('store.catLabel') }, el('span', { class: 'fzs-flabel', text: T('store.catLabel') }), el('div', { class: 'fzs-chips' }, chip('filter', 'all', T('store.catAll')), ...cats.map(c => chip('filter', c[0], c[1]))))] : []),
+      el('div', { class: 'fzs-frow' }, el('span', { class: 'fzs-flabel', text: T('store.showLabel') }),
+        el('div', { class: 'fzs-chips' }, el('div', { class: 'fzs-seg', role: 'group', 'aria-label': T('store.showLabel') }, seg('all', T('store.statusAll')), seg('buy', T('store.statusBuy')), seg('owned', T('store.statusOwned'))),
+          el('span', { class: 'fzs-count', 'data-fid': 'shop:count', 'aria-live': 'polite', text: !items.length ? '' : items.length === 1 ? T('store.count1') : T('store.count', { n: items.length }) }))));
+    const empty = () => el('div', { class: 'fzs-empty', 'data-fid': 'shop:empty' }, el('p', { text: emptyWhy() }),
+      st.filter !== 'all' || st.status !== 'all' ? el('button', { type: 'button', class: 'fzs-reset', 'data-fid': 'shop:showall', onclick: reset }, T('store.showAll')) : null);
     listEl.replaceChildren(
       ...(st.tab === 'weekly' ? [el('div', { class: 'fzs-week', 'data-fid': 'shop:week' }, el('div', null, el('h3', { text: T('store.weekTitle') }), el('p', { text: T('store.weekNote') })), el('span', { class: 'fzs-cd', 'data-fid': 'shop:countdown', text: countdown() }))] : []),       // replaceChildren would print a null
-      el('div', { class: 'fzs-filters' }, chips.map(c => chip('filter', c[0], c[1])), el('span', { class: 'fzs-sep' }), chip('status', 'all', T('store.statusAll')), chip('status', 'buy', T('store.statusBuy')), chip('status', 'owned', T('store.statusOwned'))),
-      items.length ? el('div', { class: 'fzs-grid' }, items.map(card)) : el('p', { class: 'fzs-empty', text: T('store.noResult') }));
-    listEl.scrollTop = top;
+      bar, items.length ? el('div', { class: 'fzs-grid' }, items.map(card)) : empty());
+    listEl.scrollTop = top; if (sx) { const sc = bar.querySelector('.is-cat .fzs-chips'); if (sc) sc.scrollLeft = sx; }       // phone: the category strip stays where it was
   }
   function action(it) {
     const q = it.q, out = [];
@@ -412,7 +503,7 @@ export async function openShop(deps) {
     const q = it.q, r = it.rarity ? rarityOf(it.rarity) : null, kids = [view];
     kids.push(el('div', { class: 'fzs-dhead' },
       el('div', null, r ? el('span', { class: 'fzs-rar', style: `--r:${r.color}`, text: pickLang(r.n, lang()) }) : el('span', { class: 'fzs-sub', text: it.sub }), el('h3', { text: it.name })),
-      el('div', { class: 'fzs-dprice', 'data-fid': 'shop:price' }, q.set && q.set.saved > 0 ? el('s', { text: `${num(q.set.left)} ₡` }) : null, q.notSold ? el('span', { class: 'fzs-pass', text: priceText(q) }) : q.owned && !q.test ? el('small', { text: T('store.owned') }) : priceText(q), q.test && q.cost > 0 && !q.notSold ? el('small', { text: T('store.testPrice') }) : null)));
+      el('div', { class: 'fzs-dprice', 'data-fid': 'shop:price' }, q.set && q.set.saved > 0 ? el('s', { text: `${num(q.set.left)} ₡` }) : null, q.notSold ? el('span', { class: 'fzs-pass', text: priceText(q) }) : mine(q) ? el('small', { text: T('store.owned') }) : priceText(q), q.test && q.cost > 0 && !q.notSold && !mine(q) ? el('small', { text: T('store.testPrice') }) : null)));
     if (it.kind === 'weapon') kids.push(el('p', { class: 'fzs-desc', text: `${it.sub} · ${T('store.lvlShort', { n: q.level })}` }));
     if (it.kind === 'gear') kids.push(el('p', { class: 'fzs-desc', text: `${it.sub} · ${T('store.lvlShort', { n: q.level })} · ${GX.t('carry', lang())} ${it.g.carry}` }));
     if (it.kind === 'finish') {

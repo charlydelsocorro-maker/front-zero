@@ -238,14 +238,32 @@ function pillowFace(S, b, f, R, cfg, P, exposed, lod, coarse) {
   }
 }
 
+/* dessous d'une tôle larmée en hauteur (passerelle, mezzanine) : triangles tournés vers le bas déplacés dans le lot acier lisse ; le motif de
+   marche se voyait au plafond (TEXTURE QA). Mêmes positions, normales et UV : aucune forme ni collision changée. */
+function moveTris(S, i0, T, pred, uvS) {
+  if (!T || T === S) return; const keep = [], I = S.i, N = S.n, P = S.p;
+  for (let t = i0; t + 2 < I.length; t += 3) { const a = I[t], b = I[t + 1], c = I[t + 2];
+    if (pred(N[a * 3], N[a * 3 + 1], N[a * 3 + 2]) && pred(N[b * 3], N[b * 3 + 1], N[b * 3 + 2]) && pred(N[c * 3], N[c * 3 + 1], N[c * 3 + 2])) for (const v of [a, b, c]) { const x = P[v * 3], y = P[v * 3 + 1], z = P[v * 3 + 2], nx = N[v * 3], ny = N[v * 3 + 1], nz = N[v * 3 + 2]; let U = S.u[v * 2], V = S.u[v * 2 + 1];
+      if (uvS) { const ax = Math.abs(nx), ay = Math.abs(ny), az = Math.abs(nz); if (ax >= ay && ax >= az) { U = z / uvS; V = y / uvS } else if (ay >= az) { U = x / uvS; V = z / uvS } else { U = x / uvS; V = y / uvS } }
+      T.i.push(T.vu(x, y, z, nx, ny, nz, S.a[v], U, V)) }
+    else keep.push(a, b, c) }
+  I.length = i0; for (const v of keep) I.push(v);
+}
+const underSteel = (S, i0, T) => moveTris(S, i0, T, (nx, ny) => ny < -.9);
 /* ---------- révolution : fûts, citernes ---------- */
 function lathe(S, cx, cy, cz, axis, prof, seg, ao) {
-  const N = prof.length, base = S.p.length / 3, ca = axis === 'x' ? 1 : 0;
-  for (let i = 0; i < N; i++) {
-    const [rad, h, k] = prof[i], pv = prof[Math.max(0, i - 1)], nx = prof[Math.min(N - 1, i + 1)], dr = nx[0] - pv[0], dh = nx[1] - pv[1], l = Math.hypot(dr, dh) || 1, nr = -dh / l, nh = dr / l;
-    for (let j = 0; j <= seg; j++) { const t = j / seg * 2 * PI, c = Math.cos(t), s = Math.sin(t); if (ca) S.v(cx + h, cy + rad * c, cz + rad * s, nh, nr * c, nr * s, k || ao || 0, 0); else S.v(cx + rad * c, cy + h, cz + rad * s, nr * c, nh, nr * s, k || ao || 0, 0) }
-  }
-  const w = seg + 1; for (let i = 0; i < N - 1; i++) for (let j = 0; j < seg; j++) { const a = base + i * w + j, b = a + 1, c = a + w + 1, d = a + w; ca ? S.quad(a, d, c, b) : S.quad(a, b, c, d) }
+  const N = prof.length, ca = axis === 'x' ? 1 : 0;
+  /* UV (TEXTURE QA) : flancs en coordonnées cylindriques (tour en tuiles entières, longueur de méridien), fonds à plat ; la projection par
+     normale de sommet changeait d'axe à 45° (raccords, bandes étirées). Un anneau est doublé là où le mode change : aucune bande de transition. */
+  const us = S.uvS, Rm = Math.max(...prof.map(p => p[0])), ku = (q => q >= 1 ? Math.round(q) : q)(2 * PI * Rm / us), arc = [0], mode = [], ring = (i, md) => {
+    const [rad, h, k] = prof[i], pv = prof[Math.max(0, i - 1)], nx = prof[Math.min(N - 1, i + 1)], dr = nx[0] - pv[0], dh = nx[1] - pv[1], l = Math.hypot(dr, dh) || 1, nr = -dh / l, nh = dr / l, b0 = S.p.length / 3;
+    for (let j = 0; j <= seg; j++) { const t = j / seg * 2 * PI, c = Math.cos(t), s = Math.sin(t), x = ca ? cx + h : cx + rad * c, y = ca ? cy + rad * c : cy + h, z = cz + rad * s, U = md ? (ca ? z : x) / us : ca ? arc[i] / us : j / seg * ku, V = md ? (ca ? y : z) / us : ca ? j / seg * ku : arc[i] / us;   /* couché (axe x) : v autour, les coulures restent verticales sur les flancs */
+      if (ca) S.vu(x, y, z, nh, nr * c, nr * s, k || ao || 0, U, V); else S.vu(x, y, z, nr * c, nh, nr * s, k || ao || 0, U, V) }
+    return b0 };
+  for (let i = 0; i < N; i++) { if (i) arc.push(arc[i - 1] + Math.hypot(prof[i][0] - prof[i - 1][0], prof[i][1] - prof[i - 1][1])); const pv = prof[Math.max(0, i - 1)], nx = prof[Math.min(N - 1, i + 1)], dr = nx[0] - pv[0], dh = nx[1] - pv[1]; mode.push(Math.abs(dr) / (Math.hypot(dr, dh) || 1) > .7 ? 1 : 0) }
+  const w = seg + 1; let cur = ring(0, mode[0]);
+  for (let i = 0; i < N - 1; i++) { const md = mode[i], nxt = ring(i + 1, md); for (let j = 0; j < seg; j++) { const a = cur + j, b = a + 1, c = nxt + j + 1, d = nxt + j; ca ? S.quad(a, d, c, b) : S.quad(a, b, c, d) } cur = mode[i + 1] === md ? nxt : ring(i + 1, mode[i + 1]) }
+  void w;
 }
 
 /* ---------- pierre taillée : relief sur un mur ---------- */
@@ -493,7 +511,12 @@ export function* softenBuild(L, UVS, opt = {}) {
       if (P.rigid) meshBox(S, b, Rp, { r: FLAT_BEVEL, wear: .08, wob: 0, seg: 9 }, { lod: 0, noFaces: true });
     } else if (/^cont/.test(b.m) && !lod && b.lo[1] < 5) container(S, sink, b, R, lod, o);
     else {
-      const RR = RLF && !lod && (b.m === 'rock' || b.m === 'rockS' || (b.m === 'snow' && b.hi[1] - b.lo[1] > .35)) && !o.bq ? rockReliefFaces(b, R, SZ) : null; meshBox(S, b, RR ? RR.mesh : Rw, P, RR ? { lod, grid, noBevel: true } : { lod, grid }); if (RR) sculptRock(detail, freeS, b, R, o, reg, lod, RR, used.has('snow') && L.env === 'snow' ? 'snow' : null, SZ);
+      const RR = RLF && !lod && (b.m === 'rock' || b.m === 'rockS' || (b.m === 'snow' && b.hi[1] - b.lo[1] > .35)) && !o.bq ? rockReliefFaces(b, R, SZ) : null; const i0 = S.i.length, v0b = S.p.length / 3; meshBox(S, b, RR ? RR.mesh : Rw, P, RR ? { lod, grid, noBevel: true } : { lod, grid });
+      if (S.fit && /^cont\d/.test(b.m)) { const wx = b.hi[0] - b.lo[0] >= b.hi[2] - b.lo[2]; for (let v = v0b; v < S.p.length / 3; v++) { const nx = S.n[v * 3], ny = S.n[v * 3 + 1], nz = S.n[v * 3 + 2]; if (Math.abs(ny) > .9) S.u[v * 2 + 1] *= .7; else if (Math.abs(wx ? nx : nz) > .9) S.u[v * 2] = .58 + S.u[v * 2] * .4 } }   /* conteneur sans tôle détaillée (basse qualité, empilés hauts) : toit et bouts sans marquage (TEXTURE QA) */ if (b.m === 'plate' && b.lo[1] > .05) underSteel(S, i0, sink('steel', o, (b.lo[0] + b.hi[0]) / 2, (b.lo[2] + b.hi[2]) / 2));
+      else if (b.m === 'tile' && !o.bq) { /* dalle de toit en tuiles : tranches et dessous au matériau du mur porteur (bande de tuiles sur les façades, tuiles sous l'avant-toit, TEXTURE QA) */
+        let wm = null, best = 0; grid.each(b.lo[0] - .02, b.hi[0] + .02, b.lo[2] - .02, b.hi[2] + .02, q => { if (q === b || q.m === b.m || !PROF[q.m] || PROF[q.m].pillow || Math.abs(q.hi[1] - b.lo[1]) > .03 || q.hi[1] - q.lo[1] < 1) return; const ov = Math.max(0, Math.min(q.hi[0], b.hi[0]) - Math.max(q.lo[0], b.lo[0])) + Math.max(0, Math.min(q.hi[2], b.hi[2]) - Math.max(q.lo[2], b.lo[2])); if (ov > best) { best = ov; wm = q } });
+        if (wm) { const Tw = sink(wm.m, wm.o, (wm.lo[0] + wm.hi[0]) / 2, (wm.lo[2] + wm.hi[2]) / 2);   /* même lot que le mur porteur : pas d'appel de dessin en plus */ moveTris(S, i0, Tw, (nx, ny) => Math.abs(ny) < .3 || ny < -.9, Tw.uvS) } }
+      if (RR) sculptRock(detail, freeS, b, R, o, reg, lod, RR, used.has('snow') && L.env === 'snow' ? 'snow' : null, SZ);
       if (b.m === 'crate') crateTrim(S, b, R, lod);
     }
     S.fit = null;
@@ -505,7 +528,9 @@ export function* softenBuild(L, UVS, opt = {}) {
   for (const o of rot) {
     if (skip.has(o)) continue; if (!(++n & 63)) yield;
     shadowRot(shP, shI, o); const P = PROF[o.m], S = sink(o.m, o, o.x, o.z); S.xf = { c: Math.cos(o.ry), s: Math.sin(o.ry), x: o.x, z: o.z };
-    const b = { lo: [-o.w / 2, o.y, -o.d / 2], hi: [o.w / 2, o.y + o.h, o.d / 2], rot: 1 }; S.fit = /^cont\d/.test(o.m) ? b : null; meshBox(S, b, fullRects(b), P, { lod, noAO: true }); S.xf = null; S.fit = null; skip.add(o);   /* MAP QA : conteneurs tournés en UV de boîte (la projection monde inversait et répétait le marquage) */
+    const b = { lo: [-o.w / 2, o.y, -o.d / 2], hi: [o.w / 2, o.y + o.h, o.d / 2], rot: 1 }; S.fit = /^cont\d/.test(o.m) ? b : null; const v0r = S.p.length / 3; meshBox(S, b, fullRects(b), P, { lod, noAO: true });
+    if (S.fit) { const c = S.xf.c, s = S.xf.s, wx = o.w >= o.d; for (let v = v0r; v < S.p.length / 3; v++) { const nx = S.n[v * 3], ny = S.n[v * 3 + 1], nz = S.n[v * 3 + 2]; if (Math.abs(ny) > .9) S.u[v * 2 + 1] *= .7; else if (Math.abs(wx ? nx * c - nz * s : nx * s + nz * c) > .9) S.u[v * 2] = .58 + S.u[v * 2] * .4 } }   /* toit et bouts sans marquage (TEXTURE QA) */
+    S.xf = null; S.fit = null; skip.add(o);   /* MAP QA : conteneurs tournés en UV de boîte (la projection monde inversait et répétait le marquage) */
   }
   for (const b of boxes) if (!skip.has(b.o)) skip.add(b.o);
   /* 6. encadrements */
@@ -576,17 +601,22 @@ function organicRock(S, o, lod, nk = 0, env = null) {
       const Q = (u, w) => Wv(shape(x + (tx * u + bx * w), y + (ty * u + by * w), z + (tz * u + bz * w))), T1 = Q(h, 0), T2 = Q(0, h), d1 = [T1[0] - P[0], T1[1] - P[1], T1[2] - P[2]], d2 = [T2[0] - P[0], T2[1] - P[1], T2[2] - P[2]]; let nx = d1[1] * d2[2] - d1[2] * d2[1], ny = d1[2] * d2[0] - d1[0] * d2[2], nz = d1[0] * d2[1] - d1[1] * d2[0];
       const ol = Math.hypot(P[0] - o.x, P[1] - o.y, P[2] - o.z) || 1; if (nx * (P[0] - o.x) + ny * (P[1] - o.y) + nz * (P[2] - o.z) < 0) { nx = -nx; ny = -ny; nz = -nz } const nl = Math.hypot(nx, ny, nz) || 1;
       void ol; const low = clamp((P[1] - Math.max(o.y - .6 * o.sy, 0)) / .55, 0, 1);
-      idx.push(S.vu(P[0], P[1], P[2], nx / nl, ny / nl, nz / nl, (1 - low) * .3 + (rn(Math.round(x * 5) + Math.round(z * 7), Math.round(y * 6)) - .5) * .08, PAX === 0 ? P[2] / US : P[0] / US, PAX === 1 ? P[2] / US : P[1] / US));
+      idx.push([P[0], P[1], P[2], nx / nl, ny / nl, nz / nl, (1 - low) * .3 + (rn(Math.round(x * 5) + Math.round(z * 7), Math.round(y * 6)) - .5) * .08]);
     }
+    /* axe de projection par petit triangle (normales lissées de ses sommets), sommets doublés seulement où l'axe change : la facette bombée
+       tournait de travers à son axe unique (plages étirées et lissées, TEXTURE QA). Formes et collision inchangées. */
+    void PAX; const vid = new Map(), vtx = (g, ax) => { const key = g * 3 + ax; let r = vid.get(key); if (r === undefined) { const q = idx[g]; r = S.vu(q[0], q[1], q[2], q[3], q[4], q[5], q[6], ax === 0 ? q[2] / US : q[0] / US, ax === 1 ? q[2] / US : q[1] / US); vid.set(key, r) } return r };
+    const tri3 = (a, b, e) => { const qa = idx[a], qb = idx[b], qe = idx[e], ux = qb[0] - qa[0], uy = qb[1] - qa[1], uz = qb[2] - qa[2], wx = qe[0] - qa[0], wy = qe[1] - qa[1], wz = qe[2] - qa[2], sx = Math.abs(uy * wz - uz * wy), sy = Math.abs(uz * wx - ux * wz), sz = Math.abs(ux * wy - uy * wx), bx = sx >= sy && sx >= sz ? 0 : sy >= sz ? 1 : 2, cm = [sx, sy, sz], ax = cm[PAX] >= .75 * cm[bx] ? PAX : bx; S.tri(vtx(a, ax), vtx(b, ax), vtx(e, ax)) };   /* normale géométrique du triangle ; l'axe de la facette est gardé tant qu'il reste proche (moins d'îlots) : étirement ≤ 2,3 */
     let k = 0; const row = []; for (let i = 0; i <= D; i++) { row.push(k); k += D - i + 1 }
-    for (let i = 0; i < D; i++) for (let j = 0; j < D - i; j++) { const a = idx[row[i] + j], b = idx[row[i + 1] + j], e = idx[row[i] + j + 1]; S.tri(a, b, e); if (j < D - i - 1) { const d = idx[row[i + 1] + j + 1]; S.tri(b, d, e) } }
+    for (let i = 0; i < D; i++) for (let j = 0; j < D - i; j++) { const a = row[i] + j, b = row[i + 1] + j, e = row[i] + j + 1; tri3(a, b, e); if (j < D - i - 1) { const d = row[i + 1] + j + 1; tri3(b, d, e) } }
   }
 }
 
 /* ---------- conteneur : tôle ondulée, montants et pièces de coin ---------- */
 function container(S, sink, b, R, lod, o) {
   const lo = b.lo, hi = b.hi, st = sink('steel', o, (lo[0] + hi[0]) / 2, (lo[2] + hi[2]) / 2), D = .028, P = lod ? .42 : .3, post = .13;
-  meshBox(S, b, [R[0].length ? [] : [], R[1].length ? [] : [], R[2], R[3], [], []].map((l, f) => f < 2 ? [] : f < 4 ? l : []), PROF[b.m], { lod, noAO: true });
+  /* toit et fond : la bande basse de la texture (nervures et rouille, sans le marquage du flanc ; le texte s'affichait sur les toits, TEXTURE QA) */
+  const uTop = S.u.length; meshBox(S, b, [R[0].length ? [] : [], R[1].length ? [] : [], R[2], R[3], [], []].map((l, f) => f < 2 ? [] : f < 4 ? l : []), PROF[b.m], { lod, noAO: true }); if (S.fit) for (let i = uTop + 1; i < S.u.length; i += 2) S.u[i] *= .7;
   for (const f of [0, 1, 4, 5]) {
     if (!R[f].length) continue;
     const A = f >> 1, U = A === 0 ? 2 : 0, sg = f & 1 ? 1 : -1, pl = sg > 0 ? hi[A] : lo[A], u0 = lo[U] + post, u1 = hi[U] - post, y0 = lo[1] + .12, y1 = hi[1] - .1, nn = Math.max(4, Math.round((u1 - u0) / P)), step = (u1 - u0) / nn;
@@ -851,7 +881,7 @@ function slopePatch(S, a, b, c, d, uvS, seed, rows = 3, ao0 = .1) {
   const g = []; for (let j = 0; j <= rows; j++) for (let i = 0; i <= cols; i++) { const s = i / cols, t = j / rows, q = k => (a[k] * (1 - s) + b[k] * s) * (1 - t) + (d[k] * (1 - s) + c[k] * s) * t, edge = i === 0 || i === cols || j === 0 || j === rows, w = edge ? 0 : (vn(s * L * .8, seed) - .5) * .09 + (vn(t * 3 + s * 2, seed + 1) - .5) * .05, tx = edge ? 0 : (vn(s * L * .8 + .5, seed) - vn(s * L * .8 - .5, seed)) * .18; g.push(S.vu(q(0) + nx * w, q(1) + ny * w, q(2) + nz * w, nx + tx * ux / (L || 1), ny, nz + tx * uz / (L || 1), (j === 0 ? ao0 + .16 : j === rows ? -.08 : 0) + (vn(s * L * 1.3, seed + 5) - .5) * .14, s * L / uvS, t * H / uvS)) }
   const w = cols + 1; for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) S.quad(g[j * w + i], g[j * w + i + 1], g[(j + 1) * w + i + 1], g[(j + 1) * w + i]);
 }
-const quad3 = (S, a, b, c, d, n, ao, uvS) => { const m = q => { const ax = Math.abs(n[0]), az = Math.abs(n[2]); return ax >= az ? [q[2] / uvS, q[1] / uvS] : [q[0] / uvS, q[1] / uvS] }, id = [a, b, c, d].map((q, i) => { const uv = m(q); return S.vu(q[0], q[1], q[2], n[0], n[1], n[2], Array.isArray(ao) ? ao[i] : ao, uv[0], uv[1]) }); S.quad(id[0], id[1], id[2], id[3]) };
+const quad3 = (S, a, b, c, d, n, ao, uvS) => { const m = q => { const ax = Math.abs(n[0]), az = Math.abs(n[2]); /* face à plat (dessous d'avant-toit) : projection verticale ; (z, y) y donnait v constant, texture étirée en traînées (TEXTURE QA) */ if (Math.abs(n[1]) > ax && Math.abs(n[1]) > az) return [q[0] / uvS, q[2] / uvS]; return ax >= az ? [q[2] / uvS, q[1] / uvS] : [q[0] / uvS, q[1] / uvS] }, id = [a, b, c, d].map((q, i) => { const uv = m(q); return S.vu(q[0], q[1], q[2], n[0], n[1], n[2], Array.isArray(ao) ? ao[i] : ao, uv[0], uv[1]) }); S.quad(id[0], id[1], id[2], id[3]) };
 
 function pitchedRoof(fr, R, tileM, wallM, trimM, shP, shI, reg) {
   const { x0, x1, z0, z1, base, seed } = R, ov = .46, longX = x1 - x0 >= z1 - z0, sp = longX ? z1 - z0 : x1 - x0, rise = Math.min(1.9, sp * .17), E = base + .01, cxz = longX ? (z0 + z1) / 2 : (x0 + x1) / 2, Y = E + rise, hip = R.style & 1, hl = hip ? Math.min(sp * .42, (longX ? x1 - x0 : z1 - z0) * .3) : 0, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, S = fr(tileM, null, cx, cz), W = fr(wallM, null, cx, cz), T = fr(trimM, null, cx, cz), uv = S.uvS;

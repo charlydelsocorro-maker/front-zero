@@ -86,14 +86,14 @@ const TX = {
   dh: ['{d} j {h} h', '{d} d {h} h', '{d} d {h} h', '{d} T {h} Std', '{d} d {h} h', '{d} g {h} h'],
   hm: ['{h} h {m} min', '{h} h {m} min', '{h} h {m} min', '{h} Std {m} Min', '{h} h {m} min', '{h} h {m} min'],
   open: ['Carte du front', 'Front map', 'Mapa del frente', 'Frontkarte', 'Mapa da frente', 'Mappa del fronte'],
-  choose: ['Choisissez votre camp', 'Choose your side', 'Elige tu bando', 'Wähle deine Seite', 'Escolhe o teu lado', 'Scegli la tua parte'],
-  chooseSub: ['Chaque partie en ligne compte pour votre camp, sur la carte où elle se joue. Gagnez, éliminez, prenez les objectifs : le front avance.', 'Every online match counts for your side, on the map where it is played. Win, eliminate, take objectives: the front moves.', 'Cada partida en línea cuenta para tu bando, en el mapa donde se juega. Gana, elimina, toma objetivos: el frente avanza.', 'Jedes Online-Match zählt für deine Seite, auf der Karte, auf der es gespielt wird. Gewinne, eliminiere, nimm Ziele ein: Die Front bewegt sich.', 'Cada partida online conta para o teu lado, no mapa onde é jogada. Vence, elimina, toma objetivos: a frente avança.', 'Ogni partita online conta per la tua parte, sulla mappa in cui si gioca. Vinci, elimina, prendi gli obiettivi: il fronte avanza.'],
+  choose: ['Choisis ton camp', 'Choose your side', 'Elige tu bando', 'Wähle deine Seite', 'Escolhe o teu lado', 'Scegli la tua parte'],
+  chooseSub: ['Chaque partie en ligne compte pour ton camp, sur la carte où elle se joue. Gagne, élimine, prends les objectifs : le front avance.', 'Every online match counts for your side, on the map where it is played. Win, eliminate, take objectives: the front moves.', 'Cada partida en línea cuenta para tu bando, en el mapa donde se juega. Gana, elimina, toma objetivos: el frente avanza.', 'Jedes Online-Match zählt für deine Seite, auf der Karte, auf der es gespielt wird. Gewinne, eliminiere, nimm Ziele ein: Die Front bewegt sich.', 'Cada partida online conta para o teu lado, no mapa onde é jogada. Vence, elimina, toma objetivos: a frente avança.', 'Ogni partita online conta per la tua parte, sulla mappa in cui si gioca. Vinci, elimina, prendi gli obiettivi: il fronte avanza.'],
   join: ['Rejoindre {f}', 'Join {f}', 'Unirse a {f}', '{f} beitreten', 'Juntar-me a {f}', 'Unisciti a {f}'],
   later: ['Plus tard', 'Later', 'Más tarde', 'Später', 'Mais tarde', 'Più tardi'],
   holdsW: ['Tient l’ouest : la côte, le marais, les mines du nord-ouest.', 'Holds the west: the coast, the marsh, the north-west mines.', 'Domina el oeste: la costa, el pantano, las minas del noroeste.', 'Hält den Westen: Küste, Sumpf, Minen im Nordwesten.', 'Domina o oeste: a costa, o pântano, as minas do noroeste.', 'Tiene l’ovest: la costa, la palude, le miniere a nord-ovest.'],
   holdsE: ['Tient l’est : la raffinerie, les collines sèches, la vallée du sud-est.', 'Holds the east: the refinery, the dry hills, the south-east valley.', 'Domina el este: la refinería, las colinas secas, el valle del sureste.', 'Hält den Osten: Raffinerie, trockene Hügel, das Tal im Südosten.', 'Domina o leste: a refinaria, as colinas secas, o vale do sudeste.', 'Tiene l’est: la raffineria, le colline aride, la valle a sud-est.'],
-  switchRule: ['Changement de camp : une fois par saison, 48 h après votre choix. Les parties solo ne comptent pas.', 'Switching sides: once per season, 48 h after your choice. Solo matches do not count.', 'Cambio de bando: una vez por temporada, 48 h después de elegir. Las partidas en solitario no cuentan.', 'Seitenwechsel: einmal pro Saison, 48 Std nach deiner Wahl. Solo-Matches zählen nicht.', 'Mudança de lado: uma vez por temporada, 48 h após a escolha. As partidas a solo não contam.', 'Cambio di parte: una volta per stagione, 48 h dopo la scelta. Le partite in solitaria non contano.'],
-  yourSide: ['Votre camp', 'Your side', 'Tu bando', 'Deine Seite', 'O teu lado', 'La tua parte'],
+  switchRule: ['Changement de camp : une fois par saison, 48 h après ton choix. Les parties solo ne comptent pas.', 'Switching sides: once per season, 48 h after your choice. Solo matches do not count.', 'Cambio de bando: una vez por temporada, 48 h después de elegir. Las partidas en solitario no cuentan.', 'Seitenwechsel: einmal pro Saison, 48 Std nach deiner Wahl. Solo-Matches zählen nicht.', 'Mudança de lado: uma vez por temporada, 48 h após a escolha. As partidas a solo não contam.', 'Cambio di parte: una volta per stagione, 48 h dopo la scelta. Le partite in solitaria non contano.'],
+  yourSide: ['Ton camp', 'Your side', 'Tu bando', 'Deine Seite', 'O teu lado', 'La tua parte'],
   noSide: ['Aucun camp choisi', 'No side chosen', 'Sin bando', 'Keine Seite gewählt', 'Nenhum lado escolhido', 'Nessuna parte scelta'],
   pickNow: ['Choisir un camp', 'Choose a side', 'Elegir bando', 'Seite wählen', 'Escolher lado', 'Scegli una parte'],
   terr: ['{n} territoires', '{n} territories', '{n} territorios', '{n} Gebiete', '{n} territórios', '{n} territori'],
@@ -108,9 +108,9 @@ const TX = {
   r_respawn: ['Renforts rapides', 'Fast reinforcements', 'Refuerzos rápidos', 'Schnelle Verstärkung', 'Reforços rápidos', 'Rinforzi rapidi'],
   r_ammo: ['Munitions rares', 'Scarce ammo', 'Munición escasa', 'Knappe Munition', 'Munições raras', 'Munizioni scarse'],
   d_fog: ['On voit deux fois moins loin.', 'You see half as far.', 'Se ve la mitad de lejos.', 'Die Sicht ist halbiert.', 'Vê-se a metade da distância.', 'Si vede a metà distanza.'],
-  d_dark: ['Lumière basse : allumez votre lampe ({k}).', 'Low light: switch on your flashlight ({k}).', 'Poca luz: enciende tu linterna ({k}).', 'Wenig Licht: Lampe einschalten ({k}).', 'Pouca luz: liga a lanterna ({k}).', 'Poca luce: accendi la torcia ({k}).'],
+  d_dark: ['Lumière basse : allume ta lampe ({k}).', 'Low light: switch on your flashlight ({k}).', 'Poca luz: enciende tu linterna ({k}).', 'Wenig Licht: Lampe einschalten ({k}).', 'Pouca luz: liga a lanterna ({k}).', 'Poca luce: accendi la torcia ({k}).'],
   d_respawn: ['Réapparition en 1,5 s.', 'Respawn in 1.5 s.', 'Reaparición en 1,5 s.', 'Wiedereinstieg nach 1,5 s.', 'Reaparecimento em 1,5 s.', 'Rientro in 1,5 s.'],
-  d_ammo: ['Deux chargeurs de réserve seulement : ramassez les armes.', 'Only two spare magazines: pick up weapons.', 'Solo dos cargadores de reserva: recoge armas.', 'Nur zwei Reservemagazine: Waffen aufsammeln.', 'Só dois carregadores de reserva: apanha armas.', 'Solo due caricatori di riserva: raccogli le armi.'],
+  d_ammo: ['Deux chargeurs de réserve seulement : ramasse les armes.', 'Only two spare magazines: pick up weapons.', 'Solo dos cargadores de reserva: recoge armas.', 'Nur zwei Reservemagazine: Waffen aufsammeln.', 'Só dois carregadores de reserva: apanha armas.', 'Solo due caricatori di riserva: raccogli le armi.'],
   heldBy: ['Tenu par {f}', 'Held by {f}', 'En manos de {f}', 'Gehalten von {f}', 'Nas mãos de {f}', 'Tenuto da {f}'],
   neutral: ['Zone neutre', 'Neutral ground', 'Zona neutral', 'Neutrales Gebiet', 'Zona neutra', 'Zona neutrale'],
   contested: ['Contesté', 'Contested', 'Disputado', 'Umkämpft', 'Disputado', 'Conteso'],
@@ -128,7 +128,7 @@ const TX = {
   ev_season: ['Saison {n} : le front se met en place', 'Season {n}: the front takes shape', 'Temporada {n}: el frente se forma', 'Saison {n}: Die Front formiert sich', 'Temporada {n}: a frente forma-se', 'Stagione {n}: il fronte prende forma'],
   ago: ['il y a {d}', '{d} ago', 'hace {d}', 'vor {d}', 'há {d}', '{d} fa'],
   how: ['Comment ça marche', 'How it works', 'Cómo funciona', 'So funktioniert’s', 'Como funciona', 'Come funziona'],
-  how1: ['Victoire, éliminations et objectifs donnent des points de front à votre camp, sur la carte jouée.', 'Wins, eliminations and objectives give front points to your side, on the map played.', 'Victorias, eliminaciones y objetivos dan puntos de frente a tu bando, en el mapa jugado.', 'Siege, Eliminierungen und Ziele geben deiner Seite Frontpunkte auf der gespielten Karte.', 'Vitórias, eliminações e objetivos dão pontos de frente ao teu lado, no mapa jogado.', 'Vittorie, eliminazioni e obiettivi danno punti fronte alla tua parte, sulla mappa giocata.'],
+  how1: ['Victoire, éliminations et objectifs donnent des points de front à ton camp, sur la carte jouée.', 'Wins, eliminations and objectives give front points to your side, on the map played.', 'Victorias, eliminaciones y objetivos dan puntos de frente a tu bando, en el mapa jugado.', 'Siege, Eliminierungen und Ziele geben deiner Seite Frontpunkte auf der gespielten Karte.', 'Vitórias, eliminações e objetivos dão pontos de frente ao teu lado, no mapa jogado.', 'Vittorie, eliminazioni e obiettivi danno punti fronte alla tua parte, sulla mappa giocata.'],
   how2: ['On ne peut attaquer qu’un territoire au contact de son camp. À 75 % de contrôle, il change de mains.', 'You can only attack a territory touching your side. At 75 % control it changes hands.', 'Solo se puede atacar un territorio en contacto con tu bando. Con el 75 % de control cambia de manos.', 'Angreifen kann man nur Gebiete, die an die eigene Seite grenzen. Bei 75 % Kontrolle wechselt es den Besitzer.', 'Só se pode atacar um território em contacto com o teu lado. Com 75 % de controlo muda de mãos.', 'Si può attaccare solo un territorio a contatto con la propria parte. Al 75 % di controllo cambia mano.'],
   how3: ['Contre des bots, les points comptent moitié. Les parties solo ne comptent jamais.', 'Against bots, points count half. Solo matches never count.', 'Contra bots, los puntos valen la mitad. Las partidas en solitario nunca cuentan.', 'Gegen Bots zählen die Punkte halb. Solo-Matches zählen nie.', 'Contra bots, os pontos contam metade. As partidas a solo nunca contam.', 'Contro i bot i punti valgono metà. Le partite in solitaria non contano mai.'],
   how4: ['Fin de saison : le camp qui tient le plus de territoires gagne un revêtement exclusif, jamais vendu.', 'Season end: the side holding more territory wins an exclusive finish, never sold.', 'Fin de temporada: el bando con más territorios gana un acabado exclusivo, nunca a la venta.', 'Saisonende: Die Seite mit mehr Gebieten gewinnt ein exklusives Finish, nie im Verkauf.', 'Fim de temporada: o lado com mais territórios ganha um acabamento exclusivo, nunca vendido.', 'Fine stagione: la parte con più territori vince una finitura esclusiva, mai in vendita.'],
@@ -136,7 +136,7 @@ const TX = {
   frontPts: ['points de front', 'front points', 'puntos de frente', 'Frontpunkte', 'pontos de frente', 'punti fronte'],
   m_attack: ['Attaque', 'Attack', 'Ataque', 'Angriff', 'Ataque', 'Attacco'],
   m_defend: ['Défense', 'Defence', 'Defensa', 'Verteidigung', 'Defesa', 'Difesa'],
-  m_reserve: ['Effort général : ce territoire n’est pas au contact de votre camp', 'General effort: this territory does not touch your side', 'Esfuerzo general: este territorio no toca tu bando', 'Allgemeiner Einsatz: Dieses Gebiet grenzt nicht an deine Seite', 'Esforço geral: este território não toca o teu lado', 'Sforzo generale: questo territorio non tocca la tua parte'],
+  m_reserve: ['Effort général : ce territoire n’est pas au contact de ton camp', 'General effort: this territory does not touch your side', 'Esfuerzo general: este territorio no toca tu bando', 'Allgemeiner Einsatz: Dieses Gebiet grenzt nicht an deine Seite', 'Esforço geral: este território não toca o teu lado', 'Sforzo generale: questo territorio non tocca la tua parte'],
   w_short: ['Partie trop courte (2 min minimum) : ne compte pas.', 'Match too short (2 min minimum): does not count.', 'Partida demasiado corta (2 min mínimo): no cuenta.', 'Match zu kurz (mind. 2 Min): zählt nicht.', 'Partida demasiado curta (2 min mínimo): não conta.', 'Partita troppo breve (minimo 2 min): non conta.'],
   w_presence: ['Arrivé trop tard dans la partie : ne compte pas.', 'Joined too late: does not count.', 'Llegaste demasiado tarde: no cuenta.', 'Zu spät beigetreten: zählt nicht.', 'Entraste tarde demais: não conta.', 'Entrato troppo tardi: non conta.'],
   w_opposition: ['Pas assez d’adversaires : ne compte pas.', 'Not enough opponents: does not count.', 'Pocos adversarios: no cuenta.', 'Zu wenige Gegner: zählt nicht.', 'Adversários insuficientes: não conta.', 'Avversari insufficienti: non conta.'],
@@ -203,7 +203,9 @@ const CSS = `
 .fzw-map text{font-family:'Barlow Condensed','Arial Narrow',Arial,sans-serif}
 .fzw-cell{transition:fill-opacity .25s}
 .fzw-t{cursor:pointer;outline:none}
-.fzw-t:hover .fzw-cell,.fzw-t:focus-visible .fzw-cell{fill-opacity:.62}
+/* hover = one outline path in the light overlay (.fzw-hov, set by hoverAt): a :hover rule on the cell repainted the whole detailed map
+   on every territory change, and the names, markers and bars on top of a cell dropped the hover (it flickered); they let the pointer through now */
+.fzw-t:focus-visible .fzw-cell{fill-opacity:.62}
 .fzw-t.is-sel .fzw-cell{stroke:#fff;stroke-width:2.4;stroke-opacity:.9}
 .fzw-mw{position:relative}
 .fzw-fx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;will-change:transform}
@@ -268,6 +270,14 @@ const CSS = `
 .fzw-btn.ghost:hover{border-color:var(--amber);color:#fff}
 .fzw-btn::after{content:"";width:8px;height:8px;border-right:2px solid currentColor;border-top:2px solid currentColor;transform:rotate(45deg)}
 .fzw-btn.noarrow::after{display:none}
+/* no side yet: CHOISIR UN CAMP breathes and a light runs across it, 4 times each time the band is drawn, then rests (a clip-path button
+   repaints while it scales: ~15 ms of main thread per second if it never stopped); off with reduced motion or the low preset */
+.fzw-invite{overflow:hidden;animation:fzwInvite 2.6s ease-in-out .8s 4}
+.fzw-invite::before{content:"";position:absolute;inset:0;background:linear-gradient(105deg,transparent 30%,rgba(255,255,255,.55) 50%,transparent 70%);transform:translateX(-120%);animation:fzwInviteSheen 2.6s ease-in-out .8s 4;pointer-events:none}
+@keyframes fzwInvite{0%,100%{transform:scale(1)}45%{transform:scale(1.045)}60%{transform:scale(1)}}
+@keyframes fzwInviteSheen{0%,40%{transform:translateX(-120%)}75%,100%{transform:translateX(120%)}}
+html.fzw-still .fzw-invite,html.fzw-still .fzw-invite::before,html.fzx-rm .fzw-invite,html.fzx-rm .fzw-invite::before{animation:none}
+@media (prefers-reduced-motion:reduce){.fzw-invite,.fzw-invite::before{animation:none}}
 .fzw-note{font-size:14px;color:var(--dim);letter-spacing:.04em}
 .fzw-tug-side{min-width:0;overflow:hidden;text-overflow:ellipsis}
 @media (max-width:1560px){.fzw-band{grid-template-columns:minmax(200px,270px) minmax(0,1fr)}.fzw-bright{grid-column:2;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;justify-items:start;gap:8px 14px;padding:0 20px 14px}.fzw-me{text-align:left}.fzw-bmid{padding-bottom:6px}.fzw-tug-side svg{display:none}.fzw-bmap{grid-row:1/3}}
@@ -544,7 +554,7 @@ function theatreSvg(st, opts) {
     const ob = (st.off || []).find(q => q.map === id);
     if (ob) sites += `<g transform="translate(${x - 34} ${y - 50})"><rect width="68" height="22" fill="#f0ae2e"/><text x="34" y="16" text-anchor="middle" font-size="15" font-weight="800" fill="#17140a" letter-spacing="1">×2</text><g transform="translate(4 2)" color="#17140a">${ruleSvg(ob.rule, 18)}</g></g>`;
   }
-  g += sites;
+  g += `<g pointer-events="none">${sites}</g>`;       // names, markers, bars and tags never take the pointer from the territory under them
   // frame: vignette, graticule ticks, compass, sea name
   if (!compact) {
     let ticks = ''; for (let x = 50; x < VW; x += 50) ticks += `<path d="M${x} 0v${x % 100 ? 5 : 9}M${x} ${VH}v-${x % 100 ? 5 : 9}"/>`; for (let y = 50; y < VH; y += 50) ticks += `<path d="M0 ${y}h${y % 100 ? 5 : 9}M${VW} ${y}h-${y % 100 ? 5 : 9}"/>`;
@@ -561,7 +571,8 @@ function theatreSvg(st, opts) {
   /* Only this light overlay animates (its own compositor layer, stepped animations): the detailed map under it is painted once. */
   const fdefs = `<defs><clipPath id="${uid}x-land"><path d="${landPath()}"/></clipPath>`
     + ['O', 'A', 'B'].map(k => { const c = k === 'O' ? '#f0ae2e' : FACTIONS[k].main; return `<radialGradient id="${uid}x-g${k}"><stop offset="0" stop-color="${c}" stop-opacity=".55"/><stop offset="1" stop-color="${c}" stop-opacity="0"/></radialGradient>`; }).join('') + '</defs>';
-  return `<div class="fzw-mw">${base}<svg class="fzw-fx" viewBox="0 0 ${VW} ${VH}" preserveAspectRatio="${par}" aria-hidden="true">${fdefs}${fx}</svg></div>`;
+  const hov = compact ? '' : `<g clip-path="url(#${uid}x-land)"><path class="fzw-hov" d="M0 0" fill="#f7f0dc" fill-opacity=".14" stroke="#fff6dc" stroke-opacity=".8" stroke-width="2.4" stroke-linejoin="round"/></g>`;
+  return `<div class="fzw-mw">${base}<svg class="fzw-fx" viewBox="0 0 ${VW} ${VH}" preserveAspectRatio="${par}" aria-hidden="true">${fdefs}${hov}${fx}</svg></div>`;
 }
 
 /* ---------- the module ---------- */
@@ -715,8 +726,8 @@ export function install({ net, engine, menu, i18n, profile, settings, menuRoot, 
     const status = serverOld ? L('oldServer') : hasServer === false ? (pub ? L('offline') : L('waiting')) : seasonLine(p, true);
     const right = f
       ? `<div class="fzw-me">${emblem(f, 44, true)}<div><b style="color:${f.main}">${esc(f.name)}</b>${me && me.pts !== undefined ? esc(L('pts', { n: fmt(me.pts) })) : esc(L('yourSide'))}</div></div><button type="button" class="fzw-btn" data-fid="front:open">${esc(L('open'))}</button>`
-      : `<div class="fzw-me"><div><b>${esc(L('noSide'))}</b>${esc(L('choose'))}</div></div><button type="button" class="fzw-btn" data-fid="front:pick">${esc(L('pickNow'))}</button>`;
-    return `<div class="fzw-bmap">${theatreSvg(p, { compact: true, uid: 'fzb', label: L })}</div>`
+      : `<div class="fzw-me"><div><b>${esc(L('noSide'))}</b>${esc(L('choose'))}</div></div><button type="button" class="fzw-btn fzw-invite" data-fid="front:pick">${esc(L('pickNow'))}</button>`;
+    return `<div class="fzw-bmap">${theatreSvg(p, { compact: true, uid: 'fzb', label: L, noFx: bandCompact })}</div>`       // the hub's compact band: still map (no 10 Hz overlay), the war room keeps the live one
       + `<div class="fzw-bmid"><div class="fzw-bhead"><b>${esc(L('title'))}</b>${hasServer && !serverOld ? `<span class="fzw-live">${esc(L('live'))}</span>` : ''}<span>${esc(status)}</span></div>`
       + `<div class="fzw-tug"><span class="fzw-tug-side is-a">${emblem(FACTIONS.A, 26)}${esc(FACTIONS.A.name)} <small>${p.sides ? p.sides.A.terr : 0}</small></span>${tugBar(p)}<span class="fzw-tug-side is-b">${emblem(FACTIONS.B, 26)}${esc(FACTIONS.B.name)} <small>${p.sides ? p.sides.B.terr : 0}</small></span></div>`
       + ((p.off || []).length ? `<div class="fzw-offline"><b>${esc(L('offensive'))} ×2</b>${p.season && p.season.wEnd ? `<small>${esc(L('endsIn', { d: dur(p.season.wEnd - Date.now()) }))}</small>` : ''}</div><div class="fzw-chips">${offChips(p, 2)}</div>` : '')
@@ -725,8 +736,10 @@ export function install({ net, engine, menu, i18n, profile, settings, menuRoot, 
   }
   function decorate() {
     const root = menuRoot && menuRoot.querySelector('.fzm'); if (!root) return;
-    const grid = root.querySelector('.fzm-play-grid'); if (!grid) return;
-    bandSolo = !root.querySelector('.fzm-play--multi');
+    // rc8 menu flow (menu-flow.js): the band lives on the home hub only (.fzh-front), compact and with a still map; rc7 layout: the play grid
+    const slot = root.querySelector('.fzh-front'), grid = slot || (root.querySelector('.fzh-view') ? null : root.querySelector('.fzm-play-grid')); if (!grid) return;
+    const compact = !!slot; if (compact !== bandCompact) { bandCompact = compact; const old = grid.querySelector(':scope>.fzw-band'); if (old) old.dataset.k = ''; }
+    bandSolo = !slot && !root.querySelector('.fzm-play--multi');
     let band = grid.querySelector(':scope>.fzw-band');
     if (!band) {
       band = document.createElement('div'); band.className = 'fzw-band'; band.setAttribute('data-fid', 'front:band'); band.tabIndex = 0; band.setAttribute('role', 'button');
@@ -739,13 +752,11 @@ export function install({ net, engine, menu, i18n, profile, settings, menuRoot, 
     } else if (band.dataset.k !== bandKey()) { band.innerHTML = bandHtml(); band.dataset.k = bandKey(); }
     band.setAttribute('aria-label', L('open'));
   }
-  let bandSolo = false;
-  const bandKey = () => [li(), bandSolo, side(), pub ? pub.rev || pub.t : 0, hasServer, serverOld, mem.me ? mem.me.pts : '', lastMatch ? lastMatch.at : 0].join('|');
-  /* first use: the choice opens by itself once, the first time the player looks at the multiplayer tab */
-  function maybeAutoPick(root) {
-    if (side() || mem.asked || !root.querySelector('.fzm-play--multi')) return;
-    mem.asked = 1; save(mem); setTimeout(() => { if (!side() && !engine.running && !engine.loading) openPick(); }, 400);
-  }
+  let bandSolo = false, bandCompact = false;
+  const bandKey = () => [li(), bandSolo, bandCompact, side(), pub ? pub.rev || pub.t : 0, hasServer, serverOld, mem.me ? mem.me.pts : '', lastMatch ? lastMatch.at : 0].join('|');
+  /* first use (rc8): no window that opens by itself any more (in rc7 it stole the focus of the room-code field when the player typed at once).
+     The band's CHOISIR UN CAMP button pulses instead (.fzw-invite, transform/opacity only), until a side is chosen. */
+  function maybeAutoPick(root) { void root; }
   let queued = false, observed = null;
   const after = () => { queued = false; try { decorate(); if (lastMatch && menuRoot.querySelector('.fzm-end')) injectContrib(); } catch (e) { console.warn('[front] band', e); } };
   const mo = new MutationObserver(() => { if (!queued) { queued = true; queueMicrotask(after); } });
@@ -765,12 +776,20 @@ export function install({ net, engine, menu, i18n, profile, settings, menuRoot, 
   if (i18n && i18n.on) i18n.on('change', () => { refresh(); if (pick && !pick.hidden) drawPick(); });
 
   /* ---------- war room ---------- */
-  let room = null, sel = null, roomTimer = 0;
+  let room = null, sel = null, roomTimer = 0, hovId = null;
+  /** The territory under the pointer gets its outline in the overlay (only that small layer repaints). */
+  function hoverAt(t) {
+    const c = t && t.closest ? t.closest('.fzw-mapbox .fzw-t') : null, id = c ? c.dataset.t : null;
+    if (id === hovId) return; hovId = id; paintHover();
+  }
+  function paintHover() { const h = room && room.querySelector('.fzw-mapbox .fzw-hov'); if (h) h.setAttribute('d', hovId && GEO.path[hovId] ? GEO.path[hovId] : 'M0 0'); }
   function openRoom(focus) {
     if (!room) {
       room = document.createElement('div'); room.className = 'fzw'; room.id = 'fz-front'; room.setAttribute('role', 'dialog'); room.setAttribute('aria-modal', 'true'); room.tabIndex = -1; room.hidden = true;
       document.body.append(room);
       room.addEventListener('click', onRoomClick);
+      room.addEventListener('pointerover', e => hoverAt(e.target));
+      room.addEventListener('pointerleave', () => hoverAt(null));
       room.addEventListener('keydown', e => { if (e.key === 'Escape') { e.stopPropagation(); closeRoom(); } else if ((e.key === 'Enter' || e.key === ' ') && e.target.closest && e.target.closest('.fzw-t')) { e.preventDefault(); select(e.target.closest('.fzw-t').dataset.t); } });
     }
     if (focus) sel = focus;
@@ -867,6 +886,7 @@ export function install({ net, engine, menu, i18n, profile, settings, menuRoot, 
       + `<section class="fzw-panel fzw-box"><h3 class="fzw-h">${esc(L('how'))}</h3><ul class="fzw-how"><li>${esc(L('how1'))}</li><li>${esc(L('how2'))}</li><li>${esc(L('how3'))}</li><li>${esc(L('how4'))}</li></ul></section></div>`
       + `<div class="fzw-col">${offBannerHtml(p)}${detailHtml(p)}<section class="fzw-panel fzw-box"><h3 class="fzw-h">${esc(L('news'))}</h3><ul class="fzw-feed">${feed || `<li><span></span><div>${esc(L('waiting'))}</div></li>`}</ul></section></div></div>`;
     room.querySelectorAll('.fzw-body').forEach((x, i) => { x.scrollTop = scrollers[i] || 0; });
+    paintHover();       // the 20 s refresh rebuilds the map: the outline stays on the territory under the pointer
   }
   async function onRoomClick(e) {
     const t = e.target.closest ? e.target : null; if (!t) return;
@@ -887,8 +907,7 @@ export function install({ net, engine, menu, i18n, profile, settings, menuRoot, 
   function playMap(id) {
     closeRoom();
     try {
-      menu.show('play');
-      const multi = document.querySelector('[data-fid="playmode:multi"]'); if (multi && multi.getAttribute('aria-checked') !== 'true') multi.click();
+      menu.show('friends');       // multiplayer: the "Entre amis" screen (rc8 flow) or the Multijoueur tab (rc7 layout)
       setTimeout(() => { const m = document.querySelector(`[data-fid="map:${CSS_ESC(id)}"]`); if (m) { m.click(); m.scrollIntoView({ block: 'nearest' }); } }, 60);
     } catch (err) { console.warn('[front] play', err); }
   }
@@ -911,12 +930,19 @@ export function install({ net, engine, menu, i18n, profile, settings, menuRoot, 
       pick = document.createElement('div'); pick.className = 'fzw-pick'; pick.id = 'fz-front-pick'; pick.setAttribute('role', 'dialog'); pick.setAttribute('aria-modal', 'true'); pick.hidden = true;
       document.body.append(pick);
       pick.addEventListener('click', e => { const b = e.target.closest('[data-side],[data-act]'); if (!b) return; sfx(); if (b.dataset.act === 'later') return closePick(); if (b.dataset.side) choose(b.dataset.side); });
-      pick.addEventListener('keydown', e => { if (e.key === 'Escape') closePick(); });
+      pick.addEventListener('keydown', e => { if (e.key === 'Escape') { e.stopPropagation(); closePick(); } });       // the menu below must not also go back a screen
     }
+    const was = document.activeElement; pickBack = was && was !== document.body && !pick.contains(was) ? was : null;       // given back on close
     pick.hidden = false; drawPick(); pick.tabIndex = -1;
     try { pick.focus({ preventScroll: true }); } catch { /* optional */ }
   }
-  function closePick() { if (pick) { pick.hidden = true; pick.textContent = ''; } }
+  let pickBack = null;
+  function closePick() {
+    if (!pick || pick.hidden) return;
+    pick.hidden = true; pick.textContent = '';
+    const b = pickBack && pickBack.isConnected ? pickBack : null; pickBack = null;
+    if (b && !(engine && (engine.running || engine.loading))) try { b.focus({ preventScroll: true }); } catch { /* optional */ }
+  }
   function drawPick() {
     const p = state(), lang = (i18n && i18n.lang) || 'fr';
     const half = s => {
@@ -1057,6 +1083,7 @@ export function install({ net, engine, menu, i18n, profile, settings, menuRoot, 
     }
   }, 100);
 
-  const api = { openRoom, openPick, get state() { return state(); }, get me() { return mem; }, fetch: () => fetchFront(true).then(refresh), get applied() { return applied; }, get damage() { return damage; }, theatreSvg: (p, o) => theatreSvg(p || state(), { label: L, names: mapName, ...o }) };
+  const api = { openRoom, openPick, side: () => side(), get state() { return state(); }, get me() { return mem; }, fetch: () => fetchFront(true).then(refresh), get applied() { return applied; }, get damage() { return damage; }, theatreSvg: (p, o) => theatreSvg(p || state(), { label: L, names: mapName, ...o }) };
+  try { globalThis.FZFront = api; } catch { /* menu-flow.js only uses it for its first-visit hint */ }
   return api;
 }

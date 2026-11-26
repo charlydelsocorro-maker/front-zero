@@ -427,7 +427,11 @@ function createFrontWar(api) {
         const side = pl.s, res = { map, mode, side, pts: 0, raw: 0, weight: 0, mult: 1, why: null, rule: fr.rule };
         const present = t - (fr.seen.get(q.id) || t), obj = fr.obj.get(q.id) || 0;
         let enemies = 0, humanEnemies = 0;
-        if (mode === 'ffa' || mode === 'zone') { for (const o of players) if (o !== q) { enemies++; if (!o.bot) humanEnemies++; } if (zone && zone.bots) enemies += zone.bots.size; }
+        if (mode === 'ffa' || mode === 'zone') {
+          const sqd = zone && zone.sq && zone.sq.of ? zone.sq.of.get(q.id) : null;       // Zone Duo / Trio / Quatuor (squad-referee.js): squadmates are not opposition
+          for (const o of players) if (o !== q) { if (sqd && sqd.members.includes(o.id)) continue; enemies++; if (!o.bot) humanEnemies++; }
+          if (zone && zone.bots) { enemies += zone.bots.size; if (sqd) for (const id of sqd.members) if (zone.bots.has(id)) enemies--; }
+        }
         else if (mode === 'zombie') { enemies = 1; }
         else for (const o of players) if (o.team && q.team && o.team !== q.team) { enemies++; if (!o.bot) humanEnemies++; }
         const waves = mode === 'zombie' ? (reason === 'survived' ? m.wave | 0 : Math.max(0, (m.wave | 0) - 1)) : 0;
@@ -437,7 +441,7 @@ function createFrontWar(api) {
         else if (mode === 'zombie' ? waves < 2 : !(enemies >= 2 || humanEnemies >= 1)) res.why = 'opposition';
         else if (!((q.score | 0) > 0 || (q.kills | 0) > 0 || obj > 0 || waves > 0)) res.why = 'idle';
         if (!res.why) {
-          const won = TEAM(mode) ? winner === q.team : mode === 'zombie' ? reason === 'survived' : winner === q.id;
+          const won = TEAM(mode) ? winner === q.team : mode === 'zombie' ? reason === 'survived' : winner === q.id || !!(zone && zone.sq && q.team && winner === q.team);       // squad Zone: endMatch's winner is the squad id (squad-referee.js final)
           const draw = !won && (winner === null || winner === undefined) && (reason === 'time' || reason === 'draw') && mode !== 'zombie';
           let place = 0;
           if (mode === 'ffa') place = byKills.findIndex(x => x.id === q.id) + 1;

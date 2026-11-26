@@ -11,31 +11,88 @@ const MAXI = 12, CLOUDS = 5, PER_CLOUD = 18, FIRES = 4, PER_FIRE = 16, GRIP = [0
 const REST = [-.2, -.24, -.42, .4, .1, -.9, .9, .1, .4], OPEN = [.8, .85, .9, .9, .5], FIST = [.95, 1, 1.02, 1.02, .75], LOOSE = [.3, .32, .35, .35, .25];
 const POUCH = [-.3, -.42, -.22, .12, -.75, -.65, .92, -.12, .36];
 const key = (t, p, f, hold) => [t, p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], f, !!hold];
-/* Gesture tracks in camera space. U = time of the effect (the server's use time); the hand is back at rest 0.3 s later. */
+/** A left-hand pose (camera space) from where the held item's tip points (the hand's +X: out of the little-finger side of the fist) and where the knuckles point (+Y). */
+function fist(px, py, pz, nx, ny, nz, kx, ky, kz) {
+  let l = Math.hypot(nx, ny, nz); nx /= l; ny /= l; nz /= l;
+  const d = kx * nx + ky * ny + kz * nz; kx -= d * nx; ky -= d * ny; kz -= d * nz; l = Math.hypot(kx, ky, kz); kx /= l; ky /= l; kz /= l;
+  return [px, py, pz, kx, ky, kz, ny * kz - nz * ky, nz * kx - nx * kz, nx * ky - ny * kx];
+}
+/* Left arm during a gesture: shoulder in camera space, two bones and a pole down and out to the left, so the elbow stays bent and low.
+   The sleeve runs from the wrist through the elbow and a little past it, so its open end never shows. Allocation-free (called every frame by guns.js). */
+const SHO = [-.21, -.31, .07], UA = .3, FA = .29, POLE = [-.62, -.72, .3];
+function armElbow(T, v) {
+  let dx = v.x - SHO[0], dy = v.y - SHO[1], dz = v.z - SHO[2]; const d0 = Math.hypot(dx, dy, dz); if (!(d0 > 1e-4)) return false;
+  dx /= d0; dy /= d0; dz /= d0;
+  const d = clamp(d0, .12, UA + FA - .01), a = (UA * UA - FA * FA + d * d) / (2 * d), h = Math.sqrt(Math.max(0, UA * UA - a * a));
+  let px = POLE[0], py = POLE[1], pz = POLE[2]; const pd = px * dx + py * dy + pz * dz; px -= pd * dx; py -= pd * dy; pz -= pd * dz; const pl = Math.hypot(px, py, pz) || 1;
+  const fx = SHO[0] + dx * a + px / pl * h - v.x, fy = SHO[1] + dy * a + py / pl * h - v.y, fz = SHO[2] + dz * a + pz / pl * h - v.z, fl = Math.hypot(fx, fy, fz); if (!(fl > 1e-4)) return false;
+  const L = (fl + .12) / fl; v.x += fx * L; v.y += fy * L; v.z += fz * L; return true;
+}
+/* Medical tracks in camera space. U = time of the effect (the server's use time); the hand is back at rest 0.3 s later.
+   Each returns { k: keys, ev: [[t, sound stage]], held: [from, to] (the item is in the hand), cap, push, flap: [from, to] or null }. Hands stay low and
+   close (z about -0.2 to -0.3) so the bent arm comes up from below; the elbow comes from armElbow. */
+const ICE = [1, 1.06, 1.1, 1.12, .45], PRESS = [1, 1.06, 1.1, 1.12, .62];       // closed fist, thumb over the plunger; then the thumb pushes
+/* injection (syringe, auto-injector): from the pouch, low and close in front, needle down; the cap flicks off; a short wind-up, then a stab down and
+   toward the body (the thigh), half out of the frame; plunger pressed, pulled out, dropped low, back to the weapon */
 function injectTrack(U) {
-  const show = [-.17, -.07, -.38, .55, .35, -.75, .8, -.35, .45], raise = [-.18, -.01, -.36, .45, -.72, -.53, .85, .45, .27], stab = [-.125, -.095, -.4, .45, -.72, -.53, .85, .45, .27], out = [-.175, -.02, -.37, .45, -.72, -.53, .85, .45, .27];       // the hand stays across the line of sight, so the fist never hides the needle
-  return [key(0, REST, OPEN, true), key(U * .15, POUCH, LOOSE, true), key(U * .2, POUCH, FIST, true), key(U * .4, show, FIST), key(U * .58, raise, FIST), key(U * .67, stab, FIST, true), key(U * .9, stab, FIST, true), key(U + .02, out, FIST), key(U + .3, REST, OPEN, true)];
+  const show = fist(-.13, -.12, -.27, .12, -.96, -.25, .55, .05, -.83), snap = fist(-.12, -.155, -.262, .22, -.92, -.32, .55, -.02, -.83),
+    cock = fist(-.12, -.085, -.252, .14, -.9, -.42, .5, .22, -.84), stab = fist(-.14, -.19, -.215, -.05, -.92, .38, .5, -.1, -.86),
+    push = fist(-.14, -.204, -.21, -.05, -.92, .38, .5, -.1, -.86), pull = fist(-.135, -.17, -.232, .05, -.95, .1, .5, 0, -.86), low = fist(-.22, -.36, -.22, .1, -.9, .3, .4, -.3, -.86);
+  return { k: [key(0, REST, OPEN, true), key(U * .15, POUCH, LOOSE, true), key(U * .2, POUCH, ICE, true), key(U * .4, show, ICE, true), key(U * .46, snap, ICE), key(U * .52, show, ICE, true),
+    key(U * .6, cock, ICE, true), key(U * .67, stab, ICE, true), key(U * .74, push, PRESS, true), key(U * .9, push, PRESS, true), key(U + .05, pull, ICE), key(U + .17, low, LOOSE), key(U + .3, REST, OPEN, true)],
+  ev: [[U * .18, 'grab'], [U * .67, 'in'], [U * .92, 'tap']], held: [U * .18, U + .13], cap: [U * .43, U * .53], push: [U * .72, U * .9], flap: null, stab: true };
 }
+/* bandage: the roll comes up in the fist, then is wound around the thigh, the hand circling half out of the frame; it ends tucked under, out of sight */
+const ROLL = [.74, .8, .86, .88, .55];
 function wrapTrack(U) {
-  const a = [-.17, -.15, -.37, .6, .35, -.72, .75, -.35, .55], b = [-.1, -.11, -.39, .35, .6, -.72, .9, -.3, .3], c = [-.16, -.19, -.36, .62, .05, -.78, .75, -.25, .6];
-  const k = [key(0, REST, OPEN, true), key(Math.min(.3, U * .2), POUCH, LOOSE, true), key(Math.min(.38, U * .25), POUCH, FIST, true)];
-  const n = Math.max(2, Math.round((U - .7) / .42)); for (let i = 0; i < n; i++) k.push(key(.62 + (U - .85) * i / n, i % 3 === 0 ? a : i % 3 === 1 ? b : c, FIST));
-  k.push(key(U - .1, a, FIST), key(U + .3, REST, OPEN, true));
-  return k;
+  const g = Math.min(.3, U * .18), show = fist(-.13, -.13, -.27, 0, -1, 0, .4, 0, -.92), k = [key(0, REST, OPEN, true), key(g - .06, POUCH, LOOSE, true), key(g + .04, POUCH, ROLL, true), key(U * .3, show, ROLL, true)];
+  const t0 = U * .38, t1 = U * .86, n = Math.max(4, Math.round((t1 - t0) / .075 / 4) * 4);       // whole turns, a quarter about every 75 ms
+  for (let i = 0; i <= n; i++) { const th = i * Math.PI / 2, c = Math.cos(th), s = Math.sin(th); k.push(key(t0 + (t1 - t0) * i / n, fist(-.11 + .008 * s, -.235 + .06 * c, -.28 - .06 * s, -1, 0, 0, 0, -s, -c), ROLL)); }
+  k.push(key(U * .93, fist(-.12, -.3, -.26, -1, 0, 0, 0, 0, 1), LOOSE, true), key(U + .3, REST, OPEN, true));
+  return { k, ev: [[g, 'grab'], [t0, 'in'], [U * .93, 'tap']], held: [g, U * .93], cap: null, push: null, flap: null };
 }
+/* medkit: carried low by its top handle, palm down, the kit under the fist; opened, pressed to the body a few times (out of the bottom of the frame), closed, put away */
+const KITF = [.86, .92, .97, .98, .6];
+function kitTrack(U) {
+  const g = .3, show = fist(-.1, -.07, -.29, -.87, 0, -.5, .5, 0, -.87), dip = fist(-.11, -.17, -.23, -.866, -.355, -.355, .5, -.61, -.61), low = fist(-.2, -.38, -.2, -.87, 0, -.5, .5, -.3, -.8);       // palm down, the kit hanging under the fist
+  const k = [key(0, REST, OPEN, true), key(g - .06, POUCH, LOOSE, true), key(g + .04, POUCH, KITF, true), key(.75, show, KITF, true)];
+  let t = 1.4, first = 0, last = 0; while (t + .8 <= U - .5) { k.push(key(t + .3, dip, KITF, true), key(t + .5, dip, KITF, true), key(t + .8, show, KITF, true)); if (!first) first = t + .3; last = t + .3; t += .8; }
+  k.push(key(U - .35, show, KITF, true), key(U + .04, low, KITF), key(U + .3, REST, OPEN, true));
+  return { k, ev: [[g, 'grab'], [first || U * .5, 'in'], [last || U * .8, 'tap']], held: [g, U + .04], cap: null, push: null, flap: [g + .6, U - .45] };
+}
+/* armour plate: up from the pouch, turned flat, slid down into the carrier at the chest, out of the bottom of the frame */
 function plateTrack(U) {
-  const up = [-.1, -.2, -.42, .12, .75, -.65, .95, -.1, .3], chest = [-.03, -.26, -.4, .02, .85, -.52, 1, 0, .05], seat = [-.03, -.34, -.32, .02, .9, -.43, 1, 0, .05];
-  return [key(0, REST, OPEN, true), key(U * .2, POUCH, LOOSE, true), key(U * .26, POUCH, FIST, true), key(U * .5, up, FIST), key(U * .72, chest, FIST, true), key(U * .9, seat, FIST), key(U + .02, seat, LOOSE, true), key(U + .3, REST, OPEN, true)];
+  const up = [-.1, -.16, -.33, .12, .75, -.65, .95, -.1, .3], chest = [-.04, -.21, -.3, .02, .85, -.52, 1, 0, .05], seat = [-.04, -.32, -.25, .02, .9, -.43, 1, 0, .05];
+  return { k: [key(0, REST, OPEN, true), key(U * .2, POUCH, LOOSE, true), key(U * .26, POUCH, FIST, true), key(U * .5, up, FIST), key(U * .72, chest, FIST, true), key(U * .9, seat, FIST), key(U + .02, seat, LOOSE, true), key(U + .3, REST, OPEN, true)],
+    ev: [[U * .18, 'grab'], [U * .67, 'in'], [U * .92, 'tap']], held: [U * .18, U + .2], cap: null, push: null, flap: null };
 }
 function placeTrack() {
-  const ahead = [-.13, -.13, -.46, .1, -.72, -.68, .95, -.15, .25], down = [-.12, -.25, -.5, .08, -.86, -.5, .95, -.15, .25];
+  const ahead = [-.12, -.16, -.37, .1, -.72, -.68, .95, -.15, .25], down = [-.11, -.3, -.4, .08, -.86, -.5, .95, -.15, .25];
   return [key(0, REST, OPEN, true), key(.16, POUCH, LOOSE, true), key(.22, POUCH, FIST, true), key(.46, ahead, FIST), key(.6, down, FIST, true), key(.68, down, LOOSE, true), key(.95, REST, OPEN, true)];
 }
 function clackTrack() {
-  const up = [-.11, -.2, -.38, .12, .72, -.68, .95, -.2, .25];
+  const up = [-.1, -.16, -.3, .12, .72, -.68, .95, -.2, .25];
   return [key(0, REST, OPEN, true), key(.14, up, FIST, true), key(.32, up, FIST, true), key(.62, REST, OPEN, true)];
 }
-const TRACK_OF = { syringe: injectTrack, adren: injectTrack, bandage: wrapTrack, medkit: wrapTrack, plate: plateTrack };
+const TRACK_OF = { syringe: injectTrack, adren: injectTrack, bandage: wrapTrack, medkit: kitTrack, plate: plateTrack };
+/* how an item sits in the left hand (hand space: +X little-finger side, +Y knuckles, +Z palm, fist hole about (0, .097, .04)):
+   [x, y, z, rx, ry, rz, sx, sy, sz], or a function of the model's own fit scale. Others: GRIP. */
+const HOLD = {
+  syringe: [-.004, .097, .04, 0, 0, Math.PI / 2, 1.75, 1.3, 1.75],       // barrel through the fist, needle out of the little-finger side, plunger under the thumb
+  adren: [-.006, .097, .042, 0, 0, Math.PI / 2, 1.12, 1.08, 1.12],
+  bandage: [0, .1, .05, 0, 0, Math.PI / 2, 1, 1, 1],       // the roll across the palm, fingers round it
+  medkit: s => [0, .097 - .012 * s, .04 + .158 * s, -Math.PI / 2, 0, 0, s, s, s],       // by its top handle across the palm, the kit on the palm side (under a palm-down fist)
+  plate: s => [.006, .19, .03, 0, Math.PI / 2, 0, s, s, s],       // its lower edge in the fingers, the flat face toward the eye
+};
+const THROWN = [.004, .124, .042];       // thrown items sit in the curled fingers (the throw path's own fist)
+/* HUD lines of the medical key, in the six languages (fr, en, es, de, pt, it): empty slot (in Zone, where everything is found), busy, too soon */
+const TXT = {
+  noMed: ['Aucun soin : fouille les caisses', 'No meds: search the crates', 'Sin curas: registra las cajas', 'Keine Medizin: durchsuche Kisten', 'Sem cura: revista as caixas', 'Niente cure: fruga nelle casse'],
+  noGear: ['Vide : fouille les caisses', 'Empty: search the crates', 'Vacío: registra las cajas', 'Leer: durchsuche Kisten', 'Vazio: revista as caixas', 'Vuoto: fruga nelle casse'],
+  busy: ['Soin en cours', 'Already healing', 'Curación en curso', 'Heilung läuft', 'Cura em curso', 'Cura in corso'],
+  wait: ['Pas encore', 'Not yet', 'Aún no', 'Noch nicht', 'Ainda não', 'Non ancora'],
+  off: ['Équipement indisponible sur ce serveur', 'Equipment unavailable on this server', 'Equipo no disponible en este servidor', 'Ausrüstung auf diesem Server nicht verfügbar', 'Equipamento indisponível neste servidor', 'Equipaggiamento non disponibile su questo server'],
+};
 const CSS = `
 #gx-root{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:3}
 #gx-blind,#gx-smoke,#gx-stun{position:absolute;inset:0;opacity:0}
@@ -67,7 +124,9 @@ export function createGear(c) {
   const at = (x, y, z, size) => { snd.x = x; snd.y = y; snd.z = z; snd.size = size === undefined ? 1 : size; return snd; };
   const play = (n, a, b) => { try { const f = audio[n]; if (typeof f === 'function') f.call(audio, a, b); } catch { /* audio is optional */ } };
   const stage = s => play('reload', s, player.weaponId);
-  const say = (text, kind) => { try { hud.api.message(text, { kind: kind || 'info', dur: 1.2 }); } catch { /* optional */ } };
+  const say = (text, kind, dur) => { try { hud.api.message(text, { kind: kind || 'info', dur: dur || 1.2 }); } catch { /* optional */ } };
+  const tl = k => { const a = TXT[k], i = D.LANGS.indexOf(lang()); return a[i < 0 ? 0 : i]; };
+  let useNext = 0;       // simMs before which the referee still refuses a new medical use (its gap after the last one)
 
   /* ---------- world models: one instanced mesh per item, one shared material ---------- */
   const worldMat = gearMaterial(THREE, false), inst = new Map(), parts = new Map();
@@ -101,8 +160,15 @@ export function createGear(c) {
     for (const k of Object.keys(m.parts)) { const q = m.parts[k], o = new THREE.Mesh(q.geo, mat); o.frustumCulled = false; o.position.set(q.pivot[0], q.pivot[1], q.pivot[2]); g.add(o); sub[k] = o; o.userData.py = q.pivot[1]; }
     g.position.set(GRIP[0], GRIP[1], GRIP[2]);
     const big = m.radius > 0.16, sc = big ? 0.16 / m.radius : 1; g.scale.setScalar(sc);
-    if (id === 'syringe' || id === 'adren') { g.rotation.set(Math.PI, 0, 0); g.scale.setScalar(1.35); }       // needle toward the fingertips
-    else if (id === 'plate') g.rotation.set(0, Math.PI / 2, 0);       // its flat face toward the eye
+    const hold = typeof HOLD[id] === 'function' ? HOLD[id](sc) : HOLD[id];
+    if (hold) { g.position.set(hold[0], hold[1], hold[2]); g.rotation.set(hold[3], hold[4], hold[5]); g.scale.set(hold[6], hold[7], hold[8]); }
+    else if (ITEMS[id] && ITEMS[id].kind === 'throw') g.position.set(THROWN[0], THROWN[1], THROWN[2]);
+    if (id === 'syringe' && !sub.cap) {       // needle cap (the shared model has none): one small cylinder in the same material, flicked off during the gesture
+      const cg = new THREE.CylinderGeometry(.0034, .0028, .05, 10, 1); cg.translate(0, -.025, 0); cg.deleteAttribute('uv'); COL.setHex(0xd8692c);
+      const n = cg.attributes.position.count, col = new Float32Array(n * 3); for (let i = 0; i < n; i++) { col[i * 3] = COL.r; col[i * 3 + 1] = COL.g; col[i * 3 + 2] = COL.b; } cg.setAttribute('color', new THREE.BufferAttribute(col, 3));
+      const o = new THREE.Mesh(cg, mat); o.frustumCulled = false; o.position.set(0, -.0362, 0); o.userData.py = -.0362; g.add(o); sub.cap = o;
+      if (sub.needle) sub.needle.scale.set(1.7, 1, 1.7);       // a needle that still reads at arm's length
+    }
     p = { g, sub }; vm.mountProp(g); props.set(id, p); return p;
   }
 
@@ -244,8 +310,8 @@ export function createGear(c) {
     switch (m.op) {
       case 'inv': for (const k of ['L', 'T', 'M']) { slots[k].id = m.s[k].id; slots[k].n = m.s[k].n; } if (m.got) say('+' + m.k + ' ' + D.nameOf(m.got, lang()), 'good'); paintSlots(); break;
       case 'use': break;
-      case 'cancel': { if (use) { const u = use; use = null; if (m.why === 'full') say(tx('full'), 'info'); else if (m.why === 'hit') say(tx('cancelled'), 'bad'); if (vm.gestureOn && u.gest) vm.cancelGrenade(); } break; }
-      case 'done': { const s = slots[ITEMS[m.id].slot]; if (s.id === m.id) s.n = m.n; if (m.id === (use && use.id)) use = null; player.armor = m.armor; if (m.hot) { fxs.hot = m.hot / 1000; fxs.hotMax = fxs.hot; } if (m.boost) { fxs.boost = m.boost / 1000; fxs.after = m.after / 1000; } paintSlots(); break; }
+      case 'cancel': { if (use) { const u = use; use = null; if (m.why === 'full') say(tx('full'), 'info'); else if (m.why === 'hit') say(tx('cancelled'), 'bad'); else if (m.why === 'refused' && player.alive) say(tl('wait'), 'info'); if (vm.gestureOn && u.gest) vm.cancelGrenade(); } break; }
+      case 'done': { const s = slots[ITEMS[m.id].slot]; if (s.id === m.id) s.n = m.n; if (m.id === (use && use.id)) use = null; useNext = simMs + 360; player.armor = m.armor; if (m.hot) { fxs.hot = m.hot / 1000; fxs.hotMax = fxs.hot; } if (m.boost) { fxs.boost = m.boost / 1000; fxs.after = m.after / 1000; } paintSlots(); break; }
       case 'hp': if (player.alive) { player.hp = m.hp; player.armor = m.armor; if (!m.on) fxs.hot = 0; } break;
       case 'thrown': case 'placed': { const q = byToken.get(m.c); if (q) { byToken.delete(m.c); objs.delete(q.oid); q.oid = m.oid; objs.set(m.oid, q); if (q.rest && !q.sent) { q.sent = true; send({ a: 'land', oid: q.oid, x: q.x, y: q.y, z: q.z }); } } const s = slots[ITEMS[m.id].slot]; if (s.id === m.id) s.n = m.n; paintSlots(); break; }
       case 'nope': { const q = byToken.get(m.c); if (q) { byToken.delete(m.c); rm(q); } const s = slots[ITEMS[m.id] ? ITEMS[m.id].slot : 'T']; if (s && s.id === m.id) { s.n++; if (online) send({ a: 'sync' }); } if (m.why === 'limit') say(tx('limit'), 'bad'); paintSlots(); break; }
@@ -270,10 +336,16 @@ export function createGear(c) {
     const U = it.useMs / 1000; use = { id: sl.id, t: 0, U, gest: true };
     P.sprint = false; P.burstN = 0; P.next = Math.max(P.next, E().time + U + 0.3);
     const pr = prop(sl.id), plunger = pr.sub.plunger, cap = pr.sub.cap, flap = pr.sub.flap, base = plunger ? plunger.userData.py : 0, capY = cap ? cap.userData.py : 0;
-    if (cap) { cap.visible = true; cap.position.y = capY; } if (plunger) plunger.position.y = base; if (flap) flap.rotation.x = 0;
-    const ok = vm.playGesture({ keys: vm.gestureTrack((TRACK_OF[sl.id] || wrapTrack)(U)), ev: [[U * .18, 'grab'], [U * .67, 'in'], [U * .92, 'tap']], end: U + 0.3, prop: pr.g,
-      onFrame(T) { pr.g.visible = T >= U * 0.18 && T < U + 0.2; if (plunger) plunger.position.y = base - 0.052 * sat((T - U * .7) / (U * .2)); if (cap) { const k = sat((T - U * .32) / (U * .12)); cap.position.y = capY - k * 0.1; cap.visible = k < 1; } if (flap) flap.rotation.x = sat((T - U * .3) / .25) * 1.05 * (1 - sat((T - U * .86) / .2)); },
-      onEvent(n) { if (n === 'grab') stage('pouch'); else if (n === 'in') stage(sl.id === 'plate' ? 'magIn' : 'grenadeGrab'); else if (n === 'tap') stage(sl.id === 'plate' ? 'magTap' : 'spoon'); },
+    if (cap) { cap.visible = true; cap.position.set(0, capY, 0); cap.rotation.set(0, 0, 0); } if (plunger) plunger.position.y = base; if (flap) flap.rotation.x = 0;
+    const tr = (TRACK_OF[sl.id] || wrapTrack)(U), held = tr.held, cp = tr.cap, pu = tr.push, fl = tr.flap;
+    const ok = vm.playGesture({ keys: vm.gestureTrack(tr.k), ev: tr.ev, end: U + 0.3, prop: pr.g, elbow: armElbow,
+      onFrame(T) {
+        pr.g.visible = T >= held[0] && T < held[1];
+        if (plunger && pu) plunger.position.y = base - 0.026 * sat((T - pu[0]) / (pu[1] - pu[0]));       // the head stops on the barrel's flange
+        if (cap && cp) { const k = sat((T - cp[0]) / (cp[1] - cp[0])); cap.position.y = capY - k * .025 - k * k * .14; cap.position.x = k * k * .05; cap.rotation.z = k * k * 3; cap.visible = k < 1; }       // slides off the needle, then tumbles away
+        if (flap && fl) flap.rotation.x = sat((T - fl[0]) / .25) * 1.05 * (1 - sat((T - fl[1]) / .2));
+      },
+      onEvent(n) { if (n === 'grab') stage('pouch'); else if (n === 'in') { stage(sl.id === 'plate' ? 'magIn' : 'grenadeGrab'); if (tr.stab && !reduced()) P.shake = Math.max(P.shake, 0.08); } else if (n === 'tap') stage(sl.id === 'plate' ? 'magTap' : 'spoon'); },
       onEnd(done) { if (!done && use && use.id === sl.id) { use = null; send({ a: 'cancel' }); } } });
     if (!ok) { use = null; return; }
     send({ a: 'use', id: sl.id });
@@ -303,7 +375,7 @@ export function createGear(c) {
     const q0 = spot(sl.id === 'wire' ? 1.1 : 0.25); if (!q0) { say(tx('place'), 'bad'); return; }
     P.sprint = false; P.burstN = 0; P.next = Math.max(P.next, E().time + 0.72);
     const pr = prop(sl.id), id = sl.id;
-    vm.playGesture({ keys: vm.gestureTrack(placeTrack()), ev: [[.2, 'grab'], [.62, 'put']], end: .95, prop: pr.g,
+    vm.playGesture({ keys: vm.gestureTrack(placeTrack()), ev: [[.2, 'grab'], [.62, 'put']], end: .95, prop: pr.g, elbow: armElbow,
       onFrame(T) { pr.g.visible = T >= .2 && T < .62; },
       onEvent(n) {
         if (n === 'grab') { stage('pouch'); return; }
@@ -318,18 +390,22 @@ export function createGear(c) {
   }
   function clacker() {
     const pr = prop('c4remote'), lv = pr.sub.lever;
-    vm.playGesture({ keys: vm.gestureTrack(clackTrack()), ev: [[.24, 'click']], end: .62, prop: pr.g,
+    vm.playGesture({ keys: vm.gestureTrack(clackTrack()), ev: [[.24, 'click']], end: .62, prop: pr.g, elbow: armElbow,
       onFrame(T) { pr.g.visible = T >= .06 && T < .56; if (lv) lv.rotation.z = -0.16 * sat((T - .18) / .06) * (1 - sat((T - .36) / .1)); },
       onEvent() { stage('magTap'); send({ a: 'remote' }); } });
   }
   function press(s) {
-    if (!enabled) return false;
+    if (!enabled) { if (online && s !== 'L' && player.alive && E().time - P.dryT > 0.45) { P.dryT = E().time; play('dry'); say(tl('off'), 'bad', 2); } return false; }       // a server without the equipment referee: say so instead of a silent key
     const sl = slots[s], it = ITEMS[sl.id]; if (!it) return false;
     if (it.kind === 'weapon') return false;       // the frag keeps its existing path
     if (it.remote) { for (const o of objs.values()) if (o.id === sl.id && mine(o) && o.st === 'placed') { if (canAct()) clacker(); return true; } }       // a charge is down: the key is its detonator
     if (s === 'L' && sl.n <= 0 && P.gear && P.gear.n > 0) return false;       // a frag picked up with another lethal item spent
-    if (!canAct()) return true;
-    if (sl.n <= 0) { if (E().time - P.dryT > 0.45) { P.dryT = E().time; play('dry'); say(tx('none'), 'bad'); } return true; }
+    if (!canAct()) { if (s === 'M' && player.alive && !rules.frozen && (use || vm.grenadeBusy)) say(tl(use ? 'busy' : 'wait'), 'info'); return true; }       // the medical key always answers
+    if (sl.n <= 0) { if (E().time - P.dryT > 0.45) { P.dryT = E().time; play('dry'); if (!rules.playerLoadout) say(tl(s === 'M' ? 'noMed' : 'noGear'), 'bad', 2.2); else say(D.nameOf(sl.id, lang()) + ' : ' + tx('none'), 'bad'); } return true; }       // Zone starts empty: say where to find some
+    if (it.kind === 'med') {       // what the referee would refuse is answered at once, without a gesture (it still decides)
+      if ((it.heal && !it.boost && player.hp >= player.maxHp) || (it.armor && player.armor >= Math.max(player.maxArmor || 0, it.armorCap))) { say(tx('full'), 'info'); return true; }
+      if (simMs < useNext) { say(tl('wait'), 'info'); return true; }
+    }
     if (it.kind === 'med') startMed(sl, it); else if (it.kind === 'throw') startThrow(sl, it); else if (it.wall) { if (c.wallPlace) { try { c.wallPlace(sl.id, it); } catch (e) { console.warn('[gear] wall', e); } } } else startPlace(sl, it);       // a breaching charge goes on a panel (engine-breach.js)
     return true;
   }
@@ -511,7 +587,7 @@ export function createGear(c) {
     },
     begin(isOnline, theNet, myId) {
       for (const im of inst.values()) { im.count = 0; im.visible = false; } leds.count = 0; leds.visible = false; sm.o.visible = fi.o.visible = false;
-      online = !!isOnline; net = theNet || null; me = myId || 'player'; enabled = !online || !!(net && net.gxOk); simMs = 0; use = null; fxs.blind = fxs.stun = fxs.boost = fxs.after = fxs.hot = 0; P.gxSpeed = 1; objs.clear(); byToken.clear(); cloudUsed.fill(null); fireUsed.fill(null); recs.clear(); warnOn = false;
+      online = !!isOnline; net = theNet || null; me = myId || 'player'; enabled = !online || !!(net && net.gxOk); simMs = 0; use = null; useNext = 0; fxs.blind = fxs.stun = fxs.boost = fxs.after = fxs.hot = 0; P.gxSpeed = 1; objs.clear(); byToken.clear(); cloudUsed.fill(null); fireUsed.fill(null); recs.clear(); warnOn = false;
       core = online || !enabled ? null : localCore(); pl.id = me; pl.life = 0; pl.gx = null;
       if (dom) { dom.root.style.display = enabled ? '' : 'none'; for (const k of Object.keys(dom.vals)) delete dom.vals[k]; dom.blind.style.opacity = dom.smoke.style.opacity = dom.stun.style.opacity = dom.use.style.opacity = dom.hot.style.opacity = dom.warn.style.opacity = '0'; }
       const pick = D.cleanLoadout(profile.data.gx); for (const k of ['L', 'T', 'M']) { slots[k].id = pick[k]; slots[k].n = ITEMS[pick[k]].kind === 'weapon' ? 0 : ITEMS[pick[k]].carry; }
@@ -522,7 +598,7 @@ export function createGear(c) {
     onSpawn() {
       if (!enabled) return;
       const pick = D.cleanLoadout(profile.data.gx); for (const k of ['L', 'T', 'M']) { slots[k].id = pick[k]; slots[k].n = ITEMS[pick[k]].kind === 'weapon' ? 0 : ITEMS[pick[k]].carry; }
-      use = null; fxs.blind = fxs.stun = fxs.boost = fxs.after = fxs.hot = 0;
+      use = null; useNext = 0; fxs.blind = fxs.stun = fxs.boost = fxs.after = fxs.hot = 0;
       if (online) send({ a: 'load', s: pick }); else { pl.life++; pl.status = 'alive'; pl.gx = null; pl.maxHp = player.maxHp; pl.maxArmor = player.maxArmor; core.msg(pl, { a: 'load', s: pick }); }
       paintSlots();
     },

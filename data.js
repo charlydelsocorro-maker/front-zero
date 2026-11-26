@@ -88,9 +88,13 @@ export const RANKS=['Recrue','Soldat','Caporal','Sergent','Adjudant','Lieutenant
 export const MODES=[
  {id:'ffa',teams:false,solo:true,online:true,name:'Match à mort',desc:'Chacun pour soi. Le premier à 20 éliminations gagne.'},
  {id:'tdm',teams:true,solo:true,online:true,name:'Équipes',desc:'Deux équipes. La première à 40 éliminations gagne.'},
- {id:'dom',teams:true,solo:true,online:true,name:'Domination',desc:'Capturez et tenez trois zones pour marquer des points.'},
+ {id:'dom',teams:true,solo:true,online:true,name:'Domination',desc:'Capture et tiens trois zones pour marquer des points.'},
  {id:'bomb',teams:true,solo:true,online:true,name:'Bombe',desc:'Les attaquants posent la bombe, les défenseurs la désamorcent. Pas de réapparition pendant la manche.'},
- {id:'zombie',teams:false,coop:true,solo:true,online:true,name:'Zombies',desc:'Survivez à des vagues de plus en plus dures.'},
+ {id:'zombie',teams:false,coop:true,solo:true,online:true,name:'Zombies',desc:'Survis à des vagues de plus en plus dures.'},
  {id:'zone',teams:false,solo:true,online:true,name:'Zone',desc:'Une arme de poing, des caisses à fouiller, une zone qui se referme. Le dernier en vie gagne.'},
+ // Zone in squads (zone-squads.js): the engine and the server play them as 'zone' with a squad size; the id only names the choice
+ {id:'zone2',squad:2,teams:false,solo:true,online:true,name:'Zone Duo',desc:'La Zone en équipes de deux. À terre, ton coéquipier peut te relever. La dernière équipe debout gagne.'},
+ {id:'zone3',squad:3,teams:false,solo:true,online:true,name:'Zone Trio',desc:'La Zone en équipes de trois. À terre, un coéquipier peut te relever. La dernière équipe debout gagne.'},
+ {id:'zone4',squad:4,teams:false,solo:true,online:true,name:'Zone Quatuor',desc:'La Zone en équipes de quatre. À terre, un coéquipier peut te relever. La dernière équipe debout gagne.'},
 ];
 export const byId=(list,id)=>list.find(x=>x.id===id);

@@ -14,7 +14,7 @@ const TX = {
   claim: ['{n} à récupérer', '{n} to claim', '{n} por recoger', '{n} abholbereit', '{n} por recolher', '{n} da riscattare'],
 };
 /* the picture behind each mode card (map-shots/) */
-const MODE_SHOT = { ffa: 'depot', tdm: 'vieille-ville', dom: 'bunker', bomb: 'port', zombie: 'noirval', zone: 'valferrade' };
+const MODE_SHOT = { ffa: 'depot', tdm: 'vieille-ville', dom: 'bunker', bomb: 'port', zombie: 'noirval', zone: 'valferrade', zone2: 'valferrade', zone3: 'valferrade', zone4: 'valferrade' };       // Zone Duo / Trio / Quatuor: the Zone picture
 
 const CSS = (u) => `
 html.fz2ui .fzm,html.fz2ui .fzf,html.fz2ui .fzs,html.fz2ui .fzp{--hair:rgba(236,226,198,.17);--hair2:rgba(236,226,198,.36);--cut:12px;--tick:22px}

@@ -17,7 +17,7 @@ const L = {
   muted: ['SON COUPÉ', 'SOUND OFF', 'SONIDO APAGADO', 'TON AUS', 'SOM DESLIGADO', 'AUDIO DISATTIVATO'],
   unmuted: ['SON ACTIVÉ', 'SOUND ON', 'SONIDO ACTIVADO', 'TON AN', 'SOM LIGADO', 'AUDIO ATTIVO'],
   noLock: ['Verrouillage impossible ici : flèches ou bords de l’écran pour tourner.', 'Pointer lock unavailable here: use the arrow keys or screen edges to turn.', 'Bloqueo imposible aquí: usa las flechas o los bordes de la pantalla para girar.', 'Mauszeiger kann hier nicht gesperrt werden: Pfeiltasten oder Bildschirmränder zum Drehen.', 'Bloqueio impossível aqui: usa as setas ou as margens do ecrã para rodar.', 'Blocco impossibile qui: usa le frecce o i bordi dello schermo per ruotare.'],
-  you: ['VOUS', 'YOU', 'TÚ', 'DU', 'TU', 'TU'],
+  you: ['TOI', 'YOU', 'TÚ', 'DU', 'TU', 'TU'],
   start: ['DÉPLOYER', 'DEPLOY', 'DESPLEGAR', 'EINSATZ', 'DESTACAR', 'SCHIERA'],
   map: ['Carte', 'Map', 'Mapa', 'Karte', 'Mapa', 'Mappa'],
   eliminations: ['ÉLIMINATIONS', 'KILLS', 'BAJAS', 'KILLS', 'ABATES', 'UCCISIONI'],
@@ -203,7 +203,7 @@ export function createHud(root, { settings, i18n, onResume, onQuit }) {
         v3.applyMatrix4(camera.matrixWorldInverse); const behind = v3.z > -0.1; v3.applyMatrix4(camera.projectionMatrix);
         let x = v3.x, y = v3.y;
         if (behind) { if (m.small) { sw(k.d, 'display', 'none'); continue; } x = -x; y = -1; const s = Math.max(Math.abs(x), 0.001); if (s < 1) x = x / s; }
-        if (m.small && (Math.abs(x) > 1 || Math.abs(y) > 1 || dist > 70)) { sw(k.d, 'display', 'none'); continue; }
+        if (m.small && (Math.abs(x) > 1 || Math.abs(y) > 1 || dist > 120)) { sw(k.d, 'display', 'none'); continue; }       // ally tags out to 120 m: past the bots' longest sight (85 m x 1.35 on a shooter); outfits carry no team colour
         x = Math.max(-0.94, Math.min(0.94, x)); y = Math.max(-0.86, Math.min(0.86, y));
         const sx = Math.round((x * 0.5 + 0.5) * w), sy = Math.round((-y * 0.5 + 0.5) * h);
         sw(k.d, 'display', ''); if (k.sx !== sx || k.sy !== sy) { k.sx = sx; k.sy = sy; k.d.style.transform = `translate(${sx}px,${sy}px)`; }
@@ -215,7 +215,7 @@ export function createHud(root, { settings, i18n, onResume, onQuit }) {
       const s = 170; mapS = size; mapK = s / (size * 2 + 2.4); mapBg = document.createElement('canvas'); mapBg.width = mapBg.height = s;
       const m = mapBg.getContext('2d'), X = v => (v + size + 1.2) * mapK;
       m.fillStyle = 'rgba(216,201,163,.28)';
-      for (const c of solids) { if (c.prop || c.mm === 0 || (c.mm !== 1 && c.y0 > 0.6) || c.y1 - c.y0 < 0.7 || (c.x1 - c.x0 > size * 1.6 && c.z1 - c.z0 > size * 1.6)) continue; m.fillRect(X(c.x0), X(c.z0), Math.max(1, (c.x1 - c.x0) * mapK), Math.max(1, (c.z1 - c.z0) * mapK)); }
+      for (const c of solids) { if (c.prop || c.y1 < -5 || c.mm === 0 || (c.mm !== 1 && c.y0 > 0.6) || c.y1 - c.y0 < 0.7 || (c.x1 - c.x0 > size * 1.6 && c.z1 - c.z0 > size * 1.6)) continue; m.fillRect(X(c.x0), X(c.z0), Math.max(1, (c.x1 - c.x0) * mapK), Math.max(1, (c.z1 - c.z0) * mapK)); }
     },
     /** Minimap: actors (typed by the callback), markers and the player arrow. */
     drawMap(player, actors, classify) {

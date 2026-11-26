@@ -167,7 +167,7 @@ export function* maraisSteps(Kit) {
       m = t; } } };
   yield* wallRuns('x'); yield* wallRuns('z');
   /* margelle de pierre là où une fosse borde la lagune : le mur monte au-dessus de l'eau */
-  { A.begin('ar_ashlar'); for (const [ax, w, sd, u0, u1, hi] of KERB) { const ua = ax === 'z' ? u0 + .021 : u0, ub = ax === 'z' ? u1 - .021 : u1, ca = Math.min(w - sd * .02, w + sd * .16), cb = Math.max(w - sd * .02, w + sd * .16), y0k = hi - .12, y1k = WS + .08; A.stoneTint(.86, .98); if (ax === 'x') { A.box(ua, ub, y0k, y1k, ca, cb, .004); sol(ua, ub, y0k, y1k, ca, cb).mm = 0; } else { A.box(ca, cb, y0k, y1k, ua, ub, .004); sol(ca, cb, y0k, y1k, ua, ub).mm = 0; } } A.end(); }
+  { A.begin('ar_ashlar'); for (const [ax, w, sd, u0, u1, hi] of KERB) { const ua = ax === 'z' ? u0 + .021 : u0, ub = ax === 'z' ? u1 - .021 : u1, ca = Math.min(w + sd * .005, w + sd * .16), cb = Math.max(w + sd * .005, w + sd * .16) /* [stairs2] la margelle ne déborde plus de 2 cm dans la fosse (au-dessus du bord de la volée du quai : tête qui cogne, descente qui restait dessus) */, y0k = hi - .12, y1k = WS + .08; A.stoneTint(.86, .98); if (ax === 'x') { A.box(ua, ub, y0k, y1k, ca, cb, .004); sol(ua, ub, y0k, y1k, ca, cb).mm = 0; } else { A.box(ca, cb, y0k, y1k, ua, ub, .004); sol(ca, cb, y0k, y1k, ua, ub).mm = 0; } } A.end(); }
   { /* sols et plafonds des aqueducs et des fosses */ const bins = new Map(), bin = (key, m, h, i, j, ex) => { if (!bins.has(key)) bins.set(key, { m, h, cells: [], ...ex }); bins.get(key).cells.push(i, j); };
     for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const c = j * N + i, ti = Math.floor(i / 16), tj = Math.floor(j / 16); if (V[c] > 0) { bin('f|' + ti + '|' + tj, 'ar_cobble', .012, i, j, {}); bin('c|' + ti + '|' + tj, 'ar_plaster', V[c], i, j, { ceil: 1 }); } else if (B[c] === 5) bin('s|' + H[c] + '|' + ti + '|' + tj, 'ar_cobble', H[c] + .012, i, j, {}); }
     let nb = 0; for (const b of bins.values()) { if (!(++nb & 3)) yield; A.begin(b.m); { let i0 = 1e9, j0 = 1e9; for (let q = 0; q < b.cells.length; q += 2) { i0 = Math.min(i0, b.cells[q]); j0 = Math.min(j0, b.cells[q + 1]); } const mk = new Uint8Array(256); for (let q = 0; q < b.cells.length; q += 2) mk[(b.cells[q + 1] - j0) * 16 + b.cells[q] - i0] = 1;
@@ -189,10 +189,10 @@ export function* maraisSteps(Kit) {
     for (const x of [-15.13, -11.87]) { let g = 9; for (let z = 0; z <= 9; z += .25) g = Math.min(g, colAt(x, z), colAt(x + .15, z), colAt(x - .15, z)); g -= .08; A.parapet('z', x, 0, 9, g, BASE + .9 - g, .3, { m: 'ar_brick' }); } }
   /* garde-corps métalliques autour des fosses */
   const rail = (ax, c, a, b, y, H2 = 1) => { if (b - a < .2) return; A.begin('ar_iron'); A.tint(.36, .38, .36); const n = Math.max(1, Math.round((b - a) / 1.2)); for (let i = 0; i <= n; i++) { const u = a + (b - a) * i / n; ax === 'x' ? A.rod(u, y, c, u, y + H2, c, .025, 5) : A.rod(c, y, u, c, y + H2, u, .025, 5); } for (const h of [H2, H2 * .5]) ax === 'x' ? A.rod(a, y + h, c, b, y + h, c, .022, 5) : A.rod(c, y + h, a, c, y + h, b, .022, 5); A.end(); ax === 'x' ? k.col(a, b, y + .2, y + H2 + .02, c - .04, c + .04, 'metal') : k.col(c - .04, c + .04, y + .2, y + H2 + .02, a, b, 'metal'); };
-  rail('z', -43.9, -43, -37, EHF); rail('x', -37.1, -47, -44, EHF);
-  rail('z', -47.1, 31, 38.4, QY); rail('z', -43.9, 31, 38.4, QY); rail('x', 30.92, -47, -44, QY);
-  for (const x of [9.9, 13.1]) rail('z', x, 44, 51.4, hg(x, 48) > QY - .2 ? QY : BASE); rail('x', 44.9, 10, 13, BASE);
-  for (const z of [-37.1, -33.9]) rail('x', z, 42, 48.6, BASE); rail('z', 41.9, -37, -34, BASE);
+  /* [stairs2] garde-corps au ras des bords des trémies (ils laissaient 6 cm de sol entre la trémie et la lisse : la descente le long du garde-corps restait sur cette lame) ; côté ouest de la fosse de l'usine, lisse sur la banquette de 50 cm le long du bâtiment */ rail('z', -43.96, -43, -37, EHF); rail('x', -36.96, -47, -44, EHF); rail('z', -47.04, -43, -36.92, EHF);
+  rail('z', -47.04, 31, 38.4, QY); rail('z', -43.96, 31, 38.4, QY); rail('x', 30.96, -47, -44, QY);
+  for (const x of [9.96, 13.04]) rail('z', x, 44, 51.4, hg(x, 48) > QY - .2 ? QY : BASE); rail('x', 44.9, 10, 13, BASE);
+  for (const z of [-37.04, -33.96]) rail('x', z, 42, 48.6, BASE); rail('z', 41.96, -37, -34, BASE);
   /* abri de tôle sur la sortie est */
   { A.begin('ar_wood'); A.tint(.4, .33, .27); for (const [x, z] of [[43.2, -37.4], [48.8, -37.4], [43.2, -33.6], [48.8, -33.6]]) { A.log(x, BASE, z, x, BASE + 2.6, z, .08, { seg: 6, n: 1 }); k.disc(x, z, .09, BASE, BASE + 2.6, 'wood'); } A.end(); A.roof(42.8, 49.2, -37.8, -33.2, BASE + 2.6, 'x', { pitch: .25, m: 'ar_tin', gm: 'ar_plank', over: .3, gable: false }); }
   yield;
@@ -237,7 +237,7 @@ export function* maraisSteps(Kit) {
     /* galerie d'acier à hauteur de la digue, escalier vers la salle */
     { const gz0 = z0 + T, gz1 = -42.6; sol(x0 + T, x1 - T, LV - .15, LV, gz0, gz1, 'metal'); sol(-36.5, x1 - T, LV - .15, LV, gz1, -40.8, 'metal');
       A.begin('ar_iron'); A.tint(.42, .44, .42); A.box(x0 + T, x1 - T, LV - .12, LV, gz0, gz1, 0); A.box(-36.5, x1 - T, LV - .12, LV, gz1, -40.8, 0); A.tint(.3, .31, .3); for (let x = x0 + 1.5; x < x1 - .5; x += 2.4) { A.box(x - .06, x + .06, LV - .5, LV - .12, gz0, gz1 - .05); A.rod(x, LV - .45, gz1 - .1, x, LV - 1.6, gz0 + .02, .04, 5); } A.end();
-      rail('x', gz1 + .04, x0 + T, -36.5, LV); rail('x', -40.84, -36.5, x1 - T, LV);
+      rail('x', gz1 - .04, x0 + T, -36.5, LV) /* [stairs2] sur la galerie (z < -42,6) : posé côté volée, il passait à 1,56 m au-dessus du bord des marches */; rail('x', -40.84, -36.5, x1 - T, LV);
       A.stairs(-42.8, -41.8, 1.6, 'x+', y, LV, { walls: false, rail: 1, m: 'ar_iron' }); }
     yield;
     /* deux pompes : socle, volute, moteur, refoulement plongeant dans le sol */
@@ -279,7 +279,7 @@ export function* maraisSteps(Kit) {
   yield;
 
   /* ---------- 9. digue : chemin de crête, bornes, poteaux télégraphiques, escaliers de bois, poste militaire, tour de guet ---------- */
-  for (let x = -62; x <= 62; x += 7) { for (const sd of [-1, 1]) { const z = zc(x) + sd * 3.0; if (x > 43 && x < 49) continue; if (x > -43 && x < -36 && sd > 0) continue; A.begin('ar_ashlar'); A.stoneTint(.5, .62); A.box(x - .14, x + .14, LV - .05, LV + .62, z - .14, z + .14, .01); A.tint(.46); A.box(x - .17, x + .17, LV + .55, LV + .66, z - .17, z + .17, .006); A.end(); sol(x - .15, x + .15, LV, LV + .66, z - .15, z + .15).mm = 0; } }
+  for (let x = -62; x <= 62; x += 7) { for (const sd of [-1, 1]) { const z = zc(x) + sd * 3.0; if (x > 43 && x < 49) continue; if (x > -43 && x < -36 && sd > 0) continue; const ls = LEVST.find(q => x > q.r[0] - .6 && x < q.r[1] + .6 && z > q.r[2] - .6 && z < q.r[3] + .6), bx = ls ? ls.x + 2.2 : x, bz = ls ? zc(bx) + sd * 3.0 : z; /* [stairs2] borne déplacée à côté de l'arrivée des escaliers de la digue (elle mordait sur la dernière marche) */ A.begin('ar_ashlar'); A.stoneTint(.5, .62); A.box(bx - .14, bx + .14, LV - .05, LV + .62, bz - .14, bz + .14, .01); A.tint(.46); A.box(bx - .17, bx + .17, LV + .55, LV + .66, bz - .17, bz + .17, .006); A.end(); sol(bx - .15, bx + .15, LV, LV + .66, bz - .15, bz + .15).mm = 0; } }
   { const poles = []; for (let x = -58; x <= 58; x += 16) poles.push([x, zc(x) - 2.6]); A.begin('ar_wood'); A.tint(.36, .3, .25); for (const [x, z] of poles) { A.log(x, LV, z, x + .05, LV + 7.2, z, .11, { seg: 7, n: 2 }); A.log(x - .7, LV + 6.8, z, x + .7, LV + 6.8, z, .06, { seg: 5, n: 1 }); } A.end(); for (const [x, z] of poles) k.disc(x, z, .12, LV, LV + 7.2, 'wood');
     for (let i = 0; i < poles.length - 1; i++) if (!(poles[i][0] < 50 && poles[i + 1][0] > 42)) for (const o of [-.55, .55]) A.cable(poles[i][0] + o, LV + 6.86, poles[i][1], poles[i + 1][0] + o, LV + 6.86, poles[i + 1][1], .5); }
   /* poste militaire : nids de sacs de sable sur la crête, baraque radio et mât sur l'estran, caisses et fûts */
@@ -408,7 +408,7 @@ export function* maraisSteps(Kit) {
     /* quai de bois sur le chenal, bittes et sacs */
     for (const [a, b, c, d] of [[-34, -27.6, 31.6, 34]]) { let sx = a; while (sx < b - .5 && Math.max(colAt(sx + .25, c + .1), colAt(sx + .25, d - .1)) > y - .42) sx += .25; sx += .25; sol(a, b, y - .22, y, c, d, 'wood'); A.rbox('ar_ashlar', a, sx, y - 1.2, y - .07, c, d, { b: .03, solid: true }); A.begin('ar_plank'); for (let x = a; x < b - .01; x += .24) { const v = A.rnd(.48, .66); A.tint(v, v * .93, v * .84); A.box(x, Math.min(b, x + .24), y - .07, y, c, d, 0); } A.end(); A.begin('ar_wood'); A.tint(.36, .3, .24); for (let x = a + 1.2; x < b; x += 2.2) for (const z of [c + .2, d - .2]) { A.log(x, WB - .3, z, x, y - .07, z, .12, { seg: 6, n: 1 }); k.disc(x, z, .13, WB - .3, y - .2, 'wood'); } A.end(); }
     for (const [x, z] of [[-28.2, 31.9], [-28.2, 33.7]]) { A.begin('ar_iron'); A.tint(.26); A.log(x, y, z, x, y + .45, z, .1, { seg: 8, n: 1, taper: 0, wob: 0 }); A.end(); k.disc(x, z, .11, y, y + .45, 'metal'); }
-    A.begin('ar_cloth'); for (const [x, z, r] of [[-31.6, 33.2, 0], [-31, 33.3, .4], [-31.3, 32.8, .2]]) { A.tint(.82, .8, .74); A.blob(x, y + .2, z, .32, .2); void r; } A.end(); sol(-32, -30.6, y, y + .4, 32.5, 33.7, 'sand');
+    A.begin('ar_cloth'); /* trois sacs de toile serrés côte à côte (blobs pâles à facettes avant, TEXTURE QA) */for (const [x, z, r] of [[-31.72, 33.08, 1.47], [-31.29, 33.14, 1.66], [-30.87, 33.02, 1.52]]) A.sack(x, y - .01, z, .7, .42, .3, r); A.end(); sol(-32, -30.6, y, y + .4, 32.5, 33.7, 'sand');
   }
   yield;
 
@@ -452,12 +452,12 @@ export function* maraisSteps(Kit) {
     A.roof(x0, x1, z0, z1, roofY, x1 - x0 >= z1 - z0 ? 'x' : 'z', { pitch: .55, m: h.roof, gm: 'ar_plank', gt: .8, over: .45 });
     /* mobilier : table, banc, filets, tonneau, poêle et son tuyau */
     { const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2; A.begin('ar_wood'); A.tint(.5, .4, .3); A.box(cx - .7, cx + .7, y + .72, y + .78, cz - .4, cz + .4); for (const [a, b] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) A.box(cx + a * .62 - .04, cx + a * .62 + .04, y, y + .72, cz + b * .32 - .04, cz + b * .32 + .04); A.end(); sol(cx - .7, cx + .7, y, y + .78, cz - .4, cz + .4, 'wood');
-      A.begin('ar_cloth'); A.tint(.42, .46, .4); A.blob(x0 + .8, y + .25, z1 - .8, .55, .28); A.blob(x0 + 1.3, y + .2, z1 - .7, .45, .22); A.end(); sol(x0 + .3, x0 + 1.8, y, y + .45, z1 - 1.3, z1 - .25, 'sand');
+      A.begin('ar_cloth'); /* deux sacs de toile (TEXTURE QA) */A.sack(x0 + .75, y - .01, z1 - .78, .95, .5, .34, 1.45, [.31, .32, .25]); A.sack(x0 + 1.35, y - .01, z1 - .72, .8, .44, .3, 1.75); A.end(); sol(x0 + .3, x0 + 1.8, y, y + .45, z1 - 1.3, z1 - .25, 'sand');
       A.cask(x1 - .65, z0 + .65, y, .32, .82); A.begin('ar_iron'); A.tint(.22); A.box(x1 - .95, x1 - .35, y, y + .8, z1 - .95, z1 - .35); A.rod(x1 - .65, y + .8, z1 - .65, x1 - .65, roofY + 1.6, z1 - .65, .07, 6); A.end(); sol(x1 - .95, x1 - .35, y, y + .8, z1 - .95, z1 - .35, 'metal'); k.disc(x1 - .65, z1 - .65, .08, y + .8, roofY, 'metal'); }
   }
   /* plate-forme centrale (site A) : auvent sur poteaux, potence, caisses et tonneaux pour se couvrir */
   { const y = DK; A.begin('ar_wood'); A.tint(.38, .31, .25); for (const [x, z] of [[27.4, 30.4], [31.4, 30.4], [27.4, 33.4], [31.4, 33.4]]) { A.log(x, y, z, x, y + 2.6, z, .09, { seg: 6, n: 1 }); k.disc(x, z, .1, y, y + 2.6, 'wood'); } A.end(); A.roof(27.2, 31.6, 30.2, 33.6, y + 2.6, 'x', { pitch: .3, m: 'ar_shingle', gm: 'ar_plank', over: .3, gable: false });
-    for (const [x, z, s] of [[32.6, 31, .9], [32.6, 31.84, .8], [28.4, 35.2, .8], [33.2, 34.8, .7]]) A.crate(x, z, y, s); A.crate(32.62, 31.02, y + .9, .7); for (const [x, z] of [[29.7, 35.3], [30.75, 35.45]]) A.cask(x, z, y, .34, .9);
+    for (const [x, z, s] of [[32.6, 31, .9], [32.6, 31.84, .8], [28.4, 35.2, .8], [33.2, 34.8, .7]]) A.crate(x, z, y, s); A.crate(32.62, 31.02, y + .9, .7); for (const [x, z] of [[31.5, 35.5], [30.75, 35.45]] /* [stairs2] tonneau et séchoir hors de l'arrivée de l'échelle de meunier (x 29 ... 29,8) */) A.cask(x, z, y, .34, .9);
     A.begin('ar_wood'); A.tint(.4, .32, .26); A.log(33.4, y, 35.4, 33.4, y + 3.4, 35.4, .1, { seg: 6, n: 1 }); A.log(33.4, y + 3.2, 35.4, 31.6, y + 3.6, 35.4, .07, { seg: 6, n: 1 }); A.end(); k.disc(33.4, 35.4, .11, y, y + 3.4, 'wood'); A.cable(31.7, y + 3.55, 35.4, 31.7, y + 1.4, 35.42, .02); }
   /* lanternes sur poteaux le long des passerelles, cordes à linge */
   for (const [x, z] of [[20, 28.4], [34.9, 36], [45, 43], [10, 35], [15.5, 20]]) { A.begin('ar_wood'); A.tint(.38, .3, .24); A.log(x + .75, DK, z + .75, x + .75, DK + 2.6, z + .75, .06, { seg: 5, n: 1 }); A.log(x + .75, DK + 2.5, z + .75, x + .35, DK + 2.5, z + .75, .035, { seg: 5, n: 1 }); A.end(); k.disc(x + .75, z + .75, .07, DK, DK + 2.6, 'wood'); lantern(x + .37, DK + 2.28, z + .75); }
@@ -519,7 +519,7 @@ export function* maraisSteps(Kit) {
     hWall('x', z0 + T / 2, x0, x1, y - .6, top, hl('zn', x0, x1), { T, rgb, caps: true }); hWall('x', z1 - T / 2, x0, x1, y - .6, top, hl('zp', x0, x1), { T, rgb, caps: true }); hWall('z', x0 + T / 2, z0 + T, z1 - T, y - .6, top, hl('xn', z0, z1), { T, rgb }); hWall('z', x1 - T / 2, z0 + T, z1 - T, y - .6, top, hl('xp', z0, z1), { T, rgb });
     floorRects([[x0 + T, x1 - T, z0 + T, z1 - T]], y + .006, 'ar_plank', [.5, .62]); A.begin('ar_plank'); A.tint(.46, .4, .34); A.quad(x0 + T, top - .02, z0 + T, x1 - T, top - .02, z0 + T, x1 - T, top - .02, z1 - T, x0 + T, top - .02, z1 - T); A.end();
     A.roof(x0, x1, z0, z1, top, x1 - x0 >= z1 - z0 ? 'x' : 'z', { pitch: .32, m: 'ar_tin', gm: 'ar_plank', over: .35 });
-    A.crate(side === 'xn' ? x1 - .6 : x0 + .6, side === 'zn' ? z1 - .6 : z0 + .6, y, .7); const nx0 = side === 'xp' ? x0 + .25 : x1 - 1.15, nz0 = side === 'zp' ? z0 + .25 : z1 - 1.15; A.begin('ar_cloth'); A.tint(.4, .44, .36); A.blob(nx0 + .45, y + .22, nz0 + .45, .45, .24); A.end(); sol(nx0, nx0 + .9, y, y + .45, nz0, nz0 + .9, 'sand').mm = 0; }
+    A.crate(side === 'xn' ? x1 - .6 : x0 + .6, side === 'zn' ? z1 - .6 : z0 + .6, y, .7); const nx0 = side === 'xp' ? x0 + .25 : x1 - 1.15, nz0 = side === 'zp' ? z0 + .25 : z1 - 1.15; A.begin('ar_cloth'); /* sac de toile (TEXTURE QA) */A.sack(nx0 + .45, y - .01, nz0 + .45, .76, .46, .32, .5); A.end(); sol(nx0, nx0 + .9, y, y + .45, nz0, nz0 + .9, 'sand').mm = 0; }
   yield;
   /* grappes de couverts dans les prés ouverts (troncs, barques retournées, bottes, caisses, fûts, séchoirs, nasses) */
   yield;
@@ -527,7 +527,7 @@ export function* maraisSteps(Kit) {
   skiff(38, -22, .5, hg(38, -22)); skiff(-56, -19, 1.9, hg(-56, -19)); skiff(54, 3, .2, hg(54, 3)); skiff(-24, 19.5, -.6, hg(-24, 19.5)); skiff(20, -38.6, .05, hg(20, -38.6));
   yield;
   bundles(-12, -35, 'x'); bundles(-58.5, -23, 'z'); bundles(-8, 51.5, 'x'); bundles(57, -11, 'z'); bundles(-30, -41.5, 'x');
-  netRack(40.5, -26, .3); netRack(-28, 48.5, 1.2); netRack(-59, -31.5, 0); netRack(28.3, 35.4, 0, DK); netRack(58.5, 16, 1.57);
+  netRack(40.5, -26, .3); netRack(-28, 48.5, 1.2); netRack(-59, -31.5, 0); netRack(28.6, 35.4, 0, DK); netRack(58.5, 16, 1.57);
   for (const [x, z] of [[41, -24.3], [42.4, -23.8], [56.2, 9.2], [57.1, 8.8], [-61, -33.6], [-14, 21], [-10.5, 44]]) trap(x, z);
   for (const [x, z, s] of [[-17.5, 27, .9], [-16.72, 27.2, .7], [-18, 28.1, .8], [16, -13.5, .9], [17.14, -13.8, .7], [58.5, -14, .8], [-50, 18.5, .9], [-14.5, -36, .8], [-61, -39.5, .8], [2.5, 24.5, .8]]) A.crate(x, z, gy(x, z, s / 2), s);
   for (const [x, z] of [[-16.2, 26], [2, 26], [-49, 19.3], [16.8, -12.4], [-13.6, -36.6]]) A.cask(x, z, gy(x, z, .34), .34, .9);

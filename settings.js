@@ -11,7 +11,7 @@ const DEFAULT_KEYS = {
   /* Pas de T par défaut : accroupi, Ctrl+T ouvrirait un onglet et le navigateur interdit de l'empêcher. */
   fire: 'Mouse0', aim: 'Mouse2', reload: 'KeyR', grenade: 'KeyG', tactical: 'KeyQ', medical: 'KeyX', flashlight: 'KeyL',
   weapon1: 'Digit1', weapon2: 'Digit2', nextWeapon: 'WheelDown',
-  interact: 'KeyE', inspect: 'KeyH', scoreboard: 'Tab',
+  interact: 'KeyE', inspect: 'KeyH', scoreboard: 'Tab', ping: 'Mouse1',       /* ping : signaler un endroit à son équipe (Zone en équipes, zone-squads.js) */
   pause: 'KeyP', toggleMute: 'F8', toggleFps: 'F9',
 };
 const ACTIONS = Object.keys(DEFAULT_KEYS);
@@ -25,6 +25,7 @@ const LOCAL_T = {
   'action.tactical': ['Équipement tactique', 'Tactical equipment', 'Equipo táctico', 'Taktische Ausrüstung', 'Equipamento tático', 'Equipaggiamento tattico'],
   'action.medical': ['Soin / médical', 'Medical item', 'Objeto médico', 'Sanitätsobjekt', 'Item médico', 'Oggetto medico'],
   'action.flashlight': ['Lampe torche', 'Flashlight', 'Linterna', 'Taschenlampe', 'Lanterna', 'Torcia'],
+  'action.ping': ['Signaler (équipe)', 'Ping (squad)', 'Marcar (equipo)', 'Markieren (Team)', 'Marcar (equipa)', 'Segnala (squadra)'],
   'action.inspect': ['Inspecter l’arme', 'Inspect weapon', 'Inspeccionar arma', 'Waffe prüfen', 'Inspecionar arma', 'Ispeziona arma'],
   'preset.mobile': ['Mobile', 'Mobile', 'Móvil', 'Mobil', 'Telemóvel', 'Mobile'],
   /* meilleur moment (replay-rec.js) */
@@ -39,7 +40,7 @@ const LOCAL_T = {
 const EXT_PARTS = [];
 const KEY_GROUPS = [
   ['group.movement', ['forward', 'back', 'left', 'right', 'jump', 'slide', 'crouch', 'sprint']],
-  ['group.combat', ['fire', 'aim', 'reload', ...(HAS_GEAR ? ['grenade'] : []), 'tactical', 'medical', 'interact', 'flashlight', 'inspect']],
+  ['group.combat', ['fire', 'aim', 'reload', ...(HAS_GEAR ? ['grenade'] : []), 'tactical', 'medical', 'interact', 'ping', 'flashlight', 'inspect']],
   ['group.weapons', ['weapon1', 'weapon2', 'nextWeapon']],
   ['group.interface', ['scoreboard', 'pause', 'toggleMute', 'toggleFps']],
 ];

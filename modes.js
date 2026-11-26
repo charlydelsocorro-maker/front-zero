@@ -11,27 +11,27 @@ const LOCAL = {
   'l.player': ['Joueur', 'Player', 'Jugador', 'Spieler', 'Jogador', 'Giocatore'],
   'l.objFfa': ['Premier à {n} éliminations', 'First to {n} eliminations', 'Primero en llegar a {n} eliminaciones', 'Zuerst {n} Eliminierungen', 'Primeiro a chegar às {n} eliminações', 'Primo a {n} eliminazioni'],
   'l.objTdm': ['Première équipe à {n} éliminations', 'First team to {n} eliminations', 'Primer equipo en llegar a {n} eliminaciones', 'Erstes Team mit {n} Eliminierungen', 'Primeira equipa a chegar às {n} eliminações', 'Prima squadra a {n} eliminazioni'],
-  'l.objDom': ['Capturez et tenez les points : {n} pour gagner', 'Capture and hold the points: {n} to win', 'Captura y mantén los puntos: {n} para ganar', 'Punkte erobern und halten: {n} zum Sieg', 'Captura e mantém os pontos: {n} para vencer', 'Conquista e mantieni i punti: {n} per vincere'],
+  'l.objDom': ['Capture et tiens les points : {n} pour gagner', 'Capture and hold the points: {n} to win', 'Captura y mantén los puntos: {n} para ganar', 'Punkte erobern und halten: {n} zum Sieg', 'Captura e mantém os pontos: {n} para vencer', 'Conquista e mantieni i punti: {n} per vincere'],
   'l.held': ['Points tenus : {n}/3', 'Points held: {n}/3', 'Puntos en tu poder: {n}/3', 'Gehaltene Punkte: {n}/3', 'Pontos controlados: {n}/3', 'Punti controllati: {n}/3'],
   'l.contested': ['Point {point} contesté', 'Point {point} contested', 'Punto {point} disputado', 'Punkt {point} umkämpft', 'Ponto {point} disputado', 'Punto {point} conteso'],
   'l.kill': ['Élimination', 'Elimination', 'Eliminación', 'Eliminierung', 'Eliminação', 'Eliminazione'],
   'l.capture': ['Capture', 'Capture', 'Captura', 'Eroberung', 'Captura', 'Conquista'],
-  'l.defend': ['Défendez les sites A et B', 'Defend sites A and B', 'Defiende las zonas A y B', 'Verteidige die Ziele A und B', 'Defende os locais A e B', 'Difendi i siti A e B'],
-  'l.escort': ['Escortez {name}, porteur de la bombe', 'Escort {name}, the bomb carrier', 'Escolta a {name}, que lleva la bomba', 'Eskortiere {name}, den Bombenträger', 'Escolta {name}, que leva a bomba', 'Scorta {name}, che porta la bomba'],
-  'l.carrier': ['Vous portez la bombe', 'You carry the bomb', 'Llevas la bomba', 'Du trägst die Bombe', 'Tens a bomba', 'Hai la bomba'],
-  'l.getBomb': ['Récupérez la bombe', 'Recover the bomb', 'Recupera la bomba', 'Hol die Bombe zurück', 'Recupera a bomba', 'Recupera la bomba'],
+  'l.defend': ['Défends les sites A et B', 'Defend sites A and B', 'Defiende las zonas A y B', 'Verteidige die Ziele A und B', 'Defende os locais A e B', 'Difendi i siti A e B'],
+  'l.escort': ['Escorte {name}, porteur de la bombe', 'Escort {name}, the bomb carrier', 'Escolta a {name}, que lleva la bomba', 'Eskortiere {name}, den Bombenträger', 'Escolta {name}, que leva a bomba', 'Scorta {name}, che porta la bomba'],
+  'l.carrier': ['Tu portes la bombe', 'You carry the bomb', 'Llevas la bomba', 'Du trägst die Bombe', 'Tens a bomba', 'Hai la bomba'],
+  'l.getBomb': ['Récupère la bombe', 'Recover the bomb', 'Recupera la bomba', 'Hol die Bombe zurück', 'Recupera a bomba', 'Recupera la bomba'],
   'l.dropped': ['Bombe au sol', 'Bomb dropped', 'Bomba en el suelo', 'Bombe fallen gelassen', 'Bomba no chão', 'Bomba a terra'],
   'l.picked': ['Bombe récupérée', 'Bomb recovered', 'Bomba recuperada', 'Bombe aufgenommen', 'Bomba recuperada', 'Bomba recuperata'],
-  'l.protect': ['Protégez la bombe', 'Protect the bomb', 'Protege la bomba', 'Beschütze die Bombe', 'Protege a bomba', 'Proteggi la bomba'],
+  'l.protect': ['Protège la bombe', 'Protect the bomb', 'Protege la bomba', 'Beschütze die Bombe', 'Protege a bomba', 'Proteggi la bomba'],
   'l.swap': ['CHANGEMENT DE CAMP', 'SIDES SWAPPED', 'CAMBIO DE BANDO', 'SEITENWECHSEL', 'TROCA DE LADO', 'CAMBIO DI CAMPO'],
   'l.matchPoint': ['BALLE DE MATCH', 'MATCH POINT', 'PUNTO DE PARTIDA', 'MATCHBALL', 'PONTO DE PARTIDA', 'MATCH POINT'],
   'l.elim': ['Équipe adverse éliminée', 'Enemy team eliminated', 'Equipo enemigo eliminado', 'Gegnerteam eliminiert', 'Equipa inimiga eliminada', 'Squadra nemica eliminata'],
-  'l.wiped': ['Votre équipe est éliminée', 'Your team was eliminated', 'Tu equipo ha sido eliminado', 'Dein Team wurde eliminiert', 'A tua equipa foi eliminada', 'La tua squadra è stata eliminata'],
-  'l.prepare': ['Préparez-vous', 'Get ready', 'Prepárate', 'Mach dich bereit', 'Prepara-te', 'Preparati'],
+  'l.wiped': ['Ton équipe est éliminée', 'Your team was eliminated', 'Tu equipo ha sido eliminado', 'Dein Team wurde eliminiert', 'A tua equipa foi eliminada', 'La tua squadra è stata eliminata'],
+  'l.prepare': ['Prépare-toi', 'Get ready', 'Prepárate', 'Mach dich bereit', 'Prepara-te', 'Preparati'],
   'l.allyPlanting': ['{name} pose la bombe', '{name} is planting the bomb', '{name} está colocando la bomba', '{name} legt die Bombe', '{name} está a plantar a bomba', '{name} sta piazzando la bomba'],
   'l.wave': ['VAGUE', 'WAVE', 'OLEADA', 'WELLE', 'VAGA', 'ONDATA'],
   'l.left': ['RESTANTS', 'LEFT', 'RESTANTES', 'ÜBRIG', 'RESTANTES', 'RIMASTI'],
-  'l.survive': ['Survivez aux vagues', 'Survive the waves', 'Sobrevive a las oleadas', 'Überlebe die Wellen', 'Sobrevive às vagas', 'Sopravvivi alle ondate'],
+  'l.survive': ['Survis aux vagues', 'Survive the waves', 'Sobrevive a las oleadas', 'Überlebe die Wellen', 'Sobrevive às vagas', 'Sopravvivi alle ondate'],
   'l.resupply': ['Ravitaillement : santé et munitions', 'Resupply: health and ammo', 'Reabastecimiento: salud y munición', 'Nachschub: Gesundheit und Munition', 'Reabastecimento: vida e munições', 'Rifornimento: salute e munizioni'],
   'l.statWave': ['Vague atteinte', 'Wave reached', 'Oleada alcanzada', 'Erreichte Welle', 'Vaga alcançada', 'Ondata raggiunta'],
   'l.statScore': ['Score', 'Score', 'Puntuación', 'Punkte', 'Pontuação', 'Punteggio'],
@@ -885,7 +885,7 @@ function zombieOffline(c) {
 /* ONLINE: server/server.js is the referee, the mode only mirrors it       */
 /* ====================================================================== */
 
-const teamIdx = v => (v === 'A' ? 0 : v === 'B' ? 1 : null);
+const teamIdx = v => (v === 'A' ? 0 : v === 'B' ? 1 : typeof v === 'string' && /^S\d{1,2}$/.test(v) ? 100 + Number(v.slice(1)) : null);       // 'S1'..: Zone squads (squad-rules.js engineTeam: 101..)
 const teamLetter = i => (i === 0 ? 'A' : i === 1 ? 'B' : null);
 
 function onlineBase(c) {

@@ -43,8 +43,8 @@ html.fzt #hud .fzc-m em s{position:absolute;left:-10px;top:-7px;width:20px;text-
 html.fzt #hud .fzc-m em.e b{left:-6px;top:-6px;width:12px;height:12px;opacity:.85}
 html.fzt #hud .fzc-m em.e s{font-size:9px;color:currentColor}
 /* ---------- minimap ---------- */
-html.fzt #hud .fzm{position:absolute;left:var(--fz-pad);top:var(--fz-pad);width:var(--fz-map);height:var(--fz-map);border-radius:50%;overflow:hidden;box-shadow:0 0 0 1px rgba(0,0,0,.45),0 4px 16px rgba(0,0,0,.32)}
-html.fzt #hud .fzm canvas{position:absolute;left:0;top:0;width:100%;height:100%;border-radius:50%}
+html.fzt #hud .fzmm{position:absolute;left:var(--fz-pad);top:var(--fz-pad);width:var(--fz-map);height:var(--fz-map);border-radius:50%;overflow:hidden;box-shadow:0 0 0 1px rgba(0,0,0,.45),0 4px 16px rgba(0,0,0,.32)}
+html.fzt #hud .fzmm canvas{position:absolute;left:0;top:0;width:100%;height:100%;border-radius:50%}
 html.fzt.fzt-mm:not(.fzt-mmfail) #hud>[data-h="map"]{display:none}
 /* ---------- match card: timer, mode and the two scores, under the minimap ---------- */
 html.fzt #hud [data-h="top"]{left:var(--fz-pad);top:calc(var(--fz-pad) + var(--fz-map) + 10px);transform:none;width:max(var(--fz-map),150px);display:flex;flex-wrap:wrap;align-items:stretch;gap:2px;padding:0;background:none;font-size:var(--fz-body);white-space:nowrap}

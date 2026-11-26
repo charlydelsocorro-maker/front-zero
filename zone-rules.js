@@ -10,6 +10,9 @@
     { w: 2, ids: ['hsr', 'rl'] },
   ];
   const WAIT = [45, 35, 30, 25, 20, 15], SHRINK = [30, 25, 20, 18, 15, 12], RADII = [0.82, 0.58, 0.38, 0.23, 0.13, 0.07], DPS = [2, 4, 7, 11, 16, 24], COLLAPSE = { wait: 8, shrink: 20, dps: 45 };
+  /** Small maps (under 45 m, the bunker): wider late circles, the last one still holds a fight in corridors (bunker: 20.8, 17.2, 14.8, 13.2 m instead of 15.2, 9.2, 7, 4.5).
+   *  Measured on the bunker (passive player, 10 matches): length 88 % of the plan (was 62 %), gas 14 % of deaths (was 37 %). */
+  const SMALL_RADII = [0.52, 0.43, 0.37, 0.33];
   const MED = 50, ARMOR = 50, ARMOR_MIN_CAP = 50, GRACE = 62000;       // GRACE: opening, in ms, during which bots only search crates
   /** Collision box of a crate (half width, half depth, height), handles included. rot = 1 turns it by 90 degrees. */
   const CRATE = { hx: 0.56, hz: 0.36, h: 0.57 };
@@ -29,7 +32,7 @@
     // final point: the anchor nearest the centre out of three random ones, so the end stays in the playable heart of the map
     let F = A[Math.floor(rnd() * A.length)];
     for (let i = 0; i < 2; i++) { const q = A[Math.floor(rnd() * A.length)]; if (Math.hypot(q[0], q[1]) < Math.hypot(F[0], F[1])) F = q; }
-    const R = [size * 1.5]; for (let i = 0; i < n; i++) R.push(Math.max(i === n - 1 ? 4.5 : 7, size * RADII[Math.min(i + (6 - n), RADII.length - 1)]));
+    const R = [size * 1.5]; for (let i = 0; i < n; i++) R.push(size < 45 ? size * SMALL_RADII[Math.min(i, SMALL_RADII.length - 1)] : Math.max(i === n - 1 ? 4.5 : 7, size * RADII[Math.min(i + (6 - n), RADII.length - 1)]));
     // centres are drawn from the last to the first, each circle strictly inside the previous one: the final point is inside them all
     const X = new Array(n + 1), Z = new Array(n + 1); X[n] = F[0]; Z[n] = F[1];
     for (let i = n - 1; i >= 1; i--) {

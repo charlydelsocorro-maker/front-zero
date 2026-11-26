@@ -1563,5 +1563,67 @@
    "ambience",
    "menu ui"
   ]
+ },
+ "world": {
+  "glass": {
+   "target": -27.5,
+   "takes": [
+    ["props/glass-1.mp3", -27.65],
+    ["props/glass-2.mp3", -27.53],
+    ["props/glass-3.mp3", -27.5],
+    ["props/glass-4.mp3", -27.5],
+    ["props/glass-5.mp3", -27.77],
+    ["props/glass-6.mp3", -27.48]
+   ]
+  },
+  "doorOpen": {
+   "target": -30.57,
+   "takes": [
+    ["props/doorOpen-1.mp3", -30.64],
+    ["props/doorOpen-2.mp3", -30.57],
+    ["props/doorOpen-3.mp3", -30.56],
+    ["props/doorOpen-4.mp3", -30.56]
+   ]
+  },
+  "doorSlam": {
+   "target": -27.01,
+   "takes": [
+    ["props/doorSlam-1.mp3", -27.02],
+    ["props/doorSlam-2.mp3", -27.09],
+    ["props/doorSlam-3.mp3", -27.01],
+    ["props/doorSlam-4.mp3", -27.52],
+    ["props/doorSlam-5.mp3", -27.01],
+    ["props/doorSlam-6.mp3", -26.99],
+    ["props/doorSlam-7.mp3", -26.96],
+    ["props/doorSlam-8.mp3", -26.88]
+   ]
+  },
+  "heavyOpen": {
+   "target": -22.08,
+   "takes": [
+    ["props/heavyOpen-1.mp3", -22.1],
+    ["props/heavyOpen-2.mp3", -22.07]
+   ]
+  },
+  "heavySlam": {
+   "target": -16.34,
+   "takes": [
+    ["props/heavySlam-1.mp3", -16.37],
+    ["props/heavySlam-2.mp3", -16.34]
+   ]
+  },
+  "gasHiss": {
+   "target": -9.59,
+   "takes": [
+    ["props/gasHiss-1.mp3", -9.56],
+    ["props/gasHiss-2.mp3", -9.59]
+   ]
+  },
+  "fire": {
+   "target": -31.24,
+   "takes": [
+    ["props/fire-1.mp3", -31.63]
+   ]
+  }
  }
 }

@@ -29,7 +29,7 @@ const VX = {
   next: ['Partie suivante · {s} s', 'Next match · {s} s', 'Siguiente partida · {s} s', 'Nächstes Spiel · {s} s', 'Próxima partida · {s} s', 'Prossima partita · {s} s'],
   play2: ['Joue gratuitement :', 'Play free:', 'Juega gratis:', 'Kostenlos spielen:', 'Joga grátis:', 'Gioca gratis:'],
   tagline: ['FPS tactique gratuit, directement dans le navigateur', 'Free tactical FPS, right in your browser', 'FPS táctico gratis, directamente en el navegador', 'Kostenloser Taktik-Shooter direkt im Browser', 'FPS tático grátis, direto no navegador', 'FPS tattico gratuito, direttamente nel browser'],
-  you: ['VOUS', 'YOU', 'TÚ', 'DU', 'TU', 'TU'],
+  you: ['TOI', 'YOU', 'TÚ', 'DU', 'TU', 'TU'],
 };
 
 const PAL_TEAM = [[0x4c5238, 0x2a2e22, 0x7c7a5c], [0x7d5a3c, 0x3b2a20, 0x9c7c58]];

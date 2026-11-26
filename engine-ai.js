@@ -4,11 +4,12 @@ const rnd = (a, b) => a + Math.random() * (b - a);
 const TAU = Math.PI * 2;
 const wrap = a => { a = (a + Math.PI) % TAU; if (a < 0) a += TAU; return a - Math.PI; };
 
-// yaw: the fastest the body turns, rad/s (no instant about-face)
+// yaw: the fastest the body turns, rad/s (no instant about-face); range: sight in clear daylight for a moving target in the view cone (m);
+// reactFar: extra reaction time for a target spotted at 60 m (s, proportional to the distance)
 export const DIFFICULTY = {
-  easy: { react: [0.6, 1.0], spread: 0.075, dmg: 0.4, burst: [2, 4], pause: [0.6, 1.3], turn: 5, sense: 0.24, fov: 0.25, range: 46, yaw: 4.5 },
-  normal: { react: [0.32, 0.55], spread: 0.045, dmg: 0.55, burst: [3, 5], pause: [0.35, 0.9], turn: 7.5, sense: 0.17, fov: 0.05, range: 60, yaw: 6.5 },
-  hard: { react: [0.16, 0.3], spread: 0.026, dmg: 0.75, burst: [3, 7], pause: [0.2, 0.55], turn: 11, sense: 0.11, fov: -0.2, range: 75, yaw: 9 },
+  easy: { react: [0.6, 1.0], spread: 0.075, dmg: 0.4, burst: [2, 4], pause: [0.6, 1.3], turn: 5, sense: 0.24, fov: 0.25, range: 55, yaw: 4.5, reactFar: 0.6 },
+  normal: { react: [0.32, 0.55], spread: 0.045, dmg: 0.55, burst: [3, 5], pause: [0.35, 0.9], turn: 7.5, sense: 0.17, fov: 0.05, range: 70, yaw: 6.5, reactFar: 0.45 },
+  hard: { react: [0.16, 0.3], spread: 0.026, dmg: 0.75, burst: [3, 7], pause: [0.2, 0.55], turn: 11, sense: 0.11, fov: -0.2, range: 85, yaw: 9, reactFar: 0.3 },
 };
 const RANGE = { p9: 12, ar: 20, smg: 12, sg: 7, lmg: 24, sr: 42, flame: 5, sawn: 4.5 };
 const CAT_RANGE = { assault: 20, smg: 12, shotgun: 7, lmg: 24, sniper: 42, launcher: 24, special: 28, pistol: 12, melee: 1.1 };
@@ -27,8 +28,8 @@ export function newBotAI(difficulty, index) {
     sx: 0, sz: 0, stT: 0, stuck: 0, dodgeT: 0, dodgeA: 0, cover: null, coverT: 0, coverCd: 0, huntT: 0, hx: 0, hz: 0, hy: 0, idleT: 0, idleYaw: 0, holdT: 0, wx: 0, wz: 0, wOn: false, puppet: false,
     // loadout: primary + sidearm + grenades (filled on the first update), spare rounds, spin-up, grenade avoidance
     prim: null, sec: null, ammo1: 0, ammo2: 0, res: -1, gearN: 0, swapT: 0, spin: 0, refill: false, fleeT: 0, fleeX: 0, fleeZ: 0, threatT: Math.random() * 0.2, nadeCd: rnd(3, 9),
-    // engageR: farthest enemy it picks a fight with (a mode may shorten it: Zone pacing); hitBy/hitT: who shot it last, for how long that still counts
-    engageR: Infinity, hitBy: null, hitT: 0 };
+    // engageR: farthest enemy it picks a fight with (a mode may shorten it: Zone pacing); hitBy/hitT: who shot it last, for how long that still counts; coverAt: health share under which it breaks off for cover; aimK, fireK, dmgK: aim error, burst pacing and damage factors (Zone pacing)
+    engageR: Infinity, hitBy: null, hitT: 0, coverAt: 0.4, aimK: 1, fireK: 1, dmgK: 1 };
 }
 export function newZombieAI(type, o, index) {
   const z = ZOMBIES[type] || ZOMBIES.walker;
@@ -109,10 +110,41 @@ export function createAI(ctx) {
     const tx = ai.visible ? t.pos.x : ai.lkx, ty = ai.visible ? t.pos.y : ai.lky, tz = ai.visible ? t.pos.z : ai.lkz;
     const hx = tx - a.pos.x, hz = tz - a.pos.z, hd = Math.hypot(hx, hz); if (hd < g.proj.radius + 4 || hd > 20) return;
     if (Math.abs(wrap(Math.atan2(-hx, -hz) - a.yaw)) > 0.7) return;
-    if (!aimProjectile(a, tx, ty + 0.1, tz, ai.visible ? t.vx || 0 : 0, ai.visible ? t.vz || 0 : 0, g, ai.diff.spread * 0.8, t)) return;
-    ctx.botThrow(a, g, PA.x, PA.y, PA.z, ai.diff.dmg); ai.gearN--; ai.nadeCd = rnd(7, 13); ai.fireCd = Math.max(ai.fireCd, 0.6);
+    if (!aimProjectile(a, tx, ty + 0.1, tz, ai.visible ? t.vx || 0 : 0, ai.visible ? t.vz || 0 : 0, g, ai.diff.spread * 0.8 * (ai.aimK || 1), t)) return;
+    ctx.botThrow(a, g, PA.x, PA.y, PA.z, ai.diff.dmg * (ai.dmgK || 1)); ai.gearN--; ai.nadeCd = rnd(7, 13) * (ai.fireK || 1); ai.fireCd = Math.max(ai.fireCd, 0.6);
   }
 
+  /** Line of sight to the chest and to the head: 0, 1 (half cover) or 2. */
+  function visibleN(a, b) {
+    const ex = a.pos.x, ey = a.pos.y + (a.crouch > 0.5 ? 1.05 : 1.5), ez = a.pos.z, hs = b.hScale || 1, ck = b.crouch > 0.5 ? 0.7 : 1;
+    if (ctx.smoke && ctx.smoke(ex, ey, ez, b.pos.x, b.pos.y + 1.2 * hs, b.pos.z)) return 0;
+    return (grid.los(ex, ey, ez, b.pos.x, b.pos.y + 1.15 * hs * ck, b.pos.z) ? 1 : 0) + (grid.los(ex, ey, ez, b.pos.x, b.pos.y + 1.6 * hs * ck, b.pos.z) ? 1 : 0);
+  }
+  /** Light and fog of the scene, read once a second: darkness (night map, dark weekly rule) shortens sight down to 60 %, fog caps it at 1 / density. */
+  const env = { at: -9, light: 1, fogR: 1e9 };
+  function readEnv() {
+    const t = E.time || 0; if (t - env.at < 1 && t >= env.at) return; env.at = t;
+    let light = 1, fogR = 1e9;
+    try { const f = E.internals && E.internals.scene && E.internals.scene.fog; if (f) { if (f.density > 0) fogR = 1 / f.density; if (f.color) light = Math.min(1, Math.max(0.6, (0.3 * f.color.r + 0.59 * f.color.g + 0.11 * f.color.b) / 0.25)); } } catch { /* keep clear daylight */ }
+    env.light = light; env.fogR = fogR;
+  }
+  /** Moving faster than a slow walk (any soldier, the local player included: measured from its positions, not from its inputs). */
+  function moving(b) {
+    const t = E.time || 0;
+    if (b._mt === undefined || t < b._mt || t - b._mt > 0.8) { b._mt = t; b._mx = b.pos.x; b._mz = b.pos.z; return !!b._mv; }
+    if (t - b._mt >= 0.2) { b._ms = Math.hypot(b.pos.x - b._mx, b.pos.z - b._mz) / (t - b._mt); b._mv = b._ms > 1.2; b._mt = t; b._mx = b.pos.x; b._mz = b.pos.z; }
+    return !!b._mv;
+  }
+  /**
+   * How far this enemy can be noticed right now, one rule for every soldier: the difficulty's sight range for a moving target in the view
+   * cone, 70 % of it for a still one, 135 % for one that fires; crouching 85 %; darkness and fog shorten it. Outside the view cone: 15 m,
+   * or 40 m for a shot heard (a bot that was just hit looks all around).
+   */
+  function spotR(a, b, raw, ahead) {
+    const ai = a.ai, diff = ai.diff, firing = b.shotT > 0;
+    if (ahead < diff.fov * raw && ai.alert <= 0) return firing ? 40 : b.crouch > 0.5 ? 4 : moving(b) && b._ms > 8.4 ? 25 : 15;       // heard, not seen: a crouched step only at 4 m, a sprint from 25 m
+    return Math.max(15, Math.min(diff.range * env.light, env.fogR) * (firing ? 1.35 : moving(b) ? 1 : 0.7) * (b.crouch > 0.5 ? 0.85 : 1));
+  }
   function visible(a, b) {
     const ex = a.pos.x, ey = a.pos.y + (a.crouch > 0.5 ? 1.05 : 1.5), ez = a.pos.z, hs = b.hScale || 1;
     if (ctx.smoke && ctx.smoke(ex, ey, ez, b.pos.x, b.pos.y + 1.2 * hs, b.pos.z)) return false;       // a smoke cloud hides whoever is behind it
@@ -124,25 +156,30 @@ export function createAI(ctx) {
    */
   function sense(a) {
     const ai = a.ai, diff = ai.diff, fx = -Math.sin(a.yaw), fz = -Math.cos(a.yaw), list = E.actors, by = ai.hitT > 0 ? ai.hitBy : null, er = ai.engageR;
-    c3[0] = c3[1] = c3[2] = null; d3[0] = d3[1] = d3[2] = Infinity;
+    c3[0] = c3[1] = c3[2] = null; d3[0] = d3[1] = d3[2] = Infinity; readEnv();
     for (let i = 0; i < list.length; i++) {
       const b = list[i]; if (b === a || !b.alive || !E.isEnemy(a, b)) continue;
-      const dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z, raw = Math.sqrt(dx * dx + dz * dz); if (raw > diff.range) continue;
+      const dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z, raw = Math.sqrt(dx * dx + dz * dz); if (raw > diff.range * 1.35) continue;
       let d = raw;
       if (b === by) d *= 0.55;       // it shoots at me: answer it, even beyond the reach the mode allows
       else if (raw > er) continue;
-      else if (b !== ai.target && raw > 9 && ai.alert <= 0 && (dx * fx + dz * fz) / raw < diff.fov) continue;
+      else if (b !== ai.target && raw > spotR(a, b, raw, dx * fx + dz * fz)) continue;       // not noticed (yet): too far for the light, out of the view cone, still or crouched
       if (b === ai.target) d *= 0.75;
-      const mh = b.maxHp || 100; if (b.hp < mh) d *= 0.7 + 0.3 * Math.max(0, b.hp) / mh;       // a wounded enemy is the easier kill
+      const mh = b.maxHp || 100; if (b.hp < mh && b.shotT > 0) d *= 0.7 + 0.3 * Math.max(0, b.hp) / mh;       // a wounded enemy caught in a firefight is the easier kill
       if (E.spawnGuard) d += E.spawnGuard.penalty(b);       // a spawn-protected enemy comes after an exposed one (engine-guard.js)
       if (d < d3[0]) { c3[2] = c3[1]; d3[2] = d3[1]; c3[1] = c3[0]; d3[1] = d3[0]; c3[0] = b; d3[0] = d; }
       else if (d < d3[1]) { c3[2] = c3[1]; d3[2] = d3[1]; c3[1] = b; d3[1] = d; }
       else if (d < d3[2]) { c3[2] = b; d3[2] = d; }
     }
     let seen = null;
-    for (let k = 0; k < 3 && !seen; k++) if (c3[k] && visible(a, c3[k])) seen = c3[k];
+    for (let k = 0; k < 3 && !seen; k++) {
+      const b = c3[k]; if (!b) continue;
+      const n = visibleN(a, b); if (!n) continue;
+      if (n === 1 && b !== by && b !== ai.target) { const dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z, raw = Math.sqrt(dx * dx + dz * dz); if (raw > 15 && raw > 0.75 * spotR(a, b, raw, dx * fx + dz * fz)) continue; }       // half behind cover: noticed nearer
+      seen = b;
+    }
     if (seen) {
-      if (seen !== ai.target || !ai.visible) ai.react = rnd(diff.react[0], diff.react[1]) * (ai.lostT < 1.2 && seen === ai.target ? 0.4 : 1);
+      if (seen !== ai.target || !ai.visible) ai.react = (rnd(diff.react[0], diff.react[1]) + Math.hypot(seen.pos.x - a.pos.x, seen.pos.z - a.pos.z) / 60 * (diff.reactFar || 0.45)) * (ai.lostT < 1.2 && seen === ai.target ? 0.4 : 1);       // a far target takes longer to make out
       ai.target = seen; ai.visible = true; ai.lostT = 0; ai.lkx = seen.pos.x; ai.lky = seen.pos.y; ai.lkz = seen.pos.z;
     } else ai.visible = false;
   }
@@ -199,7 +236,7 @@ export function createAI(ctx) {
     const hs = t.hScale || 1, ty = t.pos.y + (t.crouch > 0.5 ? 0.8 : 1.15) * hs, ey = a.pos.y + 1.5;
     a.yawT = Math.atan2(-dx, -dz); a.pitch = Math.atan2(ty - ey, dist);
     // movement: cover when hurt/reloading, otherwise range keeping + strafing
-    const wantCover = !noMove && (a.hp < a.maxHp * 0.4 || ai.reloadT > 0) && ai.coverCd <= 0;
+    const wantCover = !noMove && (a.hp < a.maxHp * (ai.coverAt || 0.4) || ai.reloadT > 0) && ai.coverCd <= 0;
     if (noMove) ai.coverOn = false;
     if (wantCover && !ai.coverOn && ctx.budget.cover > 0) { ctx.budget.cover--; if (findCover(a, t)) { ai.coverOn = true; ai.coverT = rnd(2.2, 3.6); ai.path = null; } else ai.coverCd = 1.5; }
     if (ai.coverOn) {
@@ -226,14 +263,14 @@ export function createAI(ctx) {
       if (ai.fireCd > 0 || dist > def.range * 0.92 || Math.abs(t.pos.y - a.pos.y) > 1.6 || Math.abs(wrap(a.yawT - a.yaw)) > 0.5) return;
       const my = ty - ey, ml = Math.sqrt(dist * dist + my * my); ctx.botFire(a, dx / ml, my / ml, dz / ml, Math.min(1, diff.dmg + 0.25)); ai.fireCd = 60 / def.rpm * rnd(1.1, 1.6); return;
     }
-    if (ai.burst <= 0) { if (ai.burstCd > 0) return; ai.burst = def.burst ? def.burst : Math.round(rnd(diff.burst[0], diff.burst[1])) * (def.auto ? 1 : 0) + (def.auto ? 0 : 1 + (Math.random() < 0.5 ? 1 : 0)); ai.first = true; }
+    if (ai.burst <= 0) { if (ai.burstCd > 0) return; ai.burst = def.burst ? def.burst : Math.max(1, Math.round(rnd(diff.burst[0], diff.burst[1]) / (ai.fireK || 1))) * (def.auto ? 1 : 0) + (def.auto ? 0 : 1 + (Math.random() < 0.5 ? 1 : 0)); ai.first = true; }       // fireK > 1: shorter bursts, longer pauses (Zone pacing)
     if (ai.fireCd > 0) return;
     if (Math.abs(wrap(a.yawT - a.yaw)) > 0.2) return;
     if (!visible(a, t)) { ai.fireCd = 0.1; return; }       // never through a wall: the sight line is checked before every round, not only at the last look
     if (def.kind === 'projectile') {       // lead + arc; explosives never at point-blank or near a teammate
-      const blast = def.proj.radius > 0, perr = diff.spread * (0.6 + Math.hypot(t.vx || 0, t.vz || 0) * 0.04);
+      const blast = def.proj.radius > 0, perr = diff.spread * (0.6 + Math.hypot(t.vx || 0, t.vz || 0) * 0.04) * (ai.aimK || 1);
       if (!aimProjectile(a, t.pos.x, blast ? t.pos.y + (def.proj.bounce > 0 ? 0.95 : 0.15) : ty, t.pos.z, t.vx || 0, t.vz || 0, def, perr, t)) { ai.strafeT = 0; ai.fireCd = 0.25; return; }      // rockets at the feet, bouncing grenades at the body (they go off on contact)
-      ctx.botFire(a, PA.x, PA.y, PA.z, diff.dmg);
+      ctx.botFire(a, PA.x, PA.y, PA.z, diff.dmg * (ai.dmgK || 1));
       ai.first = false; ai.burst--; ai.ammo--; ai.fireCd = Math.max(60 / def.rpm * rnd(1.15, 1.5), rnd(0.5, 0.8));
       if (ai.burst <= 0) ai.burstCd = rnd(diff.pause[0], diff.pause[1]);
       if (ai.ammo <= 0 && canReload(a)) { ai.reloadT = def.reload * 1.15; ctx.botReload(a, ai.reloadT); }
@@ -241,13 +278,13 @@ export function createAI(ctx) {
     }
     if (!clearShot(a, t, nx, nz, dist)) { ai.strafeT = 0; ai.fireCd = 0.15; return; }
     const tv = Math.hypot(t.vx || 0, t.vz || 0), own = Math.hypot(a.vx, a.vz);
-    const err = diff.spread * (1 + tv * 0.09 + own * 0.05 + (ai.first ? 0 : 0.25)) + def.spread;
+    const err = diff.spread * (1 + tv * 0.09 + own * 0.05 + (ai.first ? 0 : 0.25)) * (ai.aimK || 1) * (1 + Math.max(0, dist - 25) / 70) + def.spread;       // less accurate far away
     const ax = dx + (-nz) * (Math.random() + Math.random() - 1) * err * dist, ay = (ty - ey) + (Math.random() + Math.random() - 1) * err * dist * 0.8, az = dz + nx * (Math.random() + Math.random() - 1) * err * dist;
     const al = Math.sqrt(ax * ax + ay * ay + az * az);
-    ctx.botFire(a, ax / al, ay / al, az / al, diff.dmg);
+    ctx.botFire(a, ax / al, ay / al, az / al, diff.dmg * (ai.dmgK || 1));
     ai.first = false; ai.burst--; ai.ammo--;
     ai.fireCd = def.burst ? 60 / def.rpm : def.id === 'sg' ? rnd(0.95, 1.25) : def.id === 'sr' ? rnd(1.5, 1.9) : def.auto ? Math.max(def.spin ? 0.06 : 0.105, 60 / def.rpm) : Math.max(60 / def.rpm * rnd(1.15, 1.5), rnd(0.26, 0.42));
-    if (ai.burst <= 0) ai.burstCd = def.burst ? Math.max(def.burstGap || 0.2, rnd(diff.pause[0], diff.pause[1])) : rnd(diff.pause[0], diff.pause[1]);
+    if (ai.burst <= 0) ai.burstCd = def.burst ? Math.max(def.burstGap || 0.2, rnd(diff.pause[0], diff.pause[1]) * (ai.fireK || 1)) : rnd(diff.pause[0], diff.pause[1]) * (ai.fireK || 1);
     if (ai.ammo <= 0 && canReload(a)) { ai.reloadT = def.reload * 1.15; ctx.botReload(a, ai.reloadT); }
   }
   function idle(a, dt) {

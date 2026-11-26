@@ -11,6 +11,7 @@
 //   events['reload:<stage>:<weapon>']  {from, rate}      -> 'family/stage' in manifest.handling
 //   events['dry:<weapon>']             {from, rate}
 //   common[<stage>]                    {from, rate, gain, core}  any weapon: gear (core) and a neutral take per stage
+//   world[<role>]                      {target, takes}   world props (panes, doors, gas, fire): CC0 BigSoundBank / OpenGameArt takes
 // near = microphones next to the muzzle (the player's own shots), mid and far = the same weapon recorded from a distance
 // (everyone else; audio.js still applies its distance filter, delay, pan and reverb sends on top).
 
@@ -36,7 +37,7 @@ export function createSampleBank(opts = {}) {
   const lastTake = new Map();     // 'set/layer' or 'family/stage' -> index of the take played last
   const chains = new Map();       // voice-steal key -> voices of the last shot
   const primed = new Set();
-  const plays = { shot: 0, sub: 0, handling: 0, dry: 0, stolen: 0 };
+  const plays = { shot: 0, sub: 0, handling: 0, dry: 0, stolen: 0, world: 0 };
   let resolveSettled;
   const settled = new Promise((r) => { resolveSettled = r; });
   const settle = () => { if (!isSettled) { isSettled = true; resolveSettled(); } };
@@ -128,8 +129,21 @@ export function createSampleBank(opts = {}) {
     manifest = m;
     const first = [...primed, ...(Array.isArray(m.priority) ? m.priority : [])];
     for (const id of first) if (m.weapons[id]) for (const f of filesOf(id)) if (!fast.includes(f)) fast.push(f);
+    // world props (pane breaks, doors, gas, fire): small files, heard in the first seconds of a match, queued after the priority weapons
+    try { for (const f of worldFiles()) if (!fast.includes(f)) fast.push(f); } catch (e) { safe(e); }
     for (const id of Object.keys(m.weapons)) for (const f of filesOf(id)) if (!fast.includes(f) && !slow.includes(f)) slow.push(f);
     pump();
+  }
+  // manifest.world[role] = { target, takes: [[file, LUFS-M], ...] } (optional, written by tools/props.py + manifest.mjs).
+  // A role missing or malformed is simply silent.
+  function worldEntry(name) {
+    const w = manifest && manifest.world && typeof name === 'string' && Object.hasOwn(manifest.world, name) ? manifest.world[name] : null;
+    return w && Array.isArray(w.takes) && w.takes.length && w.takes.every((e) => Array.isArray(e) && typeof e[0] === 'string') ? w : null;
+  }
+  function worldFiles(name) {
+    const out = [];
+    for (const k of name ? [name] : Object.keys((manifest && manifest.world) || {})) { const w = worldEntry(k); if (w) for (const e of w.takes) if (!out.includes(e[0])) out.push(e[0]); }
+    return out;
   }
   function attach(context) {
     if (ctx || !context) return api;
@@ -260,9 +274,32 @@ export function createSampleBank(opts = {}) {
     if (play(cat, sm.buffer, Object.assign({}, opt, { gain: opt.gain * sm.gain, rate: opt.rate * sm.rate }))) plays[stage === 'dry' ? 'dry' : 'handling']++;
     return true;
   }
+  // A decoded take of a world-prop role ('glass', 'doorOpen', 'doorSlam', 'heavyOpen', 'heavySlam', 'gasHiss', 'fire'), or null.
+  // Nothing decoded yet: its files jump to the front of the queue and the event stays silent.
+  function world(name) {
+    if (!manifest || !enabled) return null;
+    const w = worldEntry(name);
+    if (!w) return null;
+    const t = take('world/' + name, w.takes);
+    if (!t) {
+      const want = worldFiles(name).filter((f) => !buffers.has(f) && !pending.has(f));
+      if (want.length) { for (let i = fast.length - 1; i >= 0; i--) if (want.includes(fast[i])) fast.splice(i, 1); fast.unshift(...want); pump(); }
+      return null;
+    }
+    return { buffer: buffers.get(t[0][0]), gain: level(t[0][1], Number.isFinite(w.target) ? w.target : t[0][1]) * rand(.92, 1) };
+  }
+  // Plays one world-prop take through audio.js play(). False when the role has no decoded recording (the event is then silent).
+  function prop(play, name, opt, cat = 'prop') {
+    const sm = world(name);
+    if (!sm) return false;
+    if (play(cat, sm.buffer, Object.assign({}, opt, { gain: opt.gain * sm.gain }))) plays.world++;
+    return true;
+  }
 
   const api = {
-    attach, prime, shot, handling, fire, hand,
+    attach, prime, shot, handling, fire, hand, world, prop,
+    // True when the manifest has recordings for this world-prop role (decoded or not).
+    hasWorld: (name) => !!worldEntry(name),
     // The weapon the player holds; reload and dry-fire calls that do not name a weapon use it.
     own(id) { if (typeof id === 'string') { ownId = id; prime(id); } },
     setEnabled(on) { enabled = !!on; },

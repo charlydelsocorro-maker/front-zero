@@ -14,7 +14,7 @@ const C = {
 
 /** hud: the engine HUD object. Returns { el, offscreen, setMap(solids, size), draw(player, actors, classify, heading, cx, cz, hfov), show(on), resize(), invalidate() }. */
 export function createMinimap({ hud, marks, opts }) {
-  const wrap = document.createElement('div'); wrap.className = 'fzm'; wrap.setAttribute('aria-hidden', 'true');
+  const wrap = document.createElement('div'); wrap.className = 'fzmm'; wrap.setAttribute('aria-hidden', 'true');       // not 'fzm': that is the menu root's class (menu.js gives it z-index 10, so the minimap drew over the pause settings)
   const el = document.createElement('canvas'); wrap.appendChild(el);
   let cv = el;
   try { if (typeof el.transferControlToOffscreen === 'function') cv = el.transferControlToOffscreen(); } catch { cv = el; }
@@ -49,7 +49,7 @@ export function createMinimap({ hud, marks, opts }) {
     for (let v = Math.ceil(-size / 10) * 10; v <= size; v += 10) { const p = Math.round(X(v)) + 0.5; m.moveTo(p, X(-size)); m.lineTo(p, X(size)); m.moveTo(X(-size), p); m.lineTo(X(size), p); }
     m.stroke();
     m.strokeStyle = C.bound; m.lineWidth = Math.max(1, dpr); m.strokeRect(X(-size), X(-size), size * 2 * k, size * 2 * k);
-    const keep = c => !(c.prop || c.mm === 0 || (c.mm !== 1 && c.y0 > 0.6) || c.y1 - c.y0 < 0.7 || (c.x1 - c.x0 > size * 1.6 && c.z1 - c.z0 > size * 1.6));
+    const keep = c => !(c.prop || c.y1 < -5 || c.mm === 0 || (c.mm !== 1 && c.y0 > 0.6) || c.y1 - c.y0 < 0.7 || (c.x1 - c.x0 > size * 1.6 && c.z1 - c.z0 > size * 1.6));
     const e = Math.max(1, dpr);
     m.fillStyle = C.wallEdge;                            // dark rim first, light fill on top: one clean outline, no seams between pieces
     for (const c of solids) if (keep(c)) m.fillRect(X(c.x0) - e, X(c.z0) - e, Math.max(1, (c.x1 - c.x0) * k) + 2 * e, Math.max(1, (c.z1 - c.z0) * k) + 2 * e);

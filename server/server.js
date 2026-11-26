@@ -178,6 +178,7 @@ function resolveStatic(rawUrl) {
 const server = http.createServer((req, res) => {
   try { if (Online && Online.http(req, res)) return; } catch (e) { console.error('room list http', e); }       // /api/ping and /api/rooms (room-list.js)
   try { if (Front && Front.http(req, res)) return; } catch (e) { console.error('front http', e); }       // /api/front and /api/front/me (front-war.js)
+  try { if (Accounts && Accounts.http(req, res)) return; } catch (e) { console.error('accounts http', e); }       // /api/auth/*, /api/me, /api/account (account-server.js)
   const headers = { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' };
   const fail = (code, text) => { res.writeHead(code, { ...headers, 'Content-Type': 'text/plain; charset=utf-8' }); res.end(req.method === 'HEAD' ? undefined : text); };
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.setHeader('Allow', 'GET, HEAD'); return fail(405, 'Method not allowed'); }
@@ -262,7 +263,7 @@ function strike(p, code) {
 const publicPlayer = q => ({ id: q.id, name: q.name, ready: q.ready, team: q.team, status: q.status, cls: q.cls, ...(q.att ? { att: q.att } : null), ...(q.fin ? { fin: q.fin } : null), ...(q.fit ? { fit: q.fit } : null), ...(q.bot ? { bot: 1 } : null) });
 function roomView(room) {
   return {
-    code: room.code, hostId: room.hostId, mode: room.mode, map: room.map, state: room.state, maxPlayers: MAX_PLAYERS,
+    code: room.code, hostId: room.hostId, mode: room.mode === 'zone' && room.sq > 1 ? 'zone' + room.sq : room.mode, map: room.map, state: room.state, maxPlayers: MAX_PLAYERS,       // 'zone2'..'zone4': Zone in squads (data.js MODES; only clients that know squads sit in such a room)
     players: [...room.players.values()].map(publicPlayer), domPoints: room.domPoints, sites: room.sites, ...(Online ? Online.view(room) : null),
   };
 }
@@ -349,6 +350,7 @@ function applyDamage(room, target, amount, attacker, weapon, head) {
   return target.hp <= 0;
 }
 function killPlayer(room, victim, killer, weapon, head) {
+  if (room.match && room.match.mode === 'zone' && Zone && Zone.lethal && Zone.lethal(room, victim, killer, weapon)) return;       // Zone in squads: downed while a squadmate stands (squad-referee.js)
   const m = room.match, now = Date.now();
   victim.status = 'dead'; victim.hp = 0; victim.deaths++; victim.plantCancel = true; victim.diedAt = now;       // diedAt: the death grace of net-relay.js
   const assists = [];
@@ -667,7 +669,7 @@ function onPropSplash(p, m, room) {
   if (!zombie && !target) return reject(p, 'bad_target');
   if (target) {
     if (target.status !== 'alive') return reject(p, 'target_dead');
-    if (target !== p && (room.mode === 'zombie' || (TEAM_MODES.has(room.mode) && target.team === p.team))) return reject(p, 'friendly_fire');
+    if (target !== p && (room.mode === 'zombie' || (TEAM_MODES.has(room.mode) && target.team === p.team) || (room.sq > 1 && Zone && Zone.allies(room, target, p)))) return reject(p, 'friendly_fire');       // room.sq: squadmates (squad-referee.js)
   }
   while (ps.booms.length && now - ps.booms[0].at > PROP.boomTtl) ps.booms.shift();
   let q = null, dist = 0;
@@ -886,6 +888,8 @@ try {
   Zone = require('../zone-referee.js')({ all, send, WEAPONS, CLASSES, T, applyDamage, killPlayer, addDrops, endMatch, strike, r2, num, isObj, canFight, sendScore, scale: SCALE });
   MODES.add('zone');
 } catch (e) { console.warn('zone mode unavailable:', e.message); }
+/** Zone Duo / Trio / Quatuor arrive as 'zone2'..'zone4' (data.js MODES): the room plays 'zone' with room.sq = 2..4 (squad-referee.js, loaded by zone-referee.js). */
+const sqMode = v => { const x = typeof v === 'string' && Zone && Zone.squads ? /^zone([234])$/.exec(v) : null; return x ? { sq: +x[1] } : null; };
 const isNpc = (room, id) => (room.mode === 'zombie' && /^z\d{1,9}$/.test(id)) || (room.mode === 'zone' && !!Zone && Zone.isBotId(id));
 /* end-of-match flow (results, map vote, next match): its own module at the game root. If it is missing, rooms keep the old end of match. */
 let Flow = null;
@@ -967,15 +971,16 @@ function addToRoom(p, room, name) {
 function onCreate(p, m) {
   if (p.room) return reject(p, 'already_in_room');
   if (rooms.size >= MAX_ROOMS) return reject(p, 'server_full');
-  const mode = m.mode === undefined ? 'ffa' : m.mode, map = m.map === undefined ? 'default' : m.map;
+  const sqm = sqMode(m.mode), mode = sqm ? 'zone' : m.mode === undefined ? 'ffa' : m.mode, map = m.map === undefined ? 'default' : m.map;       // sqm: Zone Duo / Trio / Quatuor
   if (!MODES.has(mode)) return strike(p, 'bad_mode');
   if (!validMap(map)) return strike(p, 'bad_map');
   if (Online && !Online.mayCreate(p, m)) return;       // per-address creation rate, public rooms per address (room-list.js)
   const code = makeCode();
   if (!code) return reject(p, 'server_full');
-  p.zv = m.zv === 1; p.mf = m.mf === 1;
+  p.zv = m.zv === 1; p.mf = m.mf === 1; p.sqv = m.sqv === 1;
   if (mode === 'zone' && !p.zv) return reject(p, 'client_outdated');
-  const room = { code, hostId: p.id, mode, map, state: 'lobby', players: new Map(), match: null, domPoints: null, sites: null };
+  if (sqm && !p.sqv) return reject(p, 'client_outdated');
+  const room = { code, hostId: p.id, mode, map, state: 'lobby', players: new Map(), match: null, domPoints: null, sites: null, sq: sqm ? sqm.sq : 0 };
   rooms.set(code, room);
   if (Online) Online.setup(room, p, m);       // private or public, bots on or off (room-list.js)
   addToRoom(p, room, m.name);
@@ -988,8 +993,9 @@ function onJoin(p, m) {
   if (!room) return reject(p, 'room_not_found');
   if (Online && !Online.beforeJoin(room, p, m)) return;       // a bot gives up its seat in a full room (room-list.js)
   if (room.players.size >= MAX_PLAYERS) return reject(p, 'room_full');
-  p.zv = m.zv === 1; p.mf = m.mf === 1;
+  p.zv = m.zv === 1; p.mf = m.mf === 1; p.sqv = m.sqv === 1;
   if (room.mode === 'zone' && !p.zv) return reject(p, 'client_outdated');      // a client without this mode could not play it
+  if (room.mode === 'zone' && room.sq > 1 && !p.sqv) return reject(p, 'client_outdated');      // nor squads (rc7 and older)
   if (Flow) Flow.beforeJoin(room, p);
   addToRoom(p, room, m.name);
   if (Flow) Flow.afterJoin(room, p);
@@ -1017,9 +1023,11 @@ function onConfig(p, m) {
   const room = needHost(p);
   if (!room) return;
   if (room.state !== 'lobby') return reject(p, 'not_in_lobby');
-  if (m.mode !== undefined && !MODES.has(m.mode)) return strike(p, 'bad_mode');
+  const sqm = sqMode(m.mode);       // Zone Duo / Trio / Quatuor: every client in the room must know squads
+  if (sqm) for (const q of room.players.values()) if (!q.bot && !q.sqv) return reject(p, 'client_outdated');
+  if (m.mode !== undefined && !sqm && !MODES.has(m.mode)) return strike(p, 'bad_mode');
   if (m.map !== undefined && !validMap(m.map)) return strike(p, 'bad_map');
-  if (m.mode !== undefined) room.mode = m.mode;
+  if (m.mode !== undefined) { room.mode = sqm ? 'zone' : m.mode; room.sq = sqm ? sqm.sq : 0; }
   if (m.map !== undefined && m.map !== room.map) { room.map = m.map; room.domPoints = null; room.sites = null; }
   for (const q of room.players.values()) if (q.id !== room.hostId) q.ready = false;
   normalizeTeams(room);
@@ -1031,7 +1039,7 @@ function onStart(p) {
   if (!room) return;
   if (room.state !== 'lobby') return reject(p, 'already_started');
   if (room.mode !== 'zombie' && room.mode !== 'zone' && room.players.size < 2) return reject(p, 'not_enough_players');
-  if (room.mode === 'zone') for (const q of room.players.values()) if (!q.zv) return reject(p, 'client_outdated');
+  if (room.mode === 'zone') for (const q of room.players.values()) if (!q.zv || (room.sq > 1 && !q.bot && !q.sqv)) return reject(p, 'client_outdated');
   for (const q of room.players.values()) if (q.id !== room.hostId && !q.ready) return reject(p, 'players_not_ready');
   startMatch(room);
 }
@@ -1063,6 +1071,7 @@ function onShot(p, m) {
   if (!room) return;
   if (!canFight(room)) return reject(p, 'not_live');
   if (p.status !== 'alive' && !(Relay && Relay.grace(p, WEAPONS[m.weapon], Date.now()))) return reject(p, 'dead');       // grace: it left before the death (net-relay.js)
+  if (p.down && Zone && Zone.downed && Zone.downed(p)) return reject(p, 'downed');       // Zone in squads: a downed soldier cannot shoot
   const w = WEAPONS[m.weapon];
   if (!w || w.gx) return strike(p, 'bad_weapon');       // equipment charges never go through 'shot': the referee opens their blast itself
   for (const k of ['ox', 'oy', 'oz']) if (!num(m[k], -6000, 6000)) return strike(p, 'bad_shot');
@@ -1135,7 +1144,7 @@ function onSplash(p, m, room, w) {
   const self = target === p;
   if (target) {
     if (target.status !== 'alive') return reject(p, 'target_dead');
-    if (self ? !(pr.self > 0) : (room.mode === 'zombie' || (TEAM_MODES.has(room.mode) && target.team === p.team))) return reject(p, 'friendly_fire');
+    if (self ? !(pr.self > 0) : (room.mode === 'zombie' || (TEAM_MODES.has(room.mode) && target.team === p.team) || (room.sq > 1 && Zone && Zone.allies(room, target, p)))) return reject(p, 'friendly_fire');       // room.sq: squadmates
   }
   while (p.booms.length && now - p.booms[0].at > BOOM_TTL) p.booms.shift();
   let boom = null, dist = 0;
@@ -1180,7 +1189,7 @@ function onHit(p, m) {
   if (!zombie && (!target || target === p)) return reject(p, 'bad_target');
   if (target) {
     if (target.status !== 'alive') return reject(p, 'target_dead');
-    if (room.mode === 'zombie' || (TEAM_MODES.has(room.mode) && target.team === p.team)) return reject(p, 'friendly_fire');
+    if (room.mode === 'zombie' || (TEAM_MODES.has(room.mode) && target.team === p.team) || (room.sq > 1 && Zone && Zone.allies(room, target, p))) return reject(p, 'friendly_fire');       // room.sq: squadmates
   }
   const now = Date.now();
   while (p.credits.length && now > (p.credits[0].exp || p.credits[0].at + CREDIT_TTL)) p.credits.shift();
@@ -1374,7 +1383,7 @@ function makeGear(room) {
   if (!GearRef) return null;
   return GearRef.createGearCore({
     now: () => Date.now(), all: (o, except) => all(room, o, except), send, players: () => room.players.values(), canFight: () => canFight(room),
-    isEnemy: (a, b) => a !== b && room.mode !== 'zombie' && !(TEAM_MODES.has(room.mode) && a.team === b.team),
+    isEnemy: (a, b) => a !== b && room.mode !== 'zombie' && !(TEAM_MODES.has(room.mode) && a.team === b.team) && !(room.sq > 1 && Zone && Zone.allies(room, a, b)),
     npcs: () => room.mode === 'zombie' || room.mode === 'zone', emptyStart: () => room.mode === 'zone',
     blast(owner, id, x, y, z, oid) { owner.live.push({ weapon: id, pid: oid, at: Date.now(), x, y, z }); if (owner.live.length > 16) owner.live.shift(); },       // the owner's client then reports boom and splash hits as for a grenade
     hurt(q, amount, owner, id) { if (!(amount > 0) || !room.match || q.status !== 'alive') return; const by = owner || q; if (owner && q !== owner) q.damageBy.set(owner.id, Date.now()); if (applyDamage(room, q, amount, by, id, false)) killPlayer(room, q, by, id, false); },
@@ -1433,13 +1442,17 @@ const HANDLERS = {
 let Online = null;
 try {
   Online = require('../room-list.js')({ rooms, MODES, TEAM_MODES, MAX_PLAYERS, LIMITS, ORIGINS, TRUST_PROXY, WEAPONS, send, reject, strike, notify, sendRoom, sendScore, onCreate, onJoin, startMatch,
-    guardStart, validMap, isObj, num, onState, onShot, onHit, onBoom, onAction, resetLife, checkBombElimination });
+    guardStart, validMap, isObj, num, onState, onShot, onHit, onBoom, onAction, resetLife, checkBombElimination, FIT_IDS });
   Object.assign(HANDLERS, Online.handlers);
 } catch (e) { Online = null; console.warn('public rooms and online bots unavailable:', e.message); }
 /* ---------- living front (front-war.js and front-store.js at the root): sides, territories, weekly offensive, seasons. Without them: no front. ---------- */
 let Front = null;
 try { Front = require('../front-war.js')({ rooms, T, ORIGINS, TRUST_PROXY, LIMITS, send }); Object.assign(HANDLERS, Front.handlers); }
 catch (e) { Front = null; console.warn('living front unavailable:', e.message); }
+/* ---------- player accounts (account-server.js, auth-google.js, account-store.js at the root): Google sign-in, profile sync. Without them: guests only. ---------- */
+let Accounts = null;
+try { Accounts = require('../account-server.js')({ ORIGINS, TRUST_PROXY }); }
+catch (e) { Accounts = null; console.warn('player accounts unavailable:', e.message); }
 
 /* ---------- connection lifecycle ---------- */
 function leaveRoom(p) {
@@ -1515,12 +1528,13 @@ function onConnection(ws, ip) {
     let m;
     try { m = JSON.parse(data.toString('utf8')); } catch { return strike(p, 'bad_json'); }
     if (!isObj(m) || typeof m.t !== 'string' || !Object.hasOwn(HANDLERS, m.t)) return strike(p, 'bad_message');
+    if (Accounts && (m.t === 'create' || m.t === 'join' || m.t === 'quick')) { try { Accounts.onJoinMsg(p, m); } catch (e) { console.error('accounts join', e); } }       // account pseudo as the name (m.acct)
     const [bucket, fn] = HANDLERS[m.t];
     if (!take(p, bucket)) return m.t === 'state' ? undefined : strike(p, 'rate_limited');       // a burst of old positions after a Wi-Fi stall is not abuse
     if (Relay && p.dq && Relay.hold(p, m)) return;
     try { fn(p, m); } catch (e) { console.error('handler error', m.t, e); reject(p, 'server_error'); }
   });
-  send(p, { t: 'welcome', nc: Relay ? Relay.version : 0, id: p.id, ts: Date.now(), loot: 1, att: 1, fin: 1, fit: 1, props: 1, zone: Zone ? 1 : 0, xw: Object.hasOwn(WEAPONS, 'bpc') ? 1 : 0, gx: GearRef ? 1 : 0, bk: BreachRef && GearRef ? 1 : 0, mf: Flow ? 1 : 0, sg: Guard ? 1 : 0, ...(Online ? Online.caps : null), ...(Front ? Front.caps : null) });
+  send(p, { t: 'welcome', nc: Relay ? Relay.version : 0, id: p.id, ts: Date.now(), loot: 1, att: 1, fin: 1, fit: 1, props: 1, zone: Zone ? 1 : 0, sq: Zone && Zone.squads ? 1 : 0, xw: Object.hasOwn(WEAPONS, 'bpc') ? 1 : 0, gx: GearRef ? 1 : 0, bk: BreachRef && GearRef ? 1 : 0, mf: Flow ? 1 : 0, sg: Guard ? 1 : 0, ...(Online ? Online.caps : null), ...(Front ? Front.caps : null) });
 }
 
 setInterval(() => {

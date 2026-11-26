@@ -12,12 +12,17 @@ module.exports = function createZoneReferee(api) {
   const { all, send, WEAPONS, CLASSES, T, applyDamage, killPlayer, addDrops, endMatch, strike, r2, num, isObj, canFight, scale } = api;
   const zoneOf = room => (room && room.match && room.match.zone) || null;
   const isBotId = id => typeof id === 'string' && /^b\d{1,3}$/.test(id);
+  // squads (squad-referee.js, Zone Duo / Trio / Quatuor): without it, or with room.sq = 0, Zone is everyone for themselves exactly as before
+  let SQ = null;
+  try { SQ = require('./squad-referee.js')({ ...api, counts: (room, z) => counts(room, z), board: (room, z) => board(room, z), killBot: (room, z, b, by, w, h) => killBot(room, z, b, by, w, h) }); } catch (e) { SQ = null; console.warn('zone squads unavailable:', e.message); }
+  const squads = z => !!(SQ && SQ.on(z));
 
   function start(room) {
     const m = room.match;
     m.phase = 'deploy';          // nobody can shoot or loot until the deploy countdown ends
     m.zone = { plan: null, t0: 0, live: false, sim: room.hostId, hello: new Set(), crates: [], bots: new Map(), spawns: new Map(), at: Date.now(), order: [], total: room.players.size, dmgAt: 0, c: {}, done: false, simAt: Date.now(), left: new Set() };
     for (const q of room.players.values()) { q.armor = 0; q.zoneTp = null; }
+    if (SQ && room.sq > 1) SQ.start(room, m.zone);
   }
 
   /* ---------- views ---------- */
@@ -29,8 +34,9 @@ module.exports = function createZoneReferee(api) {
   }
   function board(room, z) {
     const rows = [];
-    for (const q of room.players.values()) rows.push({ id: q.id, name: q.name, k: q.kills, alive: q.status === 'alive' && !z.left.has(q.id), place: placeOf(z, q.id) });
-    for (const b of z.bots.values()) rows.push({ id: b.id, name: b.name, k: b.kills, alive: b.status === 'alive', bot: 1, place: placeOf(z, b.id) });
+    const sq = squads(z), extra = x => (sq ? { team: SQ.teamOf(z, x.id), down: x.down && x.status === 'alive' ? 1 : 0 } : null);
+    for (const q of room.players.values()) rows.push({ id: q.id, name: q.name, k: q.kills, alive: q.status === 'alive' && !z.left.has(q.id), place: placeOf(z, q.id), ...extra(q) });
+    for (const b of z.bots.values()) rows.push({ id: b.id, name: b.name, k: b.kills, alive: b.status === 'alive', bot: 1, place: placeOf(z, b.id), ...extra(b) });
     return rows;
   }
   const placeOf = (z, id) => { for (let i = 0; i < z.order.length; i++) if (z.order[i].id === id) return z.order[i].place; return 0; };
@@ -38,9 +44,10 @@ module.exports = function createZoneReferee(api) {
   function syncMsg(room, z, q) {
     const now = Date.now();
     return { t: 'zone', op: 'sync', plan: z.plan, el: z.t0 ? now - z.t0 : null, live: z.live, sim: z.sim, total: z.total, alive: aliveList(room, z).length,
-      crates: z.crates.map(crateView), bots: [...z.bots.values()].map(b => ({ id: b.id, name: b.name, alive: b.status === 'alive', weapon: b.weapon, x: b.x, y: b.y, z: b.z, hp: b.hp })),
-      board: board(room, z), spawn: q ? z.spawns.get(q.id) || null : null, bu: 1 };       // bu: the simulating client may use crate supplies for its bots
+      crates: z.crates.map(crateView), bots: [...z.bots.values()].map(b => botView(z, b)),
+      board: board(room, z), spawn: q ? z.spawns.get(q.id) || null : null, bu: 1, ...(squads(z) ? { sq: SQ.view(room, z) } : null) };       // bu: the simulating client may use crate supplies for its bots; sq: the squads
   }
+  function botView(z, b) { const v = { id: b.id, name: b.name, alive: b.status === 'alive', weapon: b.weapon, x: b.x, y: b.y, z: b.z, hp: b.hp }; if (squads(z)) { v.team = SQ.teamOf(z, b.id); if (b.down && b.status === 'alive') v.down = 1; } return v; }
   const syncAll = (room, z) => { for (const q of room.players.values()) send(q, syncMsg(room, z, q)); };
   const counts = (room, z) => all(room, { t: 'zone', op: 'board', alive: aliveList(room, z).length, total: z.total, board: board(room, z) });
 
@@ -54,14 +61,15 @@ module.exports = function createZoneReferee(api) {
     const seed = crypto.randomInt(1, 0x7fffffff), rnd = R.rng(seed);
     z.plan = R.buildPlan({ seed, size: d.size, anchors: d.anchors, scale });
     z.crates = d.crates.map((c, i) => ({ id: i, x: r2(c[0]), y: r2(c[1]), z: r2(c[2]), rot: c[3] ? 1 : 0, open: false, c: R.rollCrate(rnd) }));
-    const humans = [...room.players.values()].filter(q => q.status === 'alive'), nBots = Math.max(0, Math.min(11, R.matchSize(d.size) - humans.length));
-    // the report lists spawns farthest-apart first: keep as many as there are soldiers, then deal them at random
-    const sp = d.spawns.slice(0, Math.max(1, humans.length + nBots)).map(s => [r2(s[0]), r2(s[1])]);
+    const humans = [...room.players.values()].filter(q => q.status === 'alive'), sq = squads(z), want = sq ? SQ.total(z, R.matchSize(d.size)) : R.matchSize(d.size), nBots = Math.max(0, Math.min(11, want - humans.length));
+    // the report lists spawns farthest-apart first: keep as many as there are soldiers (squads: one per squad), then deal them at random
+    const sp = d.spawns.slice(0, Math.max(1, sq ? Math.ceil((humans.length + nBots) / room.sq) : humans.length + nBots)).map(s => [r2(s[0]), r2(s[1])]);
     for (let i = sp.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)), t = sp[i]; sp[i] = sp[j]; sp[j] = t; }
+    const dealt = sq ? SQ.deal(room, z, humans, Array.from({ length: nBots }, (x, i) => 'b' + (i + 1)), sp) : null;       // a squad lands together around its spawn
     let k = 0;
-    for (const q of humans) { const s = sp[k++ % sp.length]; z.spawns.set(q.id, s); q.zoneTp = s; }
+    for (const q of humans) { const s = dealt ? dealt.get(q.id) : sp[k++ % sp.length]; z.spawns.set(q.id, s); q.zoneTp = s; }
     for (let i = 0; i < nBots; i++) {
-      const id = 'b' + (i + 1), s = sp[k++ % sp.length];
+      const id = 'b' + (i + 1), s = dealt ? dealt.get(id) : sp[k++ % sp.length];
       z.bots.set(id, { id, isBot: true, name: BOT_NAMES[i % BOT_NAMES.length], status: 'alive', hp: 100, armor: 0, x: s[0], y: 0, z: s[1], yaw: 0, pitch: 0, vx: 0, vz: 0, weapon: 'p9', crouch: false, kills: 0, deaths: 0, assists: 0, score: 0, hasPos: true, dirty: true, damageBy: new Map() });
       z.spawns.set(id, s);
     }
@@ -74,7 +82,7 @@ module.exports = function createZoneReferee(api) {
   function pickSim(room, z) {
     const cur = room.players.get(z.sim);
     if (cur && z.hello.has(cur.id) && !z.left.has(cur.id)) return;
-    for (const q of room.players.values()) if (z.hello.has(q.id) && !z.left.has(q.id)) { z.sim = q.id; z.simAt = Date.now(); all(room, { t: 'zone', op: 'sim', sim: q.id, bots: [...z.bots.values()].map(b => ({ id: b.id, name: b.name, alive: b.status === 'alive', weapon: b.weapon, x: b.x, y: b.y, z: b.z, hp: b.hp })) }); return; }
+    for (const q of room.players.values()) if (z.hello.has(q.id) && !z.left.has(q.id)) { z.sim = q.id; z.simAt = Date.now(); all(room, { t: 'zone', op: 'sim', sim: q.id, bots: [...z.bots.values()].map(b => botView(z, b)) }); return; }
   }
   function tick(room, now) {
     const m = room.match, z = m.zone;
@@ -93,6 +101,7 @@ module.exports = function createZoneReferee(api) {
       return;
     }
     if (z.sim && !z.hello.has(z.sim) && now - z.simAt > SIM_WAIT) { z.hello.delete(z.sim); pickSim(room, z); }
+    if (SQ) { SQ.tick(room, z, now); if (!room.match || z.done) return; }       // squads: bleeding and revives
     if (now < z.dmgAt) return;
     z.dmgAt = now + 1000;
     const c = R.circleAt(z.plan, now - z.t0, z.c);
@@ -116,7 +125,7 @@ module.exports = function createZoneReferee(api) {
 
   /* ---------- deaths and the end ---------- */
   function noteDeath(room, z, id) {
-    if (placeOf(z, id)) return;
+    if (placeOf(z, id) || squads(z)) return;       // squads: the whole squad is placed when it is out (squad-referee.js)
     const left = aliveList(room, z).length;
     z.order.push({ id, place: left + 1 });
   }
@@ -125,6 +134,7 @@ module.exports = function createZoneReferee(api) {
     noteDeath(room, z, victim.id); counts(room, z); check(room, z);
   }
   function killBot(room, z, b, by, weapon, head) {
+    if (SQ && SQ.lethal(room, z, b, by ? room.players.get(by) || z.bots.get(by) || null : null, weapon)) return;       // downed: a squadmate still stands
     b.status = 'dead'; b.hp = 0; b.deaths++;
     const killer = by ? room.players.get(by) || z.bots.get(by) || null : null;
     if (killer && killer !== b) { killer.kills++; killer.score += head ? 125 : 100; }
@@ -135,6 +145,7 @@ module.exports = function createZoneReferee(api) {
     noteDeath(room, z, b.id); counts(room, z); check(room, z);
   }
   function check(room, z) {
+    if (squads(z)) return SQ.check(room, z);       // the last squad standing wins
     if (z.done || !z.live) return;
     const list = aliveList(room, z);
     if (list.length > 1) return;
@@ -154,11 +165,11 @@ module.exports = function createZoneReferee(api) {
     if (d.bot !== undefined) {           // the simulating client opens for one of its bots
       if (p.id !== z.sim || !isBotId(d.bot)) return fail();
       const b = z.bots.get(d.bot);
-      if (!b || b.status !== 'alive' || Math.hypot(b.x - c.x, b.z - c.z) > BOT_OPEN_R) return fail();
+      if (!b || b.status !== 'alive' || b.down || Math.hypot(b.x - c.x, b.z - c.z) > BOT_OPEN_R) return fail();
       c.open = true; c.by = b.id;
       return all(room, { t: 'zone', op: 'open', id: c.id, by: b.id, s: c.c.s, w: c.c.w, g: c.c.g });       // the bot's weapon comes back in its next report
     }
-    if (p.status !== 'alive' || !p.hasPos || z.left.has(p.id) || Math.hypot(p.x - c.x, p.z - c.z) > OPEN_R || Math.abs(p.y - c.y) > OPEN_Y) return fail();
+    if (p.status !== 'alive' || p.down || !p.hasPos || z.left.has(p.id) || Math.hypot(p.x - c.x, p.z - c.z) > OPEN_R || Math.abs(p.y - c.y) > OPEN_Y) return fail();
     c.open = true; c.by = p.id;
     all(room, { t: 'zone', op: 'open', id: c.id, by: p.id, s: c.c.s });
     const list = [], w = WEAPONS[c.c.w];
@@ -174,13 +185,13 @@ module.exports = function createZoneReferee(api) {
     const fail = () => send(p, { t: 'zone', op: 'fail', id: d.id });
     if (d.bot !== undefined) {           // the simulating client takes a supply for one of its bots: its health here, then on that client
       const b = p.id === z.sim && isBotId(d.bot) ? z.bots.get(d.bot) : null;
-      if (!b || b.status !== 'alive' || !c.open || !c.c.s || !canFight(room) || Math.hypot(b.x - c.x, b.z - c.z) > BOT_OPEN_R) return fail();
+      if (!b || b.status !== 'alive' || b.down || !c.open || !c.c.s || !canFight(room) || Math.hypot(b.x - c.x, b.z - c.z) > BOT_OPEN_R) return fail();
       if (c.c.s === 'med') { if (b.hp >= 100) return fail(); b.hp = Math.min(100, b.hp + R.MED); }
       else { const cap = R.armorCap(0); if ((b.armor || 0) >= cap) return fail(); b.armor = Math.min(cap, (b.armor || 0) + R.ARMOR); }
       const s = c.c.s; c.c.s = null; b.hpHold = Date.now() + 1500;       // its reports still carry the old health for a moment
       return all(room, { t: 'zone', op: 'used', id: c.id, by: b.id, s });
     }
-    if (!c.open || !c.c.s || p.status !== 'alive' || !p.hasPos || !canFight(room) || Math.hypot(p.x - c.x, p.z - c.z) > USE_R || Math.abs(p.y - c.y) > OPEN_Y) return fail();
+    if (!c.open || !c.c.s || p.status !== 'alive' || p.down || !p.hasPos || !canFight(room) || Math.hypot(p.x - c.x, p.z - c.z) > USE_R || Math.abs(p.y - c.y) > OPEN_Y) return fail();
     if (c.c.s === 'med') { if (p.hp >= p.maxHp) return fail(); p.hp = Math.min(p.maxHp, p.hp + R.MED); }
     else { const cap = R.armorCap(CLASSES[p.cls] && CLASSES[p.cls].armor); if (p.armor >= cap) return fail(); p.armor = Math.min(cap, p.armor + R.ARMOR); }
     const s = c.c.s; c.c.s = null;
@@ -205,7 +216,7 @@ module.exports = function createZoneReferee(api) {
     if (Array.isArray(d.f) && d.f.length <= 24) for (const f of d.f) {
       if (!Array.isArray(f) || (f.length !== 8 && f.length !== 12)) return strike(p, 'bad_zone');
       const b = z.bots.get(f[0]), w = typeof f[7] === 'string' && Object.hasOwn(WEAPONS, f[7]) ? WEAPONS[f[7]] : null;
-      if (!b || b.status !== 'alive' || !w || (f.length === 8) !== (w.kind === 'hitscan' || w.kind === 'melee')) continue;
+      if (!b || b.status !== 'alive' || b.down || !w || (f.length === 8) !== (w.kind === 'hitscan' || w.kind === 'melee')) continue;
       let ok = true; for (let i = 1; i <= 6; i++) if (!num(f[i], -6000, 6000)) ok = false;
       if (!ok) continue;
       const out = { t: 'shot', id: b.id, ox: r2(f[1]), oy: r2(f[2]), oz: r2(f[3]), dx: +f[4].toFixed(4), dy: +f[5].toFixed(4), dz: +f[6].toFixed(4), weapon: f[7] };
@@ -225,6 +236,7 @@ module.exports = function createZoneReferee(api) {
       if (!Array.isArray(h) || h.length !== 5) return strike(p, 'bad_zone');
       const b = z.bots.get(h[0]), t = room.players.get(h[1]), w = WEAPONS[h[4]];
       if (!b || b.status !== 'alive' || !t || t.status !== 'alive' || !w || !num(h[2], 0.01, 2000)) continue;
+      if (SQ && (SQ.allies(z, b.id, t.id) || (b.down && !w.blast))) continue;       // squads: no damage between squadmates; a downed bot does not shoot
       if (t.hasPos && Math.hypot(t.x - b.x, t.z - b.z) > Math.max(w.range * 1.6, 12) + 6) continue;
       const amount = Math.min(h[2], w.dmg * w.maxMul * (w.pellets || 1));
       // no attacker in the 'damage' message: the simulating client would read it back as a new hit by its bot. The direction goes separately.
@@ -237,12 +249,21 @@ module.exports = function createZoneReferee(api) {
 
   return {
     start, tick, onKilled, isBotId,
+    /** Squads (null without squad-referee.js): server.js sets room.sq through it (create, config) and asks it before a death. */
+    squads: SQ,
+    /** A lethal hit on a player of a squad match: downed instead of dead while a squadmate stands. */
+    lethal(room, victim, killer, weapon) { const z = zoneOf(room); return !!(z && SQ && SQ.lethal(room, z, victim, killer, weapon)); },
+    /** A downed player: no shot, no crate, no supply. */
+    downed: p => !!(SQ && p && p.down && p.status === 'alive'),
+    /** Two squadmates: no damage between them (server.js: bullets, blasts, gear). */
+    allies(room, a, b) { const z = zoneOf(room); return !!(z && SQ && a && b && SQ.allies(z, a.id || a, b.id || b)); },
     /** Keeps the assigned spawn teleport from being clamped as an impossible move. */
     onState(p, m) { if (p.zoneTp && Math.hypot(m.x - p.zoneTp[0], m.z - p.zoneTp[1]) < 4) { p.snap = true; p.zoneTp = null; } },
     /** A human's bullet on a bot: the simulating client applies it, its death comes back through 'zb_kill'. */
     botHit(room, id, p, damage, head, weapon) {
       const z = zoneOf(room); if (!z) return false;
       const b = z.bots.get(id); if (!b || b.status !== 'alive') return false;
+      if (SQ && SQ.allies(z, p.id, id)) return true;       // a squadmate: no damage
       const s = room.players.get(z.sim); if (s) send(s, { t: 'action', type: 'zb_hit', from: p.id, data: { bot: id, damage: r2(damage), head: !!head, weapon } });
       return true;
     },
@@ -254,6 +275,7 @@ module.exports = function createZoneReferee(api) {
     onLeave(room, p) {
       const z = zoneOf(room); if (!z) return;
       z.hello.delete(p.id); z.left.delete(p.id);
+      if (SQ) SQ.onLeave(room, z, p);
       if (z.live && !placeOf(z, p.id) && p.status === 'alive') { p.status = 'dead'; noteDeath(room, z, p.id); }
       pickSim(room, z);
       if (z.live) { counts(room, z); check(room, z); }
@@ -266,6 +288,7 @@ module.exports = function createZoneReferee(api) {
         case 'zone_open': return isObj(d) ? openCrate(room, z, p, d) : strike(p, 'bad_zone');
         case 'zone_use': return isObj(d) ? useSupply(room, z, p, d) : strike(p, 'bad_zone');
         case 'zb_tick': return onTick(room, z, p, d);
+        case 'zone_rv': case 'zone_rvx': case 'zone_ping': return SQ ? SQ.onAction(p, room, z, type === 'zone_rv' ? 'sq_rv' : type === 'zone_rvx' ? 'sq_rvx' : 'sq_ping', d) : strike(p, 'bad_action');       // squads: revive, stop, ping
         case 'zb_kill': {
           if (p.id !== z.sim || !isObj(d)) return;
           const b = z.bots.get(d.id); if (!b || b.status !== 'alive') return;

@@ -661,7 +661,7 @@ export function createSoldier(scene, opts = {}) {
   const P = B.map(b => b.clone()), Q = B.map(() => new THREE.Quaternion());
   const mk = side => ({ side, off: side > 0 ? 0 : .5, plant: new THREE.Vector3(), yaw: 0, pitch: 0, swing: false, t: 0, armed: true,
     from: new THREE.Vector3(), fromYaw: 0, fromPitch: 0, ideal: new THREE.Vector3(), idealYaw: 0, ball: new THREE.Vector3(), ankle: new THREE.Vector3(),
-    q: new THREE.Quaternion(), world: new THREE.Vector3(), toY: 0, toYT: 0, probe: 0, lockX: 0, lockZ: 0, lift: 0, knee: 0, kneeOk: false });
+    q: new THREE.Quaternion(), world: new THREE.Vector3(), toY: 0, toYT: 0, probe: 0, lockX: 0, lockZ: 0, lift: 0, knee: 0, kneeOk: false, acc: 0, span: 1, hurry: false, dn: 1, landT: 1 });
   const feet = [mk(-1), mk(1)];
   const lastPos = new THREE.Vector3(), tmpW = new THREE.Vector3(), gunPos = new THREE.Vector3(), gq = new THREE.Quaternion();
   const hipW = new THREE.Vector3(), knee = new THREE.Vector3(), ankleOut = new THREE.Vector3(), pole = new THREE.Vector3();
@@ -674,12 +674,15 @@ export function createSoldier(scene, opts = {}) {
   let actT = -1, actDur = 1;   // one-handed action (knife slash, grenade throw)
   let recP = 0, recV = 0, relT = -1, relDur = 1, atkT = -1, flP = 0, flPV = 0, flR = 0, flRV = 0, flY = 0, flYV = 0, flH = 0, flHV = 0;
   let landY = 0, landV = 0, shuffleCd = 0, pelYPrev = B[PEL].y, seed = Math.random() * 10;
-  let dead = false, pelDrop = 0, contacts = 0, groundFn = null, bodyY = 0, airF = 0, airTuck = 1;
+  let dead = false, pelDrop = 0, contacts = 0, groundFn = null, bodyY = 0, bodyDn = 0, airF = 0, airTuck = 1, rephN = 0, lastLift = null;
   // height of the walkable surface under a point, kept within what a leg can reach from the body
   function groundY(x, z) {
     const ry = bodyY; if (!groundFn) return root.position.y;
     const h = groundFn(x, ry + .12, z);        // anything higher is a wall or a crate next to the body, not a step
-    return h < ry - .5 || h > ry + .5 ? ry : h;
+    if (h > ry + .5) return ry;
+    // going down stairs the steps ahead are further below than a ledge beside a flat run: a slope of up to 35 degrees ahead is followed
+    const sp = Math.hypot(velX, velZ), ahead = sp > .5 ? ((x - root.position.x) * velX + (z - root.position.z) * velZ) / sp : 0;
+    return h < ry - .5 - (ahead > 0 ? Math.min(.45, ahead * .7) : 0) - bodyDn ? ry : h;
   }
 
   // ragdoll state
@@ -711,10 +714,11 @@ export function createSoldier(scene, opts = {}) {
     toWorldXZ(lx, lz, f.ideal); f.idealYaw = yawS + fy;
   }
   function snapFeet() {
-    for (const f of feet) { computeIdeal(f); f.plant.copy(f.ideal); f.plant.y = groundY(f.plant.x, f.plant.z); f.yaw = f.idealYaw; f.pitch = 0; f.swing = false; f.t = 0; f.armed = true; f.kneeOk = false; }
-    lastPos.copy(root.position); needSnap = false; pelDrop = 0;
+    for (const f of feet) { computeIdeal(f); f.plant.copy(f.ideal); f.plant.y = groundY(f.plant.x, f.plant.z); f.yaw = f.idealYaw; f.pitch = 0; f.swing = false; f.t = 0; f.armed = true; f.kneeOk = false; f.hurry = false; }
+    lastPos.copy(root.position); needSnap = false; pelDrop = 0; lastLift = null;
   }
-  function startSwing(f) { f.swing = true; f.t = 0; f.armed = false; f.from.copy(f.plant); f.fromYaw = f.yaw; f.fromPitch = f.pitch; f.world.copy(f.plant); f.toY = f.toYT = groundY(f.ideal.x, f.ideal.z); f.probe = 0; f.lift = 0; }
+  // span: share of the gait cycle left for this swing (it lands when the clock has run that far, at the end of its window)
+  function startSwing(f, span) { lastLift = f; f.swing = true; f.t = 0; f.armed = false; f.acc = 0; f.span = span > .05 ? span : .05; f.hurry = false; f.dn = 1; f.from.copy(f.plant); f.fromYaw = f.yaw; f.fromPitch = f.pitch; f.world.copy(f.plant); f.toY = f.toYT = groundY(f.ideal.x, f.ideal.z); f.probe = 0; f.lift = 0; }
   function writeBones() {
     for (let i = 0; i < NB; i++) {
       const p = PARENT[i], b = bones[i];
@@ -727,7 +731,8 @@ export function createSoldier(scene, opts = {}) {
   function poseAlive(dt, rawDt, st) {
     const vxC = fin(st.vx, 0), vzC = fin(st.vz, 0), yawT = fin(st.yaw, yawS), aim = clamp(fin(st.aimPitch, 0), -1.2, 1.2);
     const grounded = st.grounded !== false, crouch = clamp(fin(st.crouch, 0), 0, 1);
-    bodyY = fin(st.y, root.position.y);       // the physical height (the root lags it on stairs, for smoothness)
+    const by0 = bodyY; bodyY = fin(st.y, root.position.y);       // the physical height (the root lags it on stairs, for smoothness)
+    bodyDn = rawDt > 1e-5 && st.grounded !== false && !needSnap ? damp(bodyDn, clamp((by0 - bodyY) / rawDt * .1, 0, .4), 6, dt) : 0;       // how fast the body is going down (stairs): deeper reach for the landing probe
     time += dt;
     // smoothed yaw
     if (needSnap) yawS = yawT;
@@ -743,7 +748,7 @@ export function createSoldier(scene, opts = {}) {
     const sY = Math.sin(yawS), cY = Math.cos(yawS);
     const vF = -velX * sY - velZ * cY, vR = velX * cY - velZ * sY, speed = Math.hypot(vF, vR), dist = Math.hypot(dx, dz);
     const cF = -vxC * sY - vzC * cY, cR = vxC * cY - vzC * sY;
-    gaitOn = speed > (gaitOn ? .12 : .3) && grounded;
+    const gaitWas = gaitOn; gaitOn = speed > (gaitOn ? .12 : .3) && grounded;
     runS = damp(runS, ss(2.4, 4.4, speed), 6, dt);
     moveB = damp(moveB, ss(.1, .9, speed), 7, dt);
     crouchS = damp(crouchS, crouch, 9, dt);
@@ -759,19 +764,30 @@ export function createSoldier(scene, opts = {}) {
     landV += (-120 * landY - 16 * landV) * dt; landY += landV * dt;
     const ang = Math.atan2(vR, vF);
     if (speed > .4) { if (!back && Math.abs(ang) > 1.8) back = true; else if (back && Math.abs(ang) < 1.35) back = false; }
-    let ha = back ? ang - Math.PI * Math.sign(ang) : ang; ha = clamp(ha, -1.05, 1.05);
-    hipYaw = damp(hipYaw, -ha * .62 * ss(.2, 1, speed) + clamp(-turnV * .06, -.3, .3), 7, dt);
+    const haR = back ? ang - Math.PI * Math.sign(ang) : ang, hMax = lerp(1.05, 1.3, runS), ha = clamp(haR, -hMax, hMax);
+    // the hips turn toward the motion (the chest keeps aiming): a fast strafe is a run on legs turned sideways, not side steps the legs cannot reach
+    hipYaw = damp(hipYaw, -ha * lerp(.62, .95, runS) * ss(.2, 1, speed) + clamp(-turnV * .06, -.3, .3), 7, dt);
     const lat = speed > .1 ? Math.abs(vR) / speed : 0, fwdness = speed > .1 ? Math.max(0, vF / speed) : 0;
-    const stride = Math.max(.35, (.72 + .36 * Math.min(speed, 4.4) + .16 * clamp(speed - 4.4, 0, 3.6)) * sy * (1 - .25 * crouchS) * (1 - .15 * lat) * K.stride);   // short enough that a walk does not read as a lunge
-    const duty = lerp(.62, .38, runS);
+    const sideH = speed > .1 ? Math.min(1, Math.abs(Math.sin(haR + hipYaw))) : 0, fwdH = speed > .1 && !back ? Math.sqrt(1 - sideH * sideH) : 0;   // motion across / along the hips
+    // the legs alternate on one clock: each foot swings in its own window [duty, 1) of the cycle, half a cycle apart; duty > .5 so one foot is always down
+    const duty = lerp(.62, .5, runS);       // .5 at a run: one foot lands as the other lifts
+    // a planted foot travels duty x stride under the body: the stride stays within what the legs reach (heel off behind, knee bent ahead),
+    // otherwise every foot reaches its limit before its turn, lifts out of turn, and both legs end up swinging together
+    const reach = (1.1 + .3 * crouchS) * (1 - .35 * sideH) * (back ? .8 : 1) * sy;       // backwards no heel peels off to lengthen the reach
+    const stride = Math.max(.35, Math.min((.72 + .36 * Math.min(speed, 4.4) + .16 * clamp(speed - 4.4, 0, 3.6)) * sy * (1 - .1 * crouchS) * (1 - .15 * lat) * K.stride, reach / duty));   // short enough that a walk does not read as a lunge; crouched, about as many steps per metre as standing
+    if (gaitOn && !gaitWas) {   // first step: the clock starts on the foot already lifted, else on the one that did not step last (or the one left furthest behind)
+      const a = feet[0], b = feet[1], g = a.swing ? a : b.swing ? b : lastLift === a ? b : lastLift === b ? a : (((a.plant.x - a.ideal.x) - (b.plant.x - b.ideal.x)) * velX + ((a.plant.z - a.ideal.z) - (b.plant.z - b.ideal.z)) * velZ < 0 ? a : b);
+      if (g.swing) { phase = fract(duty + g.t * (1 - duty) - g.off); g.span = 1 - duty; g.acc = g.t * g.span; } else phase = fract(duty - g.off + 1e-4);
+    }
     const dPh = gaitOn ? dist / stride : 0; phase = fract(phase + dPh);
-    const T = stride / Math.max(speed, .3), swingDur = (1 - duty) * T;
+    const T = stride / Math.max(speed, .3);
 
     // ---- feet
     shuffleCd -= dt;
     const rX = Math.cos(yawS + hipYaw), rZ = -Math.sin(yawS + hipYaw), minW = .2 * sx;   // hips' right axis, smallest gap between the feet along it
-    for (let k = 0; k < 2; k++) {
-      const f = feet[k], o = feet[1 - k];
+    const k0 = feet[1].swing && !feet[0].swing ? 1 : 0;       // a swinging foot is updated first: it lands before the other one may lift in the same frame
+    for (let kk = 0; kk < 2; kk++) {
+      const k = kk ^ k0, f = feet[k], o = feet[1 - k];
       computeIdeal(f);
       if (!grounded) {   // airborne: the foot leaves its plant and follows the body instead of jumping under it
         if (f.swing) { toWorldXZ(f.ball.x, f.ball.z, tmpW); f.plant.set(tmpW.x - dx, root.position.y - dyR + f.ball.y, tmpW.z - dz); f.swing = false; }       // from where it is drawn, lifted foot included
@@ -782,39 +798,46 @@ export function createSoldier(scene, opts = {}) {
       }
       if (wasAir) { toWorldXZ(f.ball.x, f.ball.z, tmpW); f.plant.x = tmpW.x - dx; f.plant.z = tmpW.z - dz; f.plant.y = groundY(f.plant.x, f.plant.z); }   // touches down where it is, without sliding
       if (f.swing) {
-        const rate = gaitOn ? Math.max(dPh / (1 - duty), dt / .5) : dt / .3;
-        f.t = Math.min(1, f.t + rate);
+        f.acc += dPh;       // on the clock: down by the end of its window at any frame rate, a late start included
+        f.t = Math.min(1, Math.max(f.t + (gaitOn ? dt / .5 : dt / .3), gaitOn ? f.acc / f.span : 0) + (f.hurry ? dt / .06 : 0));       // hurried: the planted foot is out of reach and waits for this one to come down
         // landing target: Raibert-style lead along velocity
-        let lead = gaitOn ? (1 - f.t) * swingDur + duty * T * .5 * lerp(1, .62, runS) : 0;
+        let lead = gaitOn ? (1 - f.t) * f.span * T + duty * T * .5 * lerp(1, .62, runS * fwdH) : 0;      // running forward it lands nearer: the heel lifting behind reaches further
         let lx = velX * lead, lz = velZ * lead; const ll = Math.hypot(lx, lz), lmax = .55 * sy * (isZ && K.limp && f.side > 0 ? .7 : 1);
         if (ll > lmax) { lx *= lmax / ll; lz *= lmax / ll; }
+        if (f.probe > 0) f.dn = damp(f.dn, 1 - .6 * ss(.1, .45, bodyY - f.toYT), 12, dt);      // stepping down: the foot lands nearer under the hips, where the leg reaches the lower step
+        lx *= f.dn; lz *= f.dn;
         const e = f.t * f.t * (3 - 2 * f.t);
         let tgx = f.ideal.x + lx, tgz = f.ideal.z + lz;
         const oX = o.swing ? o.world.x : o.plant.x, oZ = o.swing ? o.world.z : o.plant.z;
         { const rel = ((tgx - oX) * rX + (tgz - oZ) * rZ) * f.side; if (rel < minW) { const p = (minW - rel) * f.side; tgx += rX * p; tgz += rZ * p; } }   // lands on its own side of the other foot
+        { const ox = tgx - f.ideal.x, oz = tgz - f.ideal.z, ol = Math.hypot(ox, oz), om = .55 * sy; if (ol > om) { tgx = f.ideal.x + ox * om / ol; tgz = f.ideal.z + oz * om / ol; } }   // but within reach of its hip (a strafe turning round swings the hips past the other foot)
         if (f.probe === 3) { tgx = f.lockX; tgz = f.lockZ; }       // the landing point is final: the height below stays true
         else if (f.probe === 0 || (f.probe === 1 && f.t > .45) || (f.probe === 2 && f.t > .8)) { const first = f.probe === 0; f.probe++; f.toYT = groundY(tgx, tgz); if (first) f.toY = f.toYT; f.lockX = tgx; f.lockZ = tgz; }
         f.toY = damp(f.toY, f.toYT, 22, dt);
         f.world.set(lerp(f.from.x, tgx, e), lerp(f.from.y, f.toY, e), lerp(f.from.z, tgz, e));
         { const rel = ((f.world.x - oX) * rX + (f.world.z - oZ) * rZ) * f.side; if (rel < minW) { const p = (minW - rel) * f.side * ss(0, .35, f.t); f.world.x += rX * p; f.world.z += rZ * p; } }   // and passes beside it, never through
-        if (f.t >= 1) { f.world.y = f.toYT; f.plant.copy(f.world); f.yaw = f.idealYaw; f.swing = false; f.pitch = 0; if (gaitOn) contacts++; }
+        if (f.t >= 1) { f.world.y = f.toYT; f.plant.copy(f.world); f.yaw = f.idealYaw; f.swing = false; f.hurry = false; f.landT = 0; f.pitch = 0; if (gaitOn) contacts++; }
       } else {
         // lift-off decisions
         _v4.copy(f.plant).sub(f.ideal); _v4.y = 0; const err = _v4.length();
         const yawErr = Math.abs(wrapA(f.idealYaw - f.yaw));
         if (gaitOn) {
-          const pf = fract(phase + f.off);
+          let pf = fract(phase + f.off);
           if (pf < duty) f.armed = true;
-          else if (f.armed && (!o.swing || runS > .5)) startSwing(f);
-          if (!f.swing && ((err > .62 * sy && !o.swing) || err > .8 * sy)) startSwing(f);   // past that the leg cannot reach its plant and the foot would drag
-          if (!f.swing && !o.swing && ((f.plant.x - o.plant.x) * rX + (f.plant.z - o.plant.z) * rZ) * f.side < minW * .5) startSwing(f);   // the hips turned over crossed feet: uncross with the next step
-          const u = f.armed ? pf / duty : 0;
-          f.pitch = damp(f.pitch, -lerp(.45, .85, runS) * ss(.55, 1, u) * fwdness * moveB, 18, dt);
+          else if (f.armed && !o.swing) startSwing(f, 1 - pf);       // its turn: never while the other foot is up
+          // out of reach (the foot would drag), or the hips turned over crossed feet: this foot steps now, out of turn
+          if (!f.swing && (err > .8 * sy || ((f.plant.x - o.plant.x) * rX + (f.plant.z - o.plant.z) * rZ) * f.side < minW * .5)) {
+            if (o.swing) o.hurry = true;        // never both up: the other foot comes down first
+            else { const g = lastLift === f ? o : f; phase = fract(duty - g.off); if (g === f) pf = duty; startSwing(g, 1 - duty); rephN++; }   // never the same foot twice in a row; the clock follows, so the next steps alternate from here
+          }
+          const u = f.armed ? pf / duty : 0, sp = speed > .1 ? 1 / speed : 0, behind = -((f.plant.x - f.ideal.x) * velX + (f.plant.z - f.ideal.z) * velZ) * sp;
+          // the heel peels off as the foot falls behind the hips: the ankle rises and comes forward, so the leg still reaches it at the end of the stance
+          f.pitch = damp(f.pitch, -lerp(.45, .85, runS) * Math.max(ss(.55, 1, u), ss(.12 * sy, .42 * sy, behind)) * fwdH * moveB, 30, dt);
         } else {
           f.armed = true; f.pitch = damp(f.pitch, 0, 10, dt);
           if (!o.swing && shuffleCd <= 0) {
             const oe = Math.hypot(o.plant.x - o.ideal.x, o.plant.z - o.ideal.z), oy = Math.abs(wrapA(o.idealYaw - o.yaw));
-            if ((err > .16 * sy || yawErr > .55) && (err + yawErr * .3 >= oe + oy * .3)) { startSwing(f); shuffleCd = .12; }
+            if ((err > .16 * sy || yawErr > .55) && (err + yawErr * .3 >= oe + oy * .3)) { startSwing(f, 1); shuffleCd = .12; }
           }
         }
       }
@@ -832,7 +855,7 @@ export function createSoldier(scene, opts = {}) {
         } else f.lift = 0;
         by = fl + (clr + Math.abs(f.toY - f.from.y) * .45) * arc;
         yW = f.fromYaw + wrapA(f.idealYaw - f.fromYaw) * e;
-        pit = lerp(f.fromPitch, 0, e) - .3 * arc * fwdness * (isZ && K.limp && f.side > 0 ? -1.2 : 1);
+        pit = lerp(f.fromPitch, 0, e) - .3 * arc * fwdH * (isZ && K.limp && f.side > 0 ? -1.2 : 1);
         f.pitch = pit;
       } else { toModel(f.plant, _v5); bx = _v5.x; bz = _v5.z; fl = _v5.y; by = fl; yW = f.yaw; }
       if (airF > .001) {   // tucked in-air pose
@@ -862,18 +885,24 @@ export function createSoldier(scene, opts = {}) {
     leanF = damp(leanF, clamp(cF * .045 + vF * .02, -.18, .32) + crouchS * .22 + K.lean * (isZ ? (.6 + .4 * moveB + (K.frantic ? .5 * runS : 0)) : 0), 5, dt);
     leanR = damp(leanR, clamp(cR * .03, -.12, .12), 5, dt);
     const roll = -swX * 2.5 * (K.limp ? 2.5 : 1) + leanR * .5;
-    let py = B[PEL].y - .027 * sy - .035 * runS * sy - (isZ ? .02 : 0) - crouchS * .33 * sy + bob + breath + landY * .12 - airF * .06;
+    let py = B[PEL].y - .027 * sy - .06 * runS * sy - (isZ ? .02 : 0) - crouchS * .33 * sy + bob + breath + landY * .12 - airF * .06;
     if (K.heavy) py -= .04 * sy;
     P[PEL].set(swX + idleX + (isZ ? 0 : -.01), py, -.02 * moveB + leanF * .05);
     qEul(Q[PEL], -leanF * .45 - crouchS * .12 + airF * .15, hipYaw + yawSw, roll);
     // reach clamp: pelvis drops so both planted ankles are reachable (never slide the feet)
     const Lmax = (A.lT + A.lS) * .955;       // the knee stays bent: near full extension a tiny move of the ankle swings its angle by tens of degrees
-    let minDy = 0; const dropMax = -.17 * sy;
+    // down stairs the root lags above the body, and a foot already stands on a lower step: the hips may come down by both, no further
+    const lowY = Math.min(feet[0].swing ? 1e9 : feet[0].plant.y, feet[1].swing ? 1e9 : feet[1].plant.y);
+    let minDy = 0; const dropMax = -.17 * sy - (grounded ? clamp(root.position.y - bodyY, 0, .7) + clamp(bodyY - lowY, 0, .4) : 0);
     for (let fi = 0; fi < 2; fi++) { const f = feet[fi];
       hipW.copy(f.side < 0 ? OFF[THL] : OFF[THR]).applyQuaternion(Q[PEL]).add(P[PEL]);
       const hx = f.ankle.x - hipW.x, hz = f.ankle.z - hipW.z, h2 = hx * hx + hz * hz;
       const need = f.ankle.y + Math.sqrt(Math.max(Lmax * Lmax - h2, .01)) - hipW.y;
-      if (need < dropMax && !f.swing && grounded) startSwing(f);       // too far to reach: the foot steps instead of pulling the hips to the floor
+      if (need < dropMax && !f.swing && grounded) {       // too far to reach: the foot steps instead of pulling the hips to the floor
+        const o = feet[1 - fi];
+        if (o.swing) o.hurry = true;        // but only once the other foot is down
+        else { const g = gaitOn && lastLift === f ? o : f; if (gaitOn) { phase = fract(duty - g.off); rephN++; } startSwing(g, 1 - duty); }       // while walking, never the same foot twice in a row
+      }
       if (need < minDy) minDy = need;
     }
     if (minDy < dropMax) minDy = dropMax;
@@ -1018,7 +1047,14 @@ export function createSoldier(scene, opts = {}) {
           let ds = d > s0 ? s0 + (s1 - s0) * (1 - Math.exp(-(d - s0) / (s1 - s0))) : d, a = Math.acos(clamp((l12 - ds * ds) / l3, -1, 1));
           if (f.kneeOk && dt > 0) { const m = KNEE_RATE * dt, e = a - f.knee; if (e > m || e < -m) { a = f.knee + (e > 0 ? m : -m); ds = Math.sqrt(Math.max(l12 - l3 * Math.cos(a), 1e-4)); } }
           f.ankle.copy(P[th]).addScaledVector(_v4, ds / d); f.knee = a;
-        } else { const dc = Math.min(d, L * .9995); f.knee = Math.acos(clamp((l12 - dc * dc) / l3, -1, 1)); }
+        } else if (f.kneeOk && dt > 0 && d > 1e-4 && (d > L * .96 || f.landT < .12)) {
+          // a planted foot out of reach (stairs taken fast: the body lags above the steps), or one that has just touched down after a quick swing:
+          // the knee settles at a bounded speed instead of snapping straight in one frame
+          const p0 = L * .96, p1 = L * .985; let ds = d > p0 ? p0 + (p1 - p0) * (1 - Math.exp(-(d - p0) / (p1 - p0))) : d, a = Math.acos(clamp((l12 - ds * ds) / l3, -1, 1));
+          const m = KNEE_RATE * (d > p0 ? 1 : 2) * dt, e = a - f.knee; if (e > m || e < -m) { a = f.knee + (e > 0 ? m : -m); ds = Math.sqrt(Math.max(l12 - l3 * Math.cos(a), 1e-4)); }
+          if (ds !== d) f.ankle.copy(P[th]).addScaledVector(_v4, ds / d);
+          f.knee = a; f.landT += dt;
+        } else { const dc = Math.min(d, L * .9995); f.knee = Math.acos(clamp((l12 - dc * dc) / l3, -1, 1)); f.landT += dt; }
         f.kneeOk = true;
       }
       ik2(P[th], A.lT, A.lS, f.ankle, pole, knee, ankleOut);
@@ -1409,7 +1445,7 @@ export function createSoldier(scene, opts = {}) {
     },
     dispose() { if (fit) { try { fit.dispose(); } catch { /* cosmetic */ } fit = null; } if (root.parent) root.parent.remove(root); skeleton.dispose(); },
     // debug/test hooks (read-only use)
-    _dbg: { P, Q, feet, rp, RD, A, isSleeping: () => sleeping, ragTime: () => rT },
+    _dbg: { P, Q, feet, rp, RD, A, isSleeping: () => sleeping, ragTime: () => rT, rephases: () => rephN, phase: () => phase },
   };
   Object.defineProperty(s, 'dead', { get: () => dead, set: () => { }, enumerable: true });
   poseAlive(1 / 60, 0, lst);

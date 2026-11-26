@@ -36,7 +36,7 @@ export function install({ net, engine, settings, hudRoot }) {
   }
   const stop = () => { clearInterval(timer); timer = 0; show(false); warn = false; okN = 0; };
   const offs = [
-    engine.on('matchStart', c => { stop(); if (c && c.online) { update(); timer = setInterval(update, 500); } }),
+    engine.on('matchStart', c => { stop(); if (c && c.online) { net.qualSince = performance.now(); update(); timer = setInterval(update, 500); } }),       // pings taken during the load (long tasks) do not count as jitter
     engine.on('matchEnd', stop), engine.on('quit', stop),
   ];
   return { destroy() { stop(); for (const f of offs) { try { f && f(); } catch { /* ignore */ } } el.remove(); } };

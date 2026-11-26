@@ -1700,6 +1700,7 @@ export function createWeaponPreview(renderer, canvas, baseDef) {
     const t0 = performance.now(); draw(); spent += performance.now() - t0;
     if (++frames === 24) { if (spent / frames > 22) autoOn = false; frames = 0; spent = 0; }       // a slow machine keeps the preview, it only stops the idle motion
   };
+  let compiling = null;       // three's compileAsync polls each material's program: freeing one before it is linked throws in its timer (shop-ui.js createStudio has the same wait)
   const api = {
     get stats() { return { W, H, autoOn, ready }; },
     /** Resolves true when the shaders are linked and the first image is on the canvas. */
@@ -1707,7 +1708,7 @@ export function createWeaponPreview(renderer, canvas, baseDef) {
       api.setDef(def);
       const prev = renderer.getRenderTarget(); let wait;
       try { renderer.setRenderTarget(hdr); wait = renderer.compileAsync ? renderer.compileAsync(scene, cam) : null; renderer.setRenderTarget(ldr); renderer.compile(blitScene, blitCam); } finally { renderer.setRenderTarget(prev); }
-      if (wait) await Promise.race([wait, new Promise(r => setTimeout(r, 6000))]);
+      if (wait) { compiling = Promise.resolve(wait).catch(() => {}); await Promise.race([compiling, new Promise(r => setTimeout(r, 6000))]); }
       if (!alive || gl.isContextLost()) return false;
       draw(); ready = true; last = performance.now(); raf = requestAnimationFrame(tick); return true;
     },
@@ -1716,7 +1717,12 @@ export function createWeaponPreview(renderer, canvas, baseDef) {
     setFinish(id) { if (!alive) return; skin.apply(w, id); dirty = true; },
     rotate(dx, dy) { yaw += dx; pitch = clamp(pitch + dy, -.7, .7); holdUntil = performance.now() + 2600; dirty = true; },
     dispose() {
-      if (!alive) return; alive = false; cancelAnimationFrame(raf); skin.dispose();
+      if (!alive) return; alive = false; cancelAnimationFrame(raf);
+      if (compiling) { const c = compiling; compiling = null; Promise.race([c, new Promise(r => setTimeout(r, 8000))]).then(api.dispose2); return; }       // freed once the compile has settled (8 s at most)
+      api.dispose2();
+    },
+    dispose2() {
+      skin.dispose();
       const geos = new Set(), collect = root => root.traverse(o => { if (o.isMesh) geos.add(o.geometry); });
       collect(w.root); for (const e of fitter.lib.values()) collect(e.root); geos.add(blitGeo); for (const g of geos) g.dispose();
       const tex = new Set(); for (const m of Object.values(mats)) { for (const k of ['map', 'roughnessMap', 'envMap']) if (m[k]) tex.add(m[k]); m.dispose(); }
@@ -2101,7 +2107,7 @@ export function createViewModel(camera, scene) {
       return true;
     },
     cancelGrenade() { if (gren.active) stopNade(); },
-    /* equipment gesture on the grenade's hand path. s = {keys (from gestureTrack) or null for the throw path, ev [[t, name]], end, prop, onEvent(name), onFrame(T), onEnd(finished)} */
+    /* equipment gesture on the grenade's hand path. s = {keys (from gestureTrack) or null for the throw path, ev [[t, name]], end, prop, onEvent(name), onFrame(T), onEnd(finished), elbow(T, v) optional} */
     playGesture(s) {
       if (gren.active || !w) return false;
       gren.active = true; gren.t = 0; gren.ev = 0; gren.cb = null; gren.thrown = false; gren.x = s; gren.keys = s.keys || GK; gren.evs = s.ev || NADE_EV; gren.end = s.end || NADE_END;
@@ -2319,7 +2325,7 @@ export function createViewModel(camera, scene) {
         gren.t += dt; const T = gren.t;
         const k = mj(T / .1) * (1 - mj((T - (gren.end - .21)) / .21));
         sampleNade(T, tmpNade);
-        _el2.copy(tmpNade.p); _el2.x -= .3; _el2.y -= .42; _el2.z += .23;
+        _el2.copy(tmpNade.p); if (!(gren.x && gren.x.elbow && gren.x.elbow(T, _el2))) { _el2.copy(tmpNade.p); _el2.x -= .3; _el2.y -= .42; _el2.z += .23; }       // s.elbow(T, v): the gesture's own elbow (camera space, v holds the wrist), false = this default
         _qi.copy(rig.quaternion).invert();
         tmpNade.p.sub(rig.position).applyQuaternion(_qi).divideScalar(S); tmpNade.q.premultiply(_qi);
         handL.p.lerp(tmpNade.p, k); handL.q.slerp(tmpNade.q, k);
