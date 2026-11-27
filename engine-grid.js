@@ -2,6 +2,10 @@
 // plus the character mover (step-up, ground snap, sub-stepping). No allocation in any query.
 const EPS = 1e-3;
 export const STEP_H = 0.32;
+/* [objc] Natural slopes: a solid the map flags `slope` (grass, earth, scree cells of a relief grid; never cliffs, walls, roofs or stairs)
+   is climbed up to STEP_T per step (0,5 m on the 0,5 m cells: 45°); everything else keeps STEP_H. A solid flagged `cliff` (with cnx, cnz:
+   the way back to the play area) is never stepped on, and a body that lands on it slides back off (move()). */
+export const STEP_T = 0.5;
 
 export function createGrid(cell = 4) {
   let S = [], inv = 1 / cell, gx0 = 0, gz0 = 0, nx = 1, nz = 1;
@@ -144,7 +148,7 @@ export function createMover(g) {
     for (let i = 0; i < n; i++) {
       const c = A[i]; if (!ov(p, r, h, c)) continue;
       const rise = c.y1 - p.y;
-      if (rise > 0 && rise <= STEP_H + EPS) { if (c.y1 > stepTo) stepTo = c.y1; continue; }
+      if (rise > 0 && !c.cliff && rise <= (c.slope ? STEP_T : STEP_H) + EPS) { if (c.y1 > stepTo) stepTo = c.y1; continue; }       // [objc] natural slopes: STEP_T; a cliff is never stepped on
       if (c.slide && slideOut(b, ax, c)) { bump = true; continue; }
       if (ax === 0) p.x = d > 0 ? Math.max(c.x0 - r - EPS, o) : Math.min(c.x1 + r + EPS, o); else p.z = d > 0 ? Math.max(c.z0 - r - EPS, o) : Math.min(c.z1 + r + EPS, o);
       bump = true;
@@ -173,7 +177,7 @@ export function createMover(g) {
   function snap(b) {
     const p = b.pos, r = b.r; let top = p.y <= STEP_H + 0.05 ? 0 : -1, gs = null;
     const n = g.boxQuery(p.x - r, p.x + r, p.z - r, p.z + r, A);
-    for (let i = 0; i < n; i++) { const c = A[i]; if (p.x + r > c.x0 && p.x - r < c.x1 && p.z + r > c.z0 && p.z - r < c.z1 && c.y1 <= p.y + EPS && c.y1 >= p.y - STEP_H - 0.05 && c.y1 > top) { top = c.y1; gs = c; } }
+    for (let i = 0; i < n; i++) { const c = A[i]; if (p.x + r > c.x0 && p.x - r < c.x1 && p.z + r > c.z0 && p.z - r < c.z1 && c.y1 <= p.y + EPS && c.y1 >= p.y - (c.slope ? STEP_T : STEP_H) - 0.05 && c.y1 > top) { top = c.y1; gs = c; } }       // [objc] stays on the ground down a natural slope
     if (top < 0) return false;
     b.stepOff -= p.y - top; p.y = top; b.vy = 0; b.grounded = true; b.ground = gs; return true;
   }
@@ -181,11 +185,16 @@ export function createMover(g) {
     blocked,
     /** Moves the body by (dx,dy,dz), sub-stepped so nothing tunnels. Returns true when a wall was hit. */
     move(b, dx, dy, dz, noSnap) {
+      /* [objc] safety net: the last point where the body was free; a body that ends a move inside a solid goes back there */
+      if (!blocked(b.pos.x, b.pos.y, b.pos.z, b.r, b.h)) { b.fx = b.pos.x; b.fy = b.pos.y; b.fz = b.pos.z; b.fh = b.h; } else if (b.fx !== undefined && Math.abs(b.pos.x - b.fx) + Math.abs(b.pos.z - b.fz) + Math.abs(b.pos.y - b.fy) > 1.5) b.fx = undefined;       // a teleport (spawn, correction) is never undone
+      /* [objc] a body standing on a cliff (solid flagged cliff, cnx/cnz = the way back to the play area) cannot go further out and slides back */
+      const gc = b.grounded && b.ground; if (gc && gc.cliff) { const o = dx * gc.cnx + dz * gc.cnz; if (o < 0) { dx -= o * gc.cnx; dz -= o * gc.cnz; } dx += gc.cnx * 0.12; dz += gc.cnz * 0.12; }
       const m = Math.max(Math.abs(dx), Math.abs(dy), Math.abs(dz)), n = m > 0.3 ? Math.min(16, Math.ceil(m / 0.3)) : 1, was = b.grounded;
       let bump = false; b.ceil = false;
       for (let i = 0; i < n; i++) { if (axis(b, 0, dx / n)) bump = true; if (axis(b, 1, dz / n)) bump = true; vert(b, dy / n); }
       if (was && !b.grounded && b.vy <= 0 && !noSnap) snap(b);
       for (let k = 0; k < 3; k++) { const c = blocked(b.pos.x, b.pos.y, b.pos.z, b.r, b.h); if (!c) break; depen(b, c); }
+      if (b.fx !== undefined && b.fh === b.h && blocked(b.pos.x, b.pos.y, b.pos.z, b.r, b.h) && !blocked(b.fx, b.fy, b.fz, b.r, b.h)) { b.pos.x = b.fx; b.pos.y = b.fy; b.pos.z = b.fz; if (b.vy > 0) b.vy = 0; bump = true; }
       if (b.stepOff > 0.7) b.stepOff = 0.7; else if (b.stepOff < -0.7) b.stepOff = -0.7;
       return bump;
     },

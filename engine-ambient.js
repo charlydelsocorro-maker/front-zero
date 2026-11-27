@@ -32,7 +32,7 @@ void main(){
     else { float t=life; o=vec3(uW.x*t*7.+sin(t*9.+ph*6.)*.5,-t*3.4+sin(t*5.+ph)*.2,uW.y*t*7.+cos(t*7.+ph*4.)*.5); vA=smoothstep(0.,.08,t)*(1.-smoothstep(.9,1.,t)); float r=uT*2.2+ph*9.; p.xy=mat2(cos(r),-sin(r),sin(r),cos(r))*p.xy; p.y*=.55+.45*sin(uT*3.1+ph*5.); }
     vec4 c=modelViewMatrix*instanceMatrix*vec4(o,1.); c.xy+=p.xy*size; mvPosition=c;
   } else {
-    if(k<.5){ float w=uv.x,a=uT*(2.1+s*1.4)+ph; p.z+=(sin(a-w*5.2)*.17+sin(a*1.7-w*9.)*.05)*w*(.35+s); p.y+=sin(a*.8-w*4.)*.05*w*(.3+s)-w*w*.12*(1.1-min(s,1.)); vC*=.8+.26*sin(a-w*5.2+1.2); }
+    if(k<.5){ float w=uv.x,a=uT*(2.1+s*1.4)+ph; p.z+=(sin(a-w*5.2)*.17+sin(a*1.7-w*9.)*.05)*w*(.35+s); p.z+=sin(w*7.+ph*.5+uv.y*2.5)*.07*aP.z*w; p.y-=uv.y*.05*aP.z*w; /* [petits] soft fold */ p.y+=sin(a*.8-w*4.)*.05*w*(.3+s)-w*w*.12*(1.1-min(s,1.)); vC*=.8+.26*sin(a-w*5.2+1.2); }
     else if(k<1.5){ float w=1.-uv.y,a=uT*(1.3+s*.6)+ph; p.z+=(sin(a)+.45*sin(a*2.3+uv.x*3.))*.14*w*(.35+s); p.x+=sin(a*1.3+uv.y*2.)*.025*w; vC*=.84+.2*sin(a+uv.x*4.); }
     else if(k<2.5){ float x=uv.x,g=4.*x*(1.-x); p.y-=g*aP.z; p.z+=g*sin(uT*(.9+s*.5)+ph)*.07*(.3+s); }
     else if(k<3.5){ p.y+=abs(p.x)*sin(uT*aP.y+ph)*.75; }
@@ -111,11 +111,22 @@ export function install({ engine: E, settings }) {
     const T = key === 'bunker' ? [] : tops(W).filter(s => openSky((s.x0 + s.x1) / 2, s.y1, (s.z0 + s.z1) / 2, W)), used = [], far = (x, z, d) => { for (const u of used) if ((u[0] - x) * (u[0] - x) + (u[1] - z) * (u[1] - z) < d * d) return false; return true; };
     const windYaw = Math.atan2(-baseZ, baseX);
     /* flags on poles, on the roofs */
-    for (let n = 0, tries = 0; n < D.flags && tries < 120 && T.length; tries++) {
-      const s = pick(T), x = R() < .5 ? s.x0 + .3 : s.x1 - .3, z = R() < .5 ? s.z0 + .3 : s.z1 - .3, y = s.y1; if (!far(x, z, 13) || !clearAir(x, y + 1, z, W) || !openSky(x, y, z, W)) continue;
-      used.push([x, z]); n++; const h = 2.6 + R() * 1.2;
+    /* [petits] each flag is planted on the roof itself (inset from the edge), with no wall, rock or upper floor within reach of the pole or the swinging cloth; the cloth turns away from obstacles and carries a soft fold */
+    const wallNear = (x, y, z, h, W) => { for (const q of W.solids) if (q.y1 > y + .3 && q.y0 < y + h && q.x1 > x - 1.7 && q.x0 < x + 1.7 && q.z1 > z - 1.7 && q.z0 < z + 1.7) return true; return false; };
+    for (let n = 0, tries = 0; n < D.flags && tries < 160 && T.length; tries++) {
+      const s = pick(T), dxs = s.x1 - s.x0, dzs = s.z1 - s.z0; if (dxs < 3 || dzs < 3) continue;
+      const x = R() < .5 ? s.x0 + .7 : s.x1 - .7, z = R() < .5 ? s.z0 + .7 : s.z1 - .7, y = s.y1, h = 2.6 + R() * 1.2;
+      if (!far(x, z, 13) || !clearAir(x, y + 1, z, W) || !openSky(x, y, z, W) || wallNear(x, y, z, h + .4, W)) continue;
+      let yaw = null;
+      for (const da of [0, .5, -.5, 1, -1, 1.6, -1.6, 2.4, -2.4, Math.PI]) {
+        const a = windYaw + da, cx = Math.cos(a), cz = -Math.sin(a); let ok = true;
+        for (const u of [.5, 1, 1.45]) for (const sd of [-.4, 0, .4]) { const px = x + cx * u - cz * sd, pz = z + cz * u + cx * sd; if (!clearAir(px, y + h - .3, pz, W) || !clearAir(px, y + h, pz, W)) ok = false; }
+        if (ok) { yaw = a; break; }
+      }
+      if (yaw === null) continue;
+      used.push([x, z]); n++;
       put(P.rigid, x, y + h / 2, z, 0, .05, h, .05, tint(0x3b3a34), 0, 0, 0, K_RIGID);
-      put(P.flag, x, y + h - .36, z, windYaw + (R() - .5) * .25, 1.25, .72, 1, tint(pick(D.cloth)), R() * 6.3, 1, 0, K_FLAG);
+      put(P.flag, x, y + h - .36, z, yaw + (R() - .5) * .15, 1.25, .72, 1, tint(pick(D.cloth)), R() * 6.3, 1, .6 + R() * .6, K_FLAG);
     }
     /* cables between roofs, with laundry on some of them */
     let hung = 0;

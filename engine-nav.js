@@ -1,6 +1,8 @@
 // FRONT ZÉRO — engine helper: layered navigation grid (ground + upper floors + stairs) and A*.
 // Built from the solids through the spatial grid on every map load.
 const CS = 0.5, CL = 0.4, HH = 1.7, ST = 0.32, MAXH = 16;
+/* [fin] règle de pente (engine-grid STEP_T) : un solide `slope` (herbe, terre, pavés d'une grille de relief) se gravit jusqu'à 0,5 m par case ; ailleurs ST. */
+const STS = 0.5;
 const DX = [1, -1, 0, 0, 1, 1, -1, -1], DZ = [0, 0, 1, -1, 1, -1, 1, -1];
 const COST = [1, 1, 1, 1, 1.4142, 1.4142, 1.4142, 1.4142];
 
@@ -21,7 +23,7 @@ export function createNav(grid) {
       if (c >= 0) { const s = buf[c]; if (x < s.x0 || x > s.x1 || z < s.z0 || z > s.z1) continue; }
       if (h < lo - 1e-3 || h > hi + 1e-3) continue;
       let ok = true;
-      for (let i = 0; i < k; i++) { const s = buf[i]; if (x + r > s.x0 && x - r < s.x1 && z + r > s.z0 && z - r < s.z1 && s.y1 > h + ST && s.y0 < h + HH) { ok = false; break; } }
+      for (let i = 0; i < k; i++) { const s = buf[i]; if (x + r > s.x0 && x - r < s.x1 && z + r > s.z0 && z - r < s.z1 && s.y1 > h + (s.slope ? STS : ST) && s.y0 < h + HH) { ok = false; break; } }
       if (ok && h > best) best = h;
     }
     return best;
@@ -42,25 +44,26 @@ export function createNav(grid) {
     const hit = key != null ? cache.get(key) : null;
     if (hit && hit.size === size) { ({ N, half, n, cellFirst, cellCnt, nCell, nH, nei, ground } = hit); scratch(); return; }
     half = size + 1; N = Math.ceil(2 * half / CS);
-    const rc = [], rh = [];
+    const rc = [], rh = [], rs = [], cs = [];
     for (let cz = 0; cz < N; cz++) { if (!(cz & 7)) yield 0.6 * cz / N; for (let cx = 0; cx < N; cx++) {
       const x = -half + (cx + 0.5) * CS, z = -half + (cz + 0.5) * CS;
       const k = grid.boxQuery(x - CL, x + CL, z - CL, z + CL, buf);
-      cand.length = 0; cand.push(0);
-      for (let i = 0; i < k; i++) { const c = buf[i]; if (x >= c.x0 && x <= c.x1 && z >= c.z0 && z <= c.z1 && c.y1 > 0.02 && c.y1 < MAXH) cand.push(c.y1); }
+      cand.length = 0; cand.push(0); cs.length = 0;
+      for (let i = 0; i < k; i++) { const c = buf[i]; if (x >= c.x0 && x <= c.x1 && z >= c.z0 && z <= c.z1 && c.y1 > 0.02 && c.y1 < MAXH) { cand.push(c.y1); if (c.slope) cs.push(c.y1); } }
       if (cand.length > 2) cand.sort((a, b) => a - b); else if (cand.length === 2 && cand[1] < cand[0]) { const t = cand[0]; cand[0] = cand[1]; cand[1] = t; }
       let last = -9, lastI = -1;
       for (let q = 0; q < cand.length; q++) {
         const h = cand[q]; if (h - last < 0.02) continue;
         let ok = true;
-        for (let i = 0; i < k; i++) { const c = buf[i]; if (x + CL > c.x0 && x - CL < c.x1 && z + CL > c.z0 && z - CL < c.z1 && c.y1 > h + ST && c.y0 < h + HH) { ok = false; break; } }
+        for (let i = 0; i < k; i++) { const c = buf[i]; if (x + CL > c.x0 && x - CL < c.x1 && z + CL > c.z0 && z - CL < c.z1 && c.y1 > h + (c.slope ? STS : ST) && c.y0 < h + HH) { ok = false; break; } }
         if (!ok) continue;
-        if (lastI >= 0 && h - last <= ST) { rh[lastI] = h; last = h; continue; }
-        lastI = rc.length; rc.push(cz * N + cx); rh.push(h); last = h;
+        const sl = cs.length && cs.indexOf(h) >= 0 ? 1 : 0;
+        if (lastI >= 0 && h - last <= ST) { rh[lastI] = h; rs[lastI] = sl; last = h; continue; }
+        lastI = rc.length; rc.push(cz * N + cx); rh.push(h); rs.push(sl); last = h;
       }
     } }
     // provisional arrays
-    let m = rc.length; nCell = Int32Array.from(rc); nH = Float32Array.from(rh);
+    let m = rc.length; nCell = Int32Array.from(rc); nH = Float32Array.from(rh); const nSl = Uint8Array.from(rs), up = (a, b) => (nH[a] >= nH[b] ? nSl[a] : nSl[b]);   /* [fin] la marche se lit sur le solide du haut */
     cellFirst = new Int32Array(N * N).fill(-1); cellCnt = new Uint8Array(N * N);
     for (let i = 0; i < m; i++) { const c = nCell[i]; if (cellFirst[c] < 0) cellFirst[c] = i; cellCnt[c]++; }
     nei = new Int32Array(m * 8).fill(-1); n = m;
@@ -71,6 +74,7 @@ export function createNav(grid) {
         const x2 = cx + DX[d], z2 = cz + DZ[d]; if (x2 < 0 || z2 < 0 || x2 >= N || z2 >= N) continue;
         const c2 = z2 * N + x2; if (!cellCnt[c2]) continue;
         let j = find(c2, h, ST);
+        if (j < 0) { const js = find(c2, h, STS); if (js >= 0 && up(i, js)) j = js; }
         if (j < 0) {
           const j2 = find(c2, h, 0.62);
           if (j2 >= 0) { const h2 = nH[j2], lo = Math.max(h, h2) - ST, hi = Math.min(h, h2) + ST; if (standH(-half + (cx + 0.5 + DX[d] * 0.5) * CS, -half + (cz + 0.5 + DZ[d] * 0.5) * CS, lo, hi, 0.3) >= 0) j = j2; }
@@ -81,7 +85,7 @@ export function createNav(grid) {
     for (let i = 0; i < m; i++) for (let d = 4; d < 8; d++) {
       const a = nei[i * 8 + (DX[d] > 0 ? 0 : 1)], b = nei[i * 8 + (DZ[d] > 0 ? 2 : 3)]; if (a < 0 || b < 0) continue;
       const j = nei[a * 8 + (DZ[d] > 0 ? 2 : 3)], j2 = nei[b * 8 + (DX[d] > 0 ? 0 : 1)];
-      if (j >= 0 && j === j2 && Math.abs(nH[j] - nH[i]) <= ST) nei[i * 8 + d] = j;
+      if (j >= 0 && j === j2 && Math.abs(nH[j] - nH[i]) <= (up(i, j) ? STS : ST)) nei[i * 8 + d] = j;
     }
     yield 0.92;
     // connected components, keep the one the spawns live in

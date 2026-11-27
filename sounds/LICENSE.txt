@@ -579,6 +579,11 @@ Glass Break, Till Behrend (submitted by TinyWorlds)
   https://opengameart.org/sites/default/files/glass_breaking.wav
   OpenGameArt page: "License(s): CC0"
     props/glass-6.mp3 (from 0.000 s to 1.310 s)
+    props/glass-7.mp3, props/glass-8.mp3, props/glass-9.mp3 (27/11/2026, the pane break heard in the game): each one stacks takes
+      of the three recordings above (A Mirror Explodes #387, Broken glass #771, Glass Break), re-pitched by resampling
+      (x1.0 to x1.9, never slowed), delayed, panned, high-passed at 420-480 Hz, compressed and limited. The short impact at
+      the start is the first 60-70 ms of glass-1 and glass-2, with a 120 ms decaying 95 Hz sine under it (the only generated
+      part). Same CC0 1.0 terms.
 Apartment door, opening #3 (#2418), Joseph Sardin
   https://bigsoundbank.com/apartment-door-opening-3-s2418.html
   https://bigsoundbank.com/UPLOAD/bwf-en/2418.wav

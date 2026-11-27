@@ -121,7 +121,24 @@ export function seeded(str) {
  * Explosive props against walls, away from spawns, doors and each other. `grid` is built over the map's solids.
  * Returns [{x, y, z, kind:'drum'|'gas'}].
  */
-export function placeBarrels(id, cfg, grid, size, spawns, doors) {
+/**
+ * [objc] What the map draws, as boxes, for the barrel test: drawn walls can stand in front of their collision (or have none), and a barrel
+ * set 40 cm from the collision ended up half inside the drawn wall (rc8-06). Axis boxes and quarter-turn boxes of the layout, plus the
+ * bounds of small baked meshes; glass, fences, foliage, water and flat ground marks are left out. Returns overlap(x0, x1, y0, y1, z0, z1).
+ */
+export function drawnBoxes(L) {
+  const C = 4, cells = new Map(), key = (i, j) => i * 65536 + j, SKIP = /^(glass|fence|chain|leaf|leafA|far|lamp|water|ar_leaf|ar_water|ar_water_cave|ar_cloth|ar_dark|lampA|lampW)$/;
+  const add = (x0, x1, y0, y1, z0, z1) => { if (y1 < .2 || x1 - x0 > 40 || z1 - z0 > 40) return; const b = [x0, x1, y0, y1, z0, z1]; for (let i = Math.floor(x0 / C); i <= Math.floor(x1 / C); i++) for (let j = Math.floor(z0 / C); j <= Math.floor(z1 / C); j++) { const k = key(i, j); let l = cells.get(k); if (!l) cells.set(k, l = []); l.push(b); } };
+  for (const o of L.ops || []) {
+    if (!o || !o.m || SKIP.test(o.m)) continue;
+    if (o.t === 'b') add(o.x0, o.x1, o.y0, o.y1, o.z0, o.z1);
+    else if (o.t === 'r') { const q = (((o.ry || 0) % (Math.PI / 2)) + Math.PI / 2) % (Math.PI / 2); if (q > 1e-3 && Math.PI / 2 - q > 1e-3) continue; const odd = Math.round((o.ry || 0) / (Math.PI / 2)) & 1, w = odd ? o.d : o.w, d = odd ? o.w : o.d; add(o.x - w / 2, o.x + w / 2, o.y, o.y + o.h, o.z - d / 2, o.z + d / 2); }
+    else if (o.t === 'g' && o.w < 3 && o.d < 3 && o.h !== undefined) add(o.x - o.w / 2, o.x + o.w / 2, o.y - o.h, o.y + o.h, o.z - o.d / 2, o.z + o.d / 2);
+  }
+  return (x0, x1, y0, y1, z0, z1) => { for (let i = Math.floor(x0 / C); i <= Math.floor(x1 / C); i++) for (let j = Math.floor(z0 / C); j <= Math.floor(z1 / C); j++) for (const b of cells.get(key(i, j)) || []) if (x1 > b[0] && x0 < b[1] && y1 > b[2] && y0 < b[3] && z1 > b[4] && z0 < b[5]) return true; return false; };
+}
+
+export function placeBarrels(id, cfg, grid, size, spawns, doors, drawn) {
   const rnd = seeded('props:' + id), out = [], buf = [], cand = [], STEP = 2.5;
   const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
   const clear = (x, z, r, h) => !grid.overlap(x - r, x + r, 0.02, h, z - r, z + r, buf);
@@ -137,18 +154,18 @@ export function placeBarrels(id, cfg, grid, size, spawns, doors) {
     if (grid.ray(qx, 0.5, qz, -dx, 0, -dz, 2.6) < 2.6) continue;                       // keep the way past it open
     if (!clear(qx, qz, 0.36, 1.3) || grid.floorAt(qx, 1, qz) > 0.02) continue;
     if (!farFrom(qx, qz, spawns, 15) || !farFrom(qx, qz, doorPts, 3.2)) continue;
-    cand.push({ x: qx, z: qz, wx: -dz, wz: dx, k: rnd() });
+    cand.push({ x: qx, z: qz, wx: -dz, wz: dx, k: rnd(), bad: !!drawn && drawn(qx - .32, qx + .32, .05, 1.2, qz - .32, qz + .32) });       // [objc] same draws: a candidate inside a drawn wall is only skipped below
   }
   cand.sort((p, q) => p.k - q.k);
   const want = cfg.barrels + cfg.gas; let drums = 0, gas = 0;
   const put = (x, z, kind) => { out.push({ x, y: 0, z, kind }); if (kind === 'drum') drums++; else gas++; };
   for (const c of cand) {
     if (out.length >= want) break;
-    if (!farFrom(c.x, c.z, out, 8)) continue;
+    if (c.bad || !farFrom(c.x, c.z, out, 8)) continue;
     const kind = drums < cfg.barrels && (gas >= cfg.gas || rnd() < 0.72) ? 'drum' : 'gas'; put(c.x, c.z, kind);
     if (out.length < want && rnd() < 0.45) {                                            // a pair along the wall: the classic chain
       const s = rnd() < 0.5 ? 1 : -1, nx = c.x + c.wx * s * 0.95, nz = c.z + c.wz * s * 0.95;
-      if (clear(nx, nz, 0.36, 1.3) && grid.floorAt(nx, 1, nz) <= 0.02 && farFrom(nx, nz, spawns, 15) && farFrom(nx, nz, doorPts, 3.2)) put(nx, nz, drums < cfg.barrels ? 'drum' : 'gas');
+      if (clear(nx, nz, 0.36, 1.3) && grid.floorAt(nx, 1, nz) <= 0.02 && farFrom(nx, nz, spawns, 15) && farFrom(nx, nz, doorPts, 3.2) && !(drawn && drawn(nx - .32, nx + .32, .05, 1.2, nz - .32, nz + .32))) put(nx, nz, drums < cfg.barrels ? 'drum' : 'gas');
     }
   }
   return out;

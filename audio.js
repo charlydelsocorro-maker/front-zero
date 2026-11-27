@@ -7,7 +7,6 @@ const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const finite = (v, d = 0) => (Number.isFinite(v) ? v : d);
 const smooth = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 const rand = (a, b) => a + Math.random() * (b - a);
-const pick = (list) => list[Math.floor(Math.random() * list.length)];
 // Linear parameter move from the current value (avoids setTargetAtTime, which is unstable in some engines).
 function glide(param, value, now, time) {
   const cur = param.value;
@@ -36,8 +35,9 @@ const SURFACES = ['sand', 'concrete', 'metal', 'wood', 'snow'];
 const surfaceOf = (s) => (SURFACES.includes(s) ? s : 'concrete');
 const CAPS = { gunOwn: 6, gun: 12, step: 6, foley: 8, reload: 4, impact: 10, whizz: 3, casing: 4, hud: 3, ui: 3, amb: 10, boom: 4, rumble: 3, debris: 3, launch: 4, melee: 4, prop: 6 };
 // World-prop levels (recorded takes, sounds/props/), set by offline renders through the master chain against a footstep and a shot.
-// Measured at 3 m: a door opening sits between a walking and a running step, a slam 4 dB over a running step, a pane break 10 dB under
-// a rifle shot at the same distance, a steel door slam about as loud as a rifle shot at 10 m.
+// Measured at 3 m: a door opening sits between a walking and a running step, a slam 4 dB over a running step, a steel door slam about
+// as loud as a rifle shot at 10 m. A pane break was 10 dB under a rifle shot at the same distance; since 27/11 (player's request: a shot
+// window must be really loud) its takes are glass-7..9 (impact + burst of glass) at target -20 LUFS-M in sounds/manifest.json, 7.5 dB up.
 const PROP_MIX = { glass: .9, doorOpen: .51, doorSlam: .7, heavyOpen: .34, heavySlam: .32, gasHiss: .08, fire: .7 };
 
 // ---------------------------------------------------------------------------
@@ -181,21 +181,21 @@ const ENVS = {
     ir: { rt: 1.25, pre: .018, lp: 4300, lpMin: 500, damp: 2.4, hp: 170, level: .55,
       taps: [[.11, .36, -.45], [.19, .22, .55], [.31, .13, -.2], [.46, .08, .35]], modes: [] },
     echo: { t: .34, fb: .28, lp: 2100, g: .46 },
-    events: { gunfire: [7, 18], artillery: [16, 38] },
+    events: {},
   },
   urban: {
     wet: .52, ownWet: .9,
     ir: { rt: 1.7, pre: .008, lp: 6200, lpMin: 650, damp: 2.0, hp: 140, level: .8,
       taps: [[.019, .55, -.65], [.031, .5, .7], [.047, .38, -.35], [.068, .34, .45], [.093, .25, -.75], [.127, .2, .6], [.171, .13, -.2], [.236, .1, .3]], modes: [[730, .012, .12], [1240, .008, .09]] },
     echo: { t: .155, fb: .34, lp: 2900, g: .36 },
-    events: { gunfire: [6, 15], artillery: [20, 46], creak: [18, 42] },
+    events: { creak: [18, 42] },
   },
   port: {
     wet: .5, ownWet: .82,
     ir: { rt: 2.3, pre: .014, lp: 5200, lpMin: 520, damp: 1.5, hp: 120, level: .72,
       taps: [[.042, .42, .6], [.083, .3, -.55], [.141, .24, .3], [.226, .17, -.7], [.37, .13, .55], [.59, .07, -.25]], modes: [[310, .02, .55], [655, .014, .42], [1490, .007, .26]] },
     echo: { t: .29, fb: .36, lp: 2300, g: .4 },
-    events: { gunfire: [9, 22], artillery: [24, 52], gull: [4, 13], water: [3, 8], creak: [6, 16] },
+    events: { gull: [4, 13], water: [3, 8], creak: [6, 16] },
   },
   bunker: {
     wet: .74, ownWet: 1,
@@ -203,14 +203,14 @@ const ENVS = {
       taps: [[.006, .72, -.7], [.011, .66, .72], [.017, .56, -.45], [.024, .5, .5], [.033, .42, -.8], [.045, .34, .75], [.061, .27, -.25], [.083, .2, .3]],
       modes: [[182, .05, .95], [417, .045, .8], [863, .035, .62], [1377, .024, .44], [2281, .014, .28], [3518, .008, .18]] },
     echo: { t: .071, fb: .46, lp: 3200, g: .24 },
-    events: { gunfire: [13, 30], artillery: [12, 30], creak: [8, 20], tick: [3, 9] },
+    events: { creak: [8, 20], tick: [3, 9] },
   },
   snow: {
     wet: .3, ownWet: .55,
     ir: { rt: 1.5, pre: .03, lp: 2100, lpMin: 260, damp: 3.2, hp: 110, level: .46,
       taps: [[.15, .18, -.4], [.42, .13, .5], [.74, .09, -.15]], modes: [] },
     echo: { t: .52, fb: .3, lp: 1100, g: .34 },
-    events: { gunfire: [12, 30], artillery: [18, 44] },
+    events: {},
   },
 };
 
@@ -474,16 +474,6 @@ function genUi(sr, kind, rng) {
   return polish(o, sr, kind === 'hurt' ? .82 : .5, 8);
 }
 
-function genArtillery(sr, rng) {
-  const o = outBuf(sr, 3.4);
-  addDrop(o, sr, .004, 72, 25, .9, .34);
-  addNoise(o, sr, rng, .004, 3.2, .55, .62, 'lp', 62, .7, .025);
-  addNoise(o, sr, rng, .004, 1.6, .3, .32, 'bp', 760, .3, .012);
-  for (let i = 0; i < 4; i++) addDrop(o, sr, .32 + i * (.34 + rng() * .25), 52 + rng() * 15, 24, .24 / (1 + i * .4), .24);
-  softClip(o, 4.5);
-  scoop(o, sr, 215, .55, .8);
-  return polish(o, sr, .82, 60);
-}
 function genWaterLap(sr, rng) {
   const o = outBuf(sr, 1.15), a = new Biquad('bp', 420, .8, sr), b = new Biquad('bp', 1250, 1.6, sr);
   for (let i = 0; i < o.length; i++) {
@@ -902,7 +892,6 @@ export function createAudio() {
     impact: (s) => bank(`impact:${s}`, 4, (sr, r) => genImpact(sr, r, s)),
     whizz: () => bank('whizz', 4, genWhizz),
     ui: (k) => bank(`ui:${k}`, 1, (sr, r) => genUi(sr, k, r)),
-    artillery: () => bank('artillery', 3, genArtillery),
     water: () => bank('water', 4, genWaterLap),
     creak: () => bank('creak', 4, genCreak),
   };
@@ -915,7 +904,6 @@ export function createAudio() {
     }
     warm('whizz', 4, genWhizz);
     for (const s of SURFACES) warm(`slide:${s}`, 2, (sr, r) => genSlide(sr, r, s));
-    warm('artillery', 3, genArtillery);
     startIdle();
   }
 
@@ -1212,17 +1200,8 @@ export function createAudio() {
   }
   function fireEvent(type, t) {
     const pan = rand(-.95, .95);
-    if (type === 'gunfire') {
-      const id = pick(['ar', 'lmg', 'smg', 'ar', 'p9']), n = id === 'p9' ? 1 + Math.floor(Math.random() * 3) : 3 + Math.floor(Math.random() * 5);
-      const gap = id === 'lmg' ? .1 : id === 'smg' ? .068 : id === 'p9' ? .24 : .094;
-      const level = rand(.1, .24), lp = rand(650, 1500);
-      for (let i = 0; i < n; i++) {      // far-off fire is the real distant recording of that weapon, or nothing while it is not decoded
-        const take = smp && smp.shot(id, false, .9);
-        if (take && take[0]) ambVoice(take[0].buffer, t + i * gap * rand(.94, 1.06), level * Math.min(1.2, take[0].gain) * rand(.86, 1.05), pan, lp, .22, .24, take[0].rate * rand(.96, 1.01));
-      }
-    } else if (type === 'artillery') {
-      ambVoice(B.artillery(), t, rand(.46, .84), pan, rand(220, 520), .3, .25, rand(.88, 1.08));
-    } else if (type === 'water') {
+    // No made-up far-off gunfire or artillery (player's request, 26-27/11): a shot or a blast nobody fired sent players looking for a fight that was not there.
+    if (type === 'water') {
       ambVoice(B.water(), t, rand(.14, .28), pan, 3200, .1, 0, rand(.85, 1.12));
     } else if (type === 'creak') {
       ambVoice(B.creak(), t, rand(.07, .18), pan, 3600, .4, .08, rand(.82, 1.14));

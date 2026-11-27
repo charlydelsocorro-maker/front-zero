@@ -4,7 +4,9 @@
 import * as THREE from 'three';
 import { buildLayout } from './maps.js';
 import { createMover } from './engine-grid.js';
-import { PROP_MAPS, PROP_DEFAULT, BARREL, HEAVY_DOORS, PEN_MAX_THICK, PEN_MIN_LEFT, PEN_LAYERS, powerOf, penCost, deriveProps, deriveGlazing, placeBarrels, seeded } from './map-props.js';
+import { PROP_MAPS, PROP_DEFAULT, BARREL, HEAVY_DOORS, PEN_MAX_THICK, PEN_MIN_LEFT, PEN_LAYERS, powerOf, penCost, deriveProps, deriveGlazing, placeBarrels, drawnBoxes, seeded } from './map-props.js';
+// [vitres] cracks, pieces left in the frame, falling shards, glass on the floor. Loaded on the side: a missing or broken file only brings back the old look.
+let glassMod = null; import('./engine-glass.js').then(m => { glassMod = m; }, e => console.warn('[vitres] off:', e && e.message));
 
 const AWAY = -60, SWING = 1.78, SWING_RATE = 5.2, USE_R = 2.5, USE_DOT = 0.62, MAX_SHARDS = 72, PANE_T = 0.05, LEAF_T = 0.07, EPS = 0.012;
 const SURF = { sand: 0x9a8a68, concrete: 0x8a8880, metal: 0xc8b48a, wood: 0x7a5c3a, snow: 0xe8eef4 };
@@ -65,6 +67,9 @@ export function createProps(ctx) {
   const shards = inst(shardGeo, lam, MAX_SHARDS); shards.castShadow = false;
   for (let i = 0; i < MAX_SHARDS; i++) shards.setMatrixAt(i, ZERO); shards.count = MAX_SHARDS;       // always drawn (scaled to nothing): its program is linked with the map
   const sP = new Float32Array(MAX_SHARDS * 3), sV = new Float32Array(MAX_SHARDS * 3), sL = new Float32Array(MAX_SHARDS), sR = new Float32Array(MAX_SHARDS); let sHead = 0, sLive = 0;
+  /* [vitres] broken glass (engine-glass.js), driven by the pane state below. Any failure: the old dark holes and grey shards, never a broken match. */
+  let glass = null, useGlass = false, glassWarned = false; const glassFail = e => { if (!glassWarned) { glassWarned = true; console.warn('[vitres]', e); } };
+  const glassMake = () => { if (glass || !glassMod) return; try { glass = glassMod.createGlass({ scene, grid, camera, lam }); } catch (e) { glass = null; glassMod = null; console.warn('[vitres] off:', e && e.message); } };
 
   let doorMesh = null, steelMesh = null, paneMesh = null, holeMesh = null, drumMesh = null, gasMesh = null, mapId = null, ready = false, enabled = false, isOnline = false, authOff = false;
   let doors = [], panes = [], barrels = [], moving = [], scan = 0, focus = null, focusT = 0, shownKey = 0, chainUsed = 0, chainT = 0, removed = [];
@@ -76,9 +81,37 @@ export function createProps(ctx) {
   const net = () => (isOnline && ctx.net ? ctx.net() : null);
   const hide = s => { s.y0 = AWAY; s.y1 = AWAY; }, show = s => { s.y0 = s.oy0; s.y1 = s.oy1; };
   const sol = (x0, x1, y0, y1, z0, z1, surface, pen) => ({ x0, x1, y0: AWAY, y1: AWAY, z0, z1, surface, pen, prop: null, pane: false, oy0: y0, oy1: y1 });
+  /* [objc] Door collision. The closed slab blocks whenever the leaves are shut or about to be: it comes back as soon as a closing door's
+     doorway is free (it waited for the end of the swing: one walked through the closing leaf), and an opening door keeps it for the
+     first OPEN_KEEP radians of the swing. An open leaf at rest gets a thin box along it (it had none: one walked through it), never inside
+     the opening, only where the floor past its tip is free (it can never close a corridor), and only once nobody stands where it lies. */
+  const OPEN_KEEP = 0.5;
+  const block = (d, on) => { if (d.blk === on) return; d.blk = on; if (on) show(d.s); else hide(d.s); };
+  function leafSolids(d, sg, mk) {       // the two leaves of a door opened from side sg rest toward -sg; null where a box would get in the way
+    const w = (d.b - d.a) / 2, cs = Math.cos(SWING), sn = Math.sin(SWING), T = LEAF_T / 2 + 0.006, wt = (d.th || 0.3) / 2 + 0.04, out = [];
+    for (let k = 0; k < 2; k++) {
+      const hu = k ? d.b : d.a, du = k ? -cs : cs, dn = -sg * sn, pu = sg * sn * (k ? -1 : 1), pn = cs, U = [], Nn = [];       // leaf direction and its normal in (u along the opening, n across the wall)
+      for (const t of [0, w]) for (const e of [-T, T]) { U.push(hu + du * t + pu * e); Nn.push(d.c + dn * t + pn * e); }
+      let u0 = Math.min(...U), u1 = Math.max(...U); const n0 = Math.min(...Nn), n1 = Math.max(...Nn), tipN = d.c + dn * w, tipU = hu + du * w;
+      if (k) u0 = Math.max(u0, d.b); else u1 = Math.min(u1, d.a);       // never in the opening: the doorway keeps its full width
+      const box = (a0, a1, b0, b1, y0, y1) => (d.ax === 'x' ? grid.overlap(a0, a1, y0, y1, b0, b1, ovBuf) : grid.overlap(b0, b1, y0, y1, a0, a1, ovBuf));
+      const nIn = sg > 0 ? [n0, d.c - wt] : [d.c + wt, n1], nPast = sg > 0 ? [tipN - 0.85, tipN] : [tipN, tipN + 0.85], uPast = k ? [d.b - 0.25, tipU + 0.9] : [tipU - 0.9, d.a + 0.25];
+      if (!(u1 - u0 > 0.02) || box(u0, u1, nIn[0], nIn[1], d.y0 + 0.35, d.y0 + 1.9) || box(uPast[0], uPast[1], nPast[0], nPast[1], d.y0 + 0.4, d.y0 + 1.7)) { out.push(null); continue; }
+      const s = d.ax === 'x' ? sol(u0, u1, d.y0, d.y0 + d.h, n0, n1, d.s.surface, d.s.pen) : sol(n0, n1, d.y0, d.y0 + d.h, u0, u1, d.s.surface, d.s.pen);
+      s.prop = d; out.push(s); mk(s);
+    }
+    return out;
+  }
+  const leafFree = s => { for (let i = 0; i < actors.length; i++) { const a = actors[i]; if (!a.alive || a.ghost) continue; const r = (a.body ? a.body.r : 0.35) + 0.06; if (a.pos.x + r > s.x0 && a.pos.x - r < s.x1 && a.pos.z + r > s.z0 && a.pos.z - r < s.z1 && a.pos.y < s.oy1 && a.pos.y + 1.8 > s.oy0) return false; } return true; };
+  /** Leaves of the side the door opened to: on when it rests open and the space is free, off otherwise. True when they are where they should be. */
+  function setLeaves(d, on) {
+    const want = on ? d.lf[d.side > 0 ? 0 : 1] : null; let ok = true;
+    for (const set of d.lf) for (const s of set) { if (!s) continue; const keep = !!want && set === want; if (!keep) { hide(s); continue; } if (s.y1 === s.oy1) continue; if (leafFree(s)) show(s); else ok = false; }
+    d.leafOk = ok; return ok;
+  }
 
   /* ---------- building: right after world.load, before grid.build ---------- */
-  function clearMeshes() { for (const m of [doorMesh, steelMesh, paneMesh, holeMesh, drumMesh, gasMesh]) if (m) { scene.remove(m); m.dispose(); } doorMesh = steelMesh = paneMesh = holeMesh = drumMesh = gasMesh = null; }
+  function clearMeshes() { for (const m of [doorMesh, steelMesh, paneMesh, holeMesh, drumMesh, gasMesh]) if (m) { scene.remove(m); m.dispose(); } doorMesh = steelMesh = paneMesh = holeMesh = drumMesh = gasMesh = null; useGlass = false; if (glass) { try { glass.clear(); } catch { /* gone */ } } }       // [vitres] the glass meshes of the last map too
   /** A real walk through the opening, both ways, with the player's body: from 95 cm before it to 80 cm past it, at any of five lateral offsets. */
   function canWalk(h) {
     const nx = h.ax === 'x' ? 0 : 1, nz = h.ax === 'x' ? 1 : 0, ux = nz, uz = nx, mid = (h.a + h.b) / 2, cx = h.ax === 'x' ? mid : h.c, cz = h.ax === 'x' ? h.c : mid, room = Math.max(0, (h.b - h.a) / 2 - 0.4);
@@ -106,8 +139,8 @@ export function createProps(ctx) {
     }
     gStamp = new Int32Array(glazing.length); gSid = 0;
   }
-  /** Every windscreen or cabin window the bullet crossed on its way to `tt`. No allocation. */
-  function hitGlazing(ox, oy, oz, dx, dy, dz, tt) {
+  /** Every windscreen or cabin window the bullet crossed on its way to `tt`. No allocation. `look`: another client's shot, only where it hit. */
+  function hitGlazing(ox, oy, oz, dx, dy, dz, tt, look) {
     if (!glazing.length) return; const id = ++gSid; let last = -1;
     for (let t = 0; ; t += 1.5) {
       const q = t > tt ? tt : t, ci = Math.floor((ox + dx * q + gHalf) / G_CELL), cj = Math.floor((oz + dz * q + gHalf) / G_CELL), c = ci < 0 || cj < 0 || ci >= gN || cj >= gN ? -1 : cj * gN + ci;
@@ -119,6 +152,8 @@ export function createProps(ctx) {
           const tp = ((p.cx - ox) * p.nx + (p.cz - oz) * p.nz) / dn; if (tp < 0 || tp > tt + 0.35) continue;
           const hy = oy + dy * tp - p.cy; if (hy > p.hh || hy < -p.hh) continue;
           const u = (ox + dx * tp - p.cx) * p.ux + (oz + dz * tp - p.cz) * p.uz; if (u > p.hw || u < -p.hw) continue;
+          if (useGlass) { p.hu = u; p.hv = hy; p.hT = glass.now; p.hdx = dx; p.hdz = dz; p.hBl = false; }       // [vitres] the web's centre, also when the 'gl' of that shot comes back
+          if (look) continue;
           breakPane(p, dx, dz); if (isOnline) glOut.push(p.id);
         }
       }
@@ -145,20 +180,22 @@ export function createProps(ctx) {
         const startOpen = rd() < cfg.open;       // drawn for every opening, so that dropping one never changes the others
         if (!canWalk(h)) { removed.push({ x: +cx.toFixed(2), z: +cz.toFixed(2), why: 'walk' }); continue; }       // stairs or a wall right behind it: the opening stays free
         const half = LEAF_T / 2, surf = h.heavy ? 'metal' : 'wood', rate = h.heavy ? 10 : 2.6, s = h.ax === 'x' ? sol(h.a, h.b, h.y0, h.y0 + h.h, h.c - half, h.c + half, surf, rate) : sol(h.c - half, h.c + half, h.y0, h.y0 + h.h, h.a, h.b, surf, rate);
-        const d = { id: doors.length, slot: 0, heavy: !!h.heavy, ax: h.ax, c: h.c, a: h.a, b: h.b, y0: h.y0, h: h.h, cx, cz, s, startOpen, open: false, ang: 0, side: 1, noSwing: 0, moving: false, listed: false, wait: 0 }; s.prop = d;
+        const d = { id: doors.length, slot: 0, heavy: !!h.heavy, ax: h.ax, c: h.c, a: h.a, b: h.b, y0: h.y0, h: h.h, th: h.th, cx, cz, s, startOpen, open: false, ang: 0, side: 1, noSwing: 0, moving: false, listed: false, wait: 0, blk: false, lf: [[], []], leafOk: true }; s.prop = d;
         // A leaf never swings into a staircase or a wall right behind the opening: side s sends the leaves toward -s.
         const w = (h.b - h.a) / 2, hits = sg => (h.ax === 'x' ? grid.overlap(h.a + 0.05, h.b - 0.05, h.y0 + 0.12, h.y0 + 2, sg > 0 ? h.c - w : h.c + 0.2, sg > 0 ? h.c - 0.2 : h.c + w, ovBuf) : grid.overlap(sg > 0 ? h.c - w : h.c + 0.2, sg > 0 ? h.c - 0.2 : h.c + w, h.y0 + 0.12, h.y0 + 2, h.a + 0.05, h.b - 0.05, ovBuf));
         const bp = !!hits(1), bn = !!hits(-1); d.noSwing = bp && !bn ? 1 : bn && !bp ? -1 : 0;
         if (bp && bn) { removed.push({ x: +cx.toFixed(2), z: +cz.toFixed(2), why: 'swing' }); continue; }       // no side for the leaves to go
         doors.push(d); solids.push(s);
+        for (const sg of [1, -1]) if (sg !== d.noSwing) d.lf[sg > 0 ? 0 : 1] = leafSolids(d, sg, q => solids.push(q));       // [objc] after the door's own slab: door ids and the server manifest do not change
       }
       for (const h of D.windows) {
         if (panes.length >= cfg.panes) break;
         const half = PANE_T / 2, s = h.ax === 'x' ? sol(h.a, h.b, h.y0, h.y0 + h.h, h.c - half, h.c + half, 'metal', 0.6) : sol(h.c - half, h.c + half, h.y0, h.y0 + h.h, h.a, h.b, 'metal', 0.6);
-        s.pane = true; const p = { id: panes.length, ax: h.ax, c: h.c, a: h.a, b: h.b, y0: h.y0, h: h.h, cx: h.ax === 'x' ? (h.a + h.b) / 2 : h.c, cy: h.y0 + h.h / 2, cz: h.ax === 'x' ? h.c : (h.a + h.b) / 2, s, broken: false }; s.prop = p; panes.push(p); solids.push(s);
+        s.pane = true; const p = { id: panes.length, ax: h.ax, c: h.c, a: h.a, b: h.b, y0: h.y0, h: h.h, th: h.th, cx: h.ax === 'x' ? (h.a + h.b) / 2 : h.c, cy: h.y0 + h.h / 2, cz: h.ax === 'x' ? h.c : (h.a + h.b) / 2, s, broken: false }; s.prop = p; panes.push(p); solids.push(s);       // [vitres] th: wall thickness (where the glass on the floor starts)
       }
       const nWin = panes.length; addGlazing(deriveGlazing(L));       // ids after the real windows
-      for (const q of placeBarrels(id, cfg, grid, ctx.world.size, ctx.world.spawns, D.doors.concat(heavy))) {
+      let drawn = null; try { drawn = drawnBoxes(L); } catch { /* the collision test alone */ }       // [objc] barrels also keep out of drawn walls
+      for (const q of placeBarrels(id, cfg, grid, ctx.world.size, ctx.world.spawns, D.doors.concat(heavy), drawn)) {
         const k = BARREL[q.kind], s = sol(q.x - k.r, q.x + k.r, q.y, q.y + k.h, q.z - k.r, q.z + k.r, 'metal', 0); show(s);
         const b = { id: barrels.length, kind: q.kind, k, x: q.x, y: q.y, z: q.z, s, hp: k.hp, state: 0, fuse: 0, by: null, gen: 0, fireT: 0, slot: 0 }; s.prop = b; barrels.push(b); solids.push(s);
       }
@@ -166,13 +203,14 @@ export function createProps(ctx) {
       if (nw) { doorMesh = inst(leafGeo, lam, nw * 2); doorMesh.castShadow = true; doorMesh.receiveShadow = true; doorMesh.count = nw * 2; }
       if (ns) { steelMesh = inst(steelGeo, lam, ns * 2); steelMesh.castShadow = true; steelMesh.receiveShadow = true; steelMesh.count = ns * 2; }
       if (nWin) { paneMesh = inst(paneGeo, glassM, nWin); paneMesh.count = nWin; paneMesh.renderOrder = 3; }
-      if (glazing.length) { holeMesh = inst(holeGeo, lam, glazing.length); holeMesh.count = glazing.length; }
+      useGlass = false; glassMake(); if (glass) { try { glass.attach(panes, nWin, glazing.length); useGlass = true; } catch (e) { console.warn('[vitres] off on this map:', e && e.message); try { glass.clear(); } catch { /* gone */ } } }       // [vitres] its meshes are in the scene before the shader warm-up
+      if (glazing.length && !useGlass) { holeMesh = inst(holeGeo, lam, glazing.length); holeMesh.count = glazing.length; }
       let nd = 0, ng = 0; for (const b of barrels) b.slot = b.kind === 'drum' ? nd++ : ng++;
       if (nd) { drumMesh = inst(drumGeo, lam, nd); drumMesh.castShadow = true; drumMesh.count = nd; }
       if (ng) { gasMesh = inst(gasGeo, lam, ng); gasMesh.castShadow = true; gasMesh.count = ng; }
       /* MAP QA: Lambert gets no environment light while the map's standard materials do (envMapIntensity = envI of the map): without it the leaves and drums read almost black. Uniform only, same program. */
       try { let hemi = -1; scene.traverse(o => { if (hemi < 0 && o.isHemisphereLight) hemi = o.intensity; }); lam.color.setScalar(hemi > 0 ? Math.max(1.3, Math.min(2.3, 1.55 / hemi)) : 1.6); } catch { /* keep the default */ }       // dimmer sky light (snow, airbase, valley): stronger lift
-      resetAll(true); for (const d of doors) { d.open = true; d.ang = SWING; hide(d.s); drawDoor(d); } for (const p of panes) hide(p.s);       // away until begin(): the nav grid is built without them
+      resetAll(true); for (const d of doors) { d.open = true; d.ang = SWING; block(d, false); drawDoor(d); for (const set of d.lf) for (const q of set) if (q) show(q); } for (const p of panes) hide(p.s);       // away until begin(): the nav grid is built without them; [objc] the open leaves' boxes (both sides) are in it, so bots go round where a leaf may rest
       ready = true;
     } catch (e) { console.warn('[props] disabled on this map:', e && e.message); ready = false; }
   }
@@ -183,7 +221,8 @@ export function createProps(ctx) {
     for (let k = 0; k < 2; k++) {
       let ry, x, z;
       if (d.ax === 'x') { x = k ? d.b : d.a; z = d.c; ry = k ? Math.PI - th : th; } else { x = d.c; z = k ? d.b : d.a; ry = k ? Math.PI / 2 + th : -Math.PI / 2 - th; }
-      Q.setFromAxisAngle(YAX, ry); V.set(x, d.y0, z); S.set(w - 0.01, d.h - 0.015, LEAF_T); M.compose(V, Q, S); mesh.setMatrixAt(d.slot * 2 + k, M);
+      // The second leaf is 8 mm thicker and runs 6 mm past the middle, over the first one: closed, no light shows between them (a 2 cm slit before). Not coplanar, so no z-fight.
+      Q.setFromAxisAngle(YAX, ry); V.set(x, d.y0, z); S.set(k ? w + 0.006 : w - 0.002, d.h - 0.015, k ? LEAF_T + 0.008 : LEAF_T); M.compose(V, Q, S); mesh.setMatrixAt(d.slot * 2 + k, M);
     }
     mesh.instanceMatrix.needsUpdate = true;
   }
@@ -203,9 +242,10 @@ export function createProps(ctx) {
     m.instanceMatrix.needsUpdate = true;
   }
   function resetAll(noDoorAnim) {
-    for (const d of doors) { d.open = d.startOpen; d.ang = d.open ? SWING : 0; d.side = d.id & 1 ? 1 : -1; d.moving = false; d.listed = false; d.wait = 0; if (d.open) hide(d.s); else show(d.s); drawDoor(d); }
     moving.length = 0;
+    for (const d of doors) { d.open = d.startOpen; d.ang = d.open ? SWING : 0; d.side = d.id & 1 ? 1 : -1; if (d.side === d.noSwing) d.side = -d.side; d.moving = false; d.listed = false; d.wait = 0; block(d, !d.open); if (!setLeaves(d, d.open)) pend(d); drawDoor(d); }       // [objc] the start side respects noSwing (a leaf could rest in a wall)
     for (const p of panes) { p.broken = false; show(p.s); drawPane(p); }
+    if (useGlass) { try { glass.reset(); } catch (e) { glassFail(e); } }       // [vitres] no crack, no piece, no glass on the floor
     for (const b of barrels) { b.hp = b.k.hp; b.state = 0; b.fuse = 0; b.by = null; b.gen = 0; show(b.s); drawBarrel(b); }
     for (let i = 0; i < MAX_SHARDS; i++) { sL[i] = 0; shards.setMatrixAt(i, ZERO); } shards.instanceMatrix.needsUpdate = true; sLive = 0;
     chainUsed = 0; chainT = 0; focus = null; if (!noDoorAnim) doorPrompt(null);
@@ -218,9 +258,11 @@ export function createProps(ctx) {
     return false;
   }
   const sideOf = (d, x, z) => ((d.ax === 'x' ? z - d.c : x - d.c) >= 0 ? 1 : -1);
+  function pend(d) { if (!d.listed) { d.listed = true; moving.push(d); } }
   function setDoor(d, open, side, quiet) {
-    if (d.open === open) return; d.open = open; if (open) { d.side = side === d.noSwing ? -side : side; hide(d.s); }       // an opening door stops blocking at once: it can never trap anyone
-    d.moving = true; d.wait = 0; if (!d.listed) { d.listed = true; moving.push(d); }
+    if (d.open === open) return; d.open = open; if (open) { d.side = side === d.noSwing ? -side : side; if (d.ang >= OPEN_KEEP) block(d, false); }       // [objc] the slab goes once the leaves are past OPEN_KEEP (stepDoors): nobody stands in a shut doorway, it traps no one
+    setLeaves(d, false);       // [objc] moving leaves have no box; they get it back at rest
+    d.moving = true; d.wait = 0; pend(d);
     if (!quiet && open && (d.cx - camera.position.x) ** 2 + (d.cz - camera.position.z) ** 2 < 1600) play('doorOpen', at(d.cx, d.y0 + 1.1, d.cz, d.heavy ? 1.4 : 1));
   }
   function useDoor(d, who) {
@@ -232,11 +274,21 @@ export function createProps(ctx) {
   function stepDoors(dt) {
     for (let i = moving.length - 1; i >= 0; i--) {
       const d = moving[i], goal = d.open ? SWING : 0;
-      if (!d.open && occupied(d)) {       // somebody stepped into the doorway: wait with the door held, never close on them
-        d.wait += dt; if (d.ang < 0.5) { d.ang = Math.min(SWING, d.ang + SWING_RATE * dt); drawDoor(d); } continue;
+      if (!d.moving) { if (!d.open || setLeaves(d, true)) { d.listed = false; moving.splice(i, 1); } continue; }       // [objc] an open leaf waits until nobody stands where it rests
+      if (!d.open && !d.blk) {
+        if (occupied(d)) {       // somebody stepped into the doorway: wait with the door held, never close on them
+          d.wait += dt; if (d.ang < 0.5) { d.ang = Math.min(SWING, d.ang + SWING_RATE * dt); drawDoor(d); } continue;
+        }
+        block(d, true);       // [objc] doorway free: the closing door blocks from now on, not at the end of its swing
       }
       const st = SWING_RATE * (d.heavy ? 0.62 : 1) * dt, e = goal - d.ang; d.ang += e > st ? st : e < -st ? -st : e; drawDoor(d);
-      if (d.ang === goal) { d.moving = false; d.listed = false; moving.splice(i, 1); if (!d.open) { show(d.s); const n2 = (d.cx - camera.position.x) ** 2 + (d.cz - camera.position.z) ** 2; if (n2 < 900) play('doorSlam', at(d.cx, d.y0 + 1, d.cz, d.heavy ? 1.4 : 1)); } }
+      if (d.open && d.blk && d.ang >= OPEN_KEEP) block(d, false);
+      if (d.ang === goal) {
+        d.moving = false;
+        if (!d.open) { const n2 = (d.cx - camera.position.x) ** 2 + (d.cz - camera.position.z) ** 2; if (n2 < 900) play('doorSlam', at(d.cx, d.y0 + 1, d.cz, d.heavy ? 1.4 : 1)); }
+        else if (!setLeaves(d, true)) continue;       // stays listed until its leaves fit
+        d.listed = false; moving.splice(i, 1);
+      }
     }
     const n = doors.length; if (!n) return;                                       // bots: a slice of the doors each frame
     for (let k = Math.min(n, 6); k > 0; k--) {
@@ -276,11 +328,18 @@ export function createProps(ctx) {
   }
   function crash(x, y, z) { if ((x - camera.position.x) ** 2 + (z - camera.position.z) ** 2 <= 3600) play('glass', at(x, y, z, 1)); }       // named event: silent until audio.js has it
   function ignite(b) { if ((b.x - camera.position.x) ** 2 + (b.z - camera.position.z) ** 2 > 3600) return; if (b.kind === 'gas') play('gasHiss', at(b.x, b.y + b.k.h, b.z, 1)); play('fire', at(b.x, b.y + b.k.h, b.z, 1)); }
-  function breakPane(p, dx, dz, quiet) {
+  function breakPane(p, dx, dz, quiet, blast) {
     if (p.broken) return; p.broken = true; hide(p.s); drawPane(p);
     const nx = p.ax === 'x' ? 0 : (dx >= 0 ? 1 : -1), nz = p.ax === 'x' ? (dz >= 0 ? 1 : -1) : 0;
-    shardBurst(p.cx, p.cy, p.cz, nx, nz, p.ax, p.b - p.a, p.h); try { fx.puff(p.cx, p.cy, p.cz, 0xd6e4e8, 3, 1.1); } catch { /* optional */ }
+    if (useGlass) { try { glass.shatter(p, dx, dz, true, blast); } catch (e) { glassFail(e); } }       // [vitres] pieces in the frame, glass on the floor, the fall
+    else shardBurst(p.cx, p.cy, p.cz, nx, nz, p.ax, p.b - p.a, p.h);
+    try { fx.puff(p.cx, p.cy, p.cz, 0xd6e4e8, 3, 1.1); } catch { /* optional */ }
     if (!quiet) crash(p.cx, p.cy, p.cz);
+  }
+  /** [vitres] This client's bullet, blow or blast on a window: one is enough, it all goes with the loud crash (player's choice, 27/11: a first bullet that only cracked it made no sound). Windscreens keep their web (hitGlazing). */
+  function hitPane(p, x, y, z, dx, dz, def) {
+    if (p.broken) return;
+    breakPane(p, dx, dz); if (isOnline) glOut.push(p.id);
   }
   const glOut = [];
   function reportPanes() { const n = net(); if (n && glOut.length) { try { n.sendProp({ a: 'gl', ids: glOut.slice(0, 16) }); } catch { /* connection lost */ } } glOut.length = 0; }
@@ -346,15 +405,18 @@ export function createProps(ctx) {
     for (let i = 0; i < T.n; i++) {
       if (T.tIn[i] > tt) break; const s = T.hit[i], a = T.tIn[i], b = T.tOut[i], col = s.pane ? 0xd6e4e8 : SURF[s.surface] || 0x9a8a68;
       try { fx.puff(ox + dx * a, oy + dy * a, oz + dz * a, col, 3, 0.9); if (b <= tt) fx.puff(ox + dx * b, oy + dy * b, oz + dz * b, col, 3, 1.25); } catch { /* optional */ }
-      if (s.pane) { if (mine && enabled) { const p = s.prop; breakPane(p, dx, dz); if (isOnline) glOut.push(p.id); } }
+      if (s.pane) {       // [vitres] the bullet's way through it; another client's shot only notes it here, its break comes back as 'gl' and throws the glass that way
+        const p = s.prop, m = (a + b) / 2; if (useGlass) { p.hdx = dx; p.hdz = dz; p.hT = glass.now; p.hBl = false; }
+        if (mine && enabled) hitPane(p, ox + dx * m, oy + dy * m, oz + dz * m, dx, dz, def);
+      }
       else play('impact', s.surface, at(ox + dx * a, oy + dy * a, oz + dz * a, 0.8));
     }
     if (mine && enabled) {
       hitGlazing(ox, oy, oz, dx, dy, dz, tt);
       const s = T.solid; if (s && tt >= T.t - 0.02 && s.prop && !s.pane && s.prop.k) damageBarrel(s.prop, def.dmg * kAt(tt), shooter, def.id);
-      else if (s && tt >= T.t - 0.02 && s.pane) { breakPane(s.prop, dx, dz); if (isOnline) glOut.push(s.prop.id); }
+      else if (s && tt >= T.t - 0.02 && s.pane) hitPane(s.prop, ox + dx * T.t, oy + dy * T.t, oz + dz * T.t, dx, dz, def);       // [vitres] a bullet that stops in the glass, or a blow
       reportPanes();
-    }
+    } else if (enabled && useGlass) hitGlazing(ox, oy, oz, dx, dy, dz, tt, true);       // [vitres] another client's shot: where its web will be
   }
   function damageBarrel(b, amount, by, weapon) {
     const n = net(); if (n) { try { n.sendProp({ a: 'hit', id: b.id, d: Math.round(amount * 10) / 10, w: weapon }); } catch { /* connection lost */ } } else hitBarrel(b, amount, by);
@@ -364,15 +426,17 @@ export function createProps(ctx) {
   return {
     attach, trace, kAt, applyShot, T,
     get removed() { return removed; }, get glazing() { return glazing; }, get doors() { return doors; }, get panes() { return panes; }, get barrels() { return barrels; }, get enabled() { return enabled; },
+    glassStats() { return useGlass ? glass.stats() : null; },       // [vitres] tests
     /** Match start, map fully loaded. */
     begin(online) {
-      isOnline = !!online; enabled = false; shownKey = 0; hud.door(null); if (!ready) { for (const m of [doorMesh, steelMesh, paneMesh, holeMesh, drumMesh, gasMesh]) if (m) m.visible = false; return; }
+      isOnline = !!online; enabled = false; shownKey = 0; hud.door(null); if (!ready) { for (const m of [doorMesh, steelMesh, paneMesh, holeMesh, drumMesh, gasMesh]) if (m) m.visible = false; if (glass) { try { glass.setVisible(false); } catch { /* optional */ } } return; }
       const n = isOnline ? net() : null; authOff = isOnline && !(n && n.propsOk);
       if (authOff) {       // a server that does not know the props: no door or pane in the way, nobody disagrees about the world
-        for (const d of doors) { d.open = true; d.ang = SWING; hide(d.s); drawDoor(d); } for (const p of panes) { p.broken = true; hide(p.s); drawPane(p); } for (const b of barrels) { b.state = 2; hide(b.s); drawBarrel(b); }
-        for (const m of [doorMesh, steelMesh, paneMesh, holeMesh, drumMesh, gasMesh]) if (m) m.visible = false; return;
+        for (const d of doors) { d.open = true; d.ang = SWING; block(d, false); setLeaves(d, false); drawDoor(d); } for (const p of panes) { p.broken = true; hide(p.s); drawPane(p); } for (const b of barrels) { b.state = 2; hide(b.s); drawBarrel(b); }
+        for (const m of [doorMesh, steelMesh, paneMesh, holeMesh, drumMesh, gasMesh]) if (m) m.visible = false; if (useGlass) { try { glass.setVisible(false); } catch { /* optional */ } } return;
       }
       for (const m of [doorMesh, steelMesh, paneMesh, holeMesh, drumMesh, gasMesh]) if (m) m.visible = true;
+      if (useGlass) { try { glass.setVisible(true); } catch (e) { glassFail(e); } }       // [vitres]
       resetAll(); enabled = true;
       if (n) { try { n.sendProp({ a: 'man', h: mapId, d: doors.flatMap(q => [Math.round(q.cx * 10), Math.round(q.cz * 10), q.startOpen ? 1 : 0]), g: panes.length, b: barrels.flatMap(q => [Math.round(q.x * 10), Math.round(q.z * 10), q.kind === 'drum' ? 0 : 1]) }); n.sendProp({ a: 'req' }); } catch (e) { console.warn('[props] manifest', e); } }
     },
@@ -397,15 +461,17 @@ export function createProps(ctx) {
         }
         sLive = any; shards.instanceMatrix.needsUpdate = true;
       } else if (shards.visible) shards.visible = false;       // no shard alive: no draw call (its program was linked during the load)
+      if (useGlass) { try { glass.update(dt); } catch (e) { glassFail(e); } }       // [vitres] shards in flight, glass landing on the floor
     },
     /** A rocket or grenade reached an intact pane: it breaks, the projectile carries on. */
-    breakPane(s, owner, dx, dz) { const p = s && s.prop; if (!p || p.broken || !enabled) return false; breakPane(p, dx || 0, dz || 0); if (isOnline && owner === player) { glOut.push(p.id); reportPanes(); } return true; },
+    breakPane(s, owner, dx, dz) { const p = s && s.prop; if (!p || p.broken || !enabled) return false; breakPane(p, dx || 0, dz || 0, false, true); if (isOnline && owner === player) { glOut.push(p.id); reportPanes(); } return true; },       // [vitres] blast: it all goes
     /** Any blast: panes in its radius break, barrels take damage. `real` = this client owns the blast (online: not a mirror). */
     onBlast(x, y, z, radius, by, weaponId, visual) {
       if (!enabled) return; const own = !visual && (!isOnline || by === player || (!by && ctx.isHost && ctx.isHost())); let loud = 0;       // at most three crashes per blast
       for (let i = 0; i < panes.length; i++) {
         const p = panes[i]; if (p.broken) continue; const dx = p.cx - x, dy = p.cy - y, dz = p.cz - z, q = dx * dx + dy * dy + dz * dz, r = radius * 1.15; if (q > r * r) continue;
-        if (own) { breakPane(p, dx, dz, loud++ >= 3); if (isOnline) { glOut.push(p.id); if (glOut.length >= 16) reportPanes(); } }
+        if (own) { breakPane(p, dx, dz, loud++ >= 3, true); if (isOnline) { glOut.push(p.id); if (glOut.length >= 16) reportPanes(); } }
+        else if (useGlass) { p.hdx = dx; p.hdz = dz; p.hT = glass.now; p.hBl = true; }       // [vitres] another client's blast: its 'gl' throws the glass away from it
       }
       if (own) reportPanes();
       if (!own || (isOnline && weaponId === 'barrel')) return;       // online the server chains barrels itself
@@ -418,18 +484,17 @@ export function createProps(ctx) {
       if (!ready) return;
       switch (m.op) {
         case 'door': { const d = doors[m.id]; if (d) setDoor(d, !!m.o, m.s > 0 ? 1 : -1); break; }
-        case 'gl': for (const id of m.ids || []) { const p = panes[id]; if (p && !p.broken) breakPane(p, p.cx - camera.position.x, p.cz - camera.position.z); } break;
+        case 'gl': for (const id of m.ids || []) { const p = panes[id]; if (p && !p.broken) { const f = useGlass && p.hT > glass.now - 2; breakPane(p, f ? p.hdx : p.cx - camera.position.x, f ? p.hdz : p.cz - camera.position.z, false, f && p.hBl); } } break;       // [vitres] the way of the shot or blast seen here, if any
         case 'brl': { const b = barrels[m.id]; if (b && b.state === 0) { b.state = 1; b.fireT = 0; ignite(b); } break; }
         case 'boom': { const b = barrels[m.id]; if (!b || b.state === 2) break; b.state = 2; hide(b.s); drawBarrel(b); ctx.remoteBlast(b.x, b.y + b.k.h * 0.45, b.z, b.k.radius, b.k.damage, m.by); break; }
         case 'sync': {
-          if (Array.isArray(m.d)) for (let i = 0; i < m.d.length && i < doors.length; i++) { const d = doors[i], v = m.d[i], o = !!v; if (v === 1 || v === -1) d.side = v === d.noSwing ? -v : v; d.open = o; d.ang = o ? SWING : 0; d.moving = false; d.listed = false; if (o) hide(d.s); else show(d.s); drawDoor(d); }
-          moving.length = 0;
-          for (const id of m.g || []) { const p = panes[id]; if (p && !p.broken) { p.broken = true; hide(p.s); drawPane(p); } }
+          if (Array.isArray(m.d)) { for (const d of moving) { d.listed = false; d.moving = false; } moving.length = 0; for (let i = 0; i < m.d.length && i < doors.length; i++) { const d = doors[i], v = m.d[i], o = !!v; if (v === 1 || v === -1) d.side = v === d.noSwing ? -v : v; d.open = o; d.ang = o ? SWING : 0; d.moving = false; d.listed = false; block(d, !o); if (!setLeaves(d, o)) pend(d); drawDoor(d); } }       // [objc] every door left in the list is released first (one cut short by the sync stayed listed and never moved again)
+          for (const id of m.g || []) { const p = panes[id]; if (p && !p.broken) { p.broken = true; hide(p.s); drawPane(p); if (useGlass) { try { glass.shatter(p, 0, 0, false); } catch (e) { glassFail(e); } } } }       // [vitres] a late joiner: pieces in the frames and glass on the floor, no fall
           for (const e of m.b || []) { const b = barrels[e[0]]; if (!b) continue; b.state = e[1]; if (b.state === 2) { hide(b.s); drawBarrel(b); } }
           break;
         }
         case 'reset': if (enabled) resetAll(); break;
-        case 'off': enabled = false; for (const d of doors) { d.open = true; hide(d.s); } for (const p of panes) { p.broken = true; hide(p.s); } for (const b of barrels) { b.state = 2; hide(b.s); } for (const q of [doorMesh, steelMesh, paneMesh, holeMesh, drumMesh, gasMesh]) if (q) q.visible = false; hud.door(null); break;
+        case 'off': enabled = false; for (const d of doors) { d.open = true; block(d, false); setLeaves(d, false); } for (const p of panes) { p.broken = true; hide(p.s); } for (const b of barrels) { b.state = 2; hide(b.s); } for (const q of [doorMesh, steelMesh, paneMesh, holeMesh, drumMesh, gasMesh]) if (q) q.visible = false; if (glass) { try { glass.setVisible(false); } catch { /* optional */ } } hud.door(null); break;
       }
     },
   };

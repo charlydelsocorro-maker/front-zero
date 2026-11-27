@@ -1566,14 +1566,11 @@
  },
  "world": {
   "glass": {
-   "target": -27.5,
+   "target": -20,
    "takes": [
-    ["props/glass-1.mp3", -27.65],
-    ["props/glass-2.mp3", -27.53],
-    ["props/glass-3.mp3", -27.5],
-    ["props/glass-4.mp3", -27.5],
-    ["props/glass-5.mp3", -27.77],
-    ["props/glass-6.mp3", -27.48]
+    ["props/glass-7.mp3", -14.68],
+    ["props/glass-8.mp3", -15.41],
+    ["props/glass-9.mp3", -14.65]
    ]
   },
   "doorOpen": {

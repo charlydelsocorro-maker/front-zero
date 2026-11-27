@@ -1,6 +1,7 @@
 // FRONT ZÉRO — game engine (CONTRACT.md "Engine API"). Owns rendering, world, input, player physics,
 // shooting, actors, bot AI + navigation, HUD and audio hookup. Modes own rules; menus own everything else.
 import * as THREE from 'three';
+import './engine-lightcull.js';       // [fluid] point and spot lights skipped where they do not reach: before any shader is compiled
 import { WEAPONS, ALL_WEAPONS, OUTFITS, CLASSES, byId } from './data.js';
 import { EXTRA_IDS } from './weapons-extra.js';
 import { createFire } from './engine-fire.js';
@@ -791,6 +792,15 @@ export function createEngine(opts) {
     ric(step);
   }
   const STAGE_ON = { shadows: v => v !== 'off', postProcessing: v => v !== false, antialiasing: v => v !== 'off' };
+  /* [fluid] textures nettes plus loin : filtrage anisotrope des textures de couleur du décor selon le préréglage (bas 4, moyen 8, élevé et ultra 16, mobile 2),
+     plafonné par la carte graphique ; une valeur déjà plus haute est gardée (sol à 8). Au chargement seulement : changer l'anisotropie renvoie la texture au GPU
+     (derrière l'écran de chargement) ; aucun programme de plus. Mesuré : +0,1 à +0,2 ms GPU en élevé 1080p (Vieille Ville). */
+  const ANISO = { mobile: 2, bas: 4, moyen: 8, eleve: 16, ultra: 16 }, ANISO_SLOTS = ['map'];
+  function worldAniso() {
+    const sc = settings.get('graphics.renderScale') || 1, mx = renderer.capabilities.getMaxAnisotropy() || 1, a = Math.max(1, Math.min(mx, ANISO[settings.get('graphics.preset')] || (sc >= 1 ? 16 : sc >= 0.85 ? 8 : 4))); let n = 0;
+    for (const r of scene.children) { if (!/^world-/.test(r.name || '')) continue; r.traverse(o => { if (!o.material) return; for (const m of Array.isArray(o.material) ? o.material : [o.material]) for (const k of ANISO_SLOTS) { const t = m[k]; if (t && t.isTexture && t.image && t.anisotropy < a) { t.anisotropy = a; t.needsUpdate = true; n++; } } }); }
+    loadStats.aniso = a; loadStats.anisoN = n;
+  }
   const stageSnap = () => ({ shadows: STAGE_ON.shadows(settings.get('graphics.shadows')), postProcessing: STAGE_ON.postProcessing(settings.get('graphics.postProcessing')), antialiasing: STAGE_ON.antialiasing(settings.get('graphics.antialiasing')) });
   function applyGraphics() {
     gDeferred = false;
@@ -1156,6 +1166,7 @@ export function createEngine(opts) {
         gate(); loadProgress(0.5, 'nav');
         bkCall('navFold', true); try { nav.setLevel(world.levelAt); for (const f of nav.buildSteps(world.size, world.spawns, cfg.map)) { loadProgress(0.5 + 0.08 * f); await slice(); } } finally { bkCall('navFold', false); }       // wall panels away while the nav is built
       }
+      try { worldAniso(); } catch (e) { console.warn('[engine] anisotropy', e); }       // [fluid] before the textures are sent to the GPU (warmGpu)
       fx.clear(); proj.clear(); proj.resetIds(); try { fire.clear(); } catch { /* optional */ } P.drawK = 0; P.torch = world.env === 'bunker'; P.torchK = 0; torch.intensity = 0;      // the weapon light starts on in the dark map only
       loadProgress(0.58, 'units'); await brk();
       for (const id of vm.attachmentIds()) { try { vm.prebuildAttachment(id); } catch (e) { console.warn('[engine] attachments', e); } await brk(); }       // one accessory model per slice
@@ -1185,7 +1196,7 @@ export function createEngine(opts) {
       if (!player.alive && player.respawnT < 0 && rules.autoRespawn) respawn(player, { at: null, delay: 0 });
       applyAudio(); hud.earn(0);
       loadProgress(0.64, 'audio'); await brk();
-      try { if (audio.preload) audio.preload([...new Set([...P.ws.map(w => w.def.id), ...actors.map(a => a.weaponId)])]); } catch { /* optional */ }      // recorded sounds of the weapons in this match first (not awaited)
+      try { if (audio.preload) audio.preload([...new Set(['frag', ...P.ws.map(w => w.def.id), ...actors.map(a => a.weaponId)])]); } catch { /* optional */ }      // recorded sounds of the weapons in this match first (not awaited); [fluid] 'frag': the explosion banks (blast, rumble, debris: 8 buffers) are rendered here by the pump below, not at the first grenade or barrel (40-53 ms frame each time a new one was needed)
       if (typeof audio.pump === 'function') { let left = audio.pump(4); const n0 = left; while (left > 0) { await brk(); left = audio.pump(4); loadProgress(0.64 + 0.06 * (1 - left / n0)); } }
       await warmGpu(h, temps, 0.7, 0.97);
       { const s = temps[0]; s.setColliders(grid.gather(player.pos.x, 1, player.pos.z, 3.2, [])); s.die(0, 1, false, 1); await brk(); for (let i = 0; i < 40; i++) s.update(1 / 60, solSt); }   // JIT the ragdoll solver now, not on the first kill

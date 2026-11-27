@@ -928,7 +928,15 @@ function buildTruck(b) {
     const end = (z, s) => { use(CANVAS, canv); gridSurf(L === 0 ? 14 : 5, L === 0 ? 6 : 2, (u, v, p) => { const x = lerp(-bedW * .985, bedW * .985, u), top = tH(x, z), y = lerp(cy, top, v); p[0] = x; p[1] = y; p[2] = z + s * .012 * Math.sin(u * 21) * (1 - v); }, false, [0, cy + .6, z - s * .5]); };
     end(bz1 - .05, 1); if (!b.wreck) end(bz0 + .02, -1);
   }
-  if (b.wreck && !flat) { use(TRIM, 0x1c1a17, .8); const nb = L === 2 ? 2 : nh, ns = L === 0 ? 10 : 5; for (let i = 0; i <= nb; i++) { const z = lerp(bz0 + .1, bz1 - .1, i / nb), p = []; for (let j = 0; j <= ns; j++) { const x = lerp(-bedW * .96, bedW * .96, j / ns); p.push([x, tH(x, z) - .03, z]); } tube(p, .018, 4); } }
+  /* [objc] burnt canvas: the bare hoops stand in their sockets on the side rails (their legs stopped 27 cm above the rails and read as hoops
+     floating off the bed); one is bent down by the heat, one snapped in the middle with both halves hanging. Same draws as before (none). */
+  if (b.wreck && !flat) { use(TRIM, 0x1c1a17, .8); const nb = L === 2 ? 2 : nh, ns = L === 0 ? 10 : 5, rail = bedY + .58, xr = bedW - .02, sd = (b.seed | 0) & 3;
+    for (let i = 0; i <= nb; i++) { const z = lerp(bz0 + .1, bz1 - .1, i / nb), kind = L === 2 ? 0 : (i + sd) % 5 === 2 ? 1 : (i + sd) % 5 === 4 ? 2 : 0, p = [[-xr, rail - .02, z]];
+      for (let j = 0; j <= ns; j++) { const x = lerp(-bedW * .96, bedW * .96, j / ns), u = j / ns, dip = kind === 1 ? .32 * Math.sin(u * Math.PI) * (.6 + .4 * u) : 0; p.push([x, tH(x, z) - .03 - dip, z + (kind === 1 ? .12 * Math.sin(u * Math.PI) : 0)]); }
+      p.push([xr, rail - .02, z]);
+      if (kind === 2) { const h = p.length >> 1, a = p.slice(0, h), c = p.slice(h + 1), drop = (q, s) => { const e = q[s ? 0 : q.length - 1]; q.splice(s ? 0 : q.length, 0, [e[0] + (s ? .06 : -.06), e[1] - .34, e[2] + .05]); }; drop(a, false); drop(c, true); tube(a, .018, 4); tube(c, .018, 4); }
+      else tube(p, .018, 4);
+      use(TRIM, 0x141210, .7); for (const s of [-1, 1]) box(s * xr, rail - .06, z, .05, .12, .05, .006); use(TRIM, 0x1c1a17, .8); } }
   if (hasDetail(b) && !b.wreck && !flat) {
     use(CANVAS, 0x38382a, .85); for (let i = 1; i < nh; i++) { const z = lerp(bz0, bz1, i / nh), p = []; for (let j = 0; j <= 9; j++) { const x = lerp(-bedW * .99, bedW * .99, j / 9); p.push([x, tH(x, z) + .012, z]); } tube(p, .012, 3); }
     sym(() => { for (let i = 0; i < 9; i++) { const z = lerp(bz0 + .15, bz1 - .15, i / 8); use(TRIM, 0x1a1b1d); box(bedW - .005, cy + .06, z, .02, .05, .035, .006); strap([[bedW + .012, cy + .06, z], [bedW + .012, cy - .16, z]], .025, 0x24241a); } });
