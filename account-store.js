@@ -26,7 +26,7 @@ const ID_RE = /^[a-f0-9]{32}$/, TOKEN_RE = /^[A-Za-z0-9_-]{43}$/, HEX64 = /^[a-f
 function dataDir(env = process.env) {
   if (env.FZ_DATA_DIR) return path.resolve(String(env.FZ_DATA_DIR));
   const here = path.resolve(__dirname);
-  if (here.split(path.sep).some(s => /^(rc\d*|play|play-prev)$/i.test(s))) return path.join(os.tmpdir(), 'front-zero-data-' + path.basename(here));
+  if (here.split(path.sep).some(s => /^(rc[\d.]*|play|play-prev)$/i.test(s))) return path.join(os.tmpdir(), 'front-zero-data-' + path.basename(here));
   return path.join(here, '.data');
 }
 

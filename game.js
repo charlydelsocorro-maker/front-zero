@@ -53,7 +53,7 @@ export function createEngine(opts) {
   // Weapon light: one spot light on the camera, in the scene from the start with intensity 0 when off, so the light count never changes (no shader rebuild on toggle).
   // It sits ahead of the weapon (so the viewmodel is not washed out) and slides back to the eye near a wall (a light without shadows must not end up behind the surface it lights).
   let torchN = 1;
-  const TORCH_I = 85, torch = new THREE.SpotLight(0xfff0d6, 0, 38, THREE.MathUtils.degToRad(16), 0.55, 1.25);
+  const TORCH_I = 85, torch = new THREE.SpotLight(0xfff0d6, 0, 38, THREE.MathUtils.degToRad(16), 0.8, 1.25);   // [restes] softer rim (penumbra 0.55 -> 0.8)
   torch.castShadow = false; torch.position.set(0.1, -0.1, -0.75); torch.target.position.set(0.02, -0.02, -9); camera.add(torch); camera.add(torch.target);
   const grid = createGrid(4), mover = createMover(grid), nav = createNav(grid);
   let groundSurf = 'concrete', sun = null, teamSp = [[], []];
@@ -93,10 +93,14 @@ export function createEngine(opts) {
   hud.show(false);
 
   /* ---------- world / map ---------- */
+  /* [meubles] meubles des pièces vides (map-furnish.js) : collisions ajoutées après portes, vitres et barils, avant la grille et la navigation */
+  let furnMod = null; const furnLoad = import('./map-furnish.js').then(m => { furnMod = m; }).catch(e => console.warn('[meubles] indisponible', e && e.message));
+  const furnish = id => { if (!furnMod) return; try { furnMod.furnish({ world, scene, id }); } catch (e) { console.warn('[meubles]', e); } };
+  const furnishSliced = async (id, slice) => { if (!furnMod) return; try { await furnMod.furnishAsync({ world, scene, id }, slice); } catch (e) { if (e === LOAD_ABORT) throw e; console.warn('[meubles]', e); } };   // [meubles] loading screen: room scan in 6 ms slices
   function loadMap(id) {
     if (world.id !== id) {
       for (const a of actors) if (a.sol) { a.sol.dispose(); a.sol = null; }
-      world.load(id); props.attach(id); bkCall('attach', id);
+      world.load(id); props.attach(id); bkCall('attach', id); furnish(id);       // [meubles]
       grid.build(world.solids); nav.setLevel(world.levelAt); bkCall('navFold', true); try { nav.build(world.size, world.spawns, id); } finally { bkCall('navFold', false); } mapReady();
     }
     fx.clear(); proj.clear();
@@ -613,7 +617,7 @@ export function createEngine(opts) {
     camera.getWorldDirection(v1); const wallT = a.alive ? grid.ray(camera.position.x, camera.position.y, camera.position.z, v1.x, v1.y, v1.z, 1.15) : 1.15;
     P.vmBlock += (clamp((1.15 - wallT) / 0.75, 0, 1) - P.vmBlock) * Math.min(1, dt * 14);
     // Flashlight on a near wall: the beam is a point-like spot (I / d^1.25), so a wall at 0.6 m got ~25x the light of one at 10 m and clipped to white. Cap the illuminance at what a wall 10 m away gets; the reach beyond 10 m is untouched. One extra grid ray, only while the lamp is on.
-    if (P.torchK > 0) { const wl = grid.ray(camera.position.x, camera.position.y, camera.position.z, v1.x, v1.y, v1.z, 10.8) + torch.position.z; const nk = wl >= 10 ? 1 : Math.pow(Math.max(0.15, wl) / 10, 1.25); torchN += (nk - torchN) * Math.min(1, dt * 14); torch.intensity = TORCH_I * P.torchK * P.torchK * torchN; }
+    if (P.torchK > 0) { const wl = grid.ray(camera.position.x, camera.position.y, camera.position.z, v1.x, v1.y, v1.z, 14.8) + torch.position.z; const nk = wl >= 14 ? 1 : Math.pow(Math.max(0.15, wl) / 14, 1.25);   /* [restes] the spot on a near wall stays a third dimmer (14 m reference, was 10): no more blown-out white disc (8e capture, Bunker) */ torchN += (nk - torchN) * Math.min(1, dt * 14); torch.intensity = TORCH_I * P.torchK * P.torchK * torchN; }
     vmSt.ads = P.ads; vmSt.speed = sp; vmSt.grounded = b.grounded; vmSt.sliding = P.slide > 0; vmSt.yawDelta = wrap(a.yaw - P.yawPrev); vmSt.pitchDelta = a.pitch - P.pitchPrev; vmSt.blocked = P.vmBlock; vmSt.dead = !a.alive;
     P.yawPrev = a.yaw; P.pitchPrev = a.pitch;
     vm.update(dt, vmSt); hud.scope(vm.scoped && a.alive);
@@ -1152,13 +1156,13 @@ export function createEngine(opts) {
       const bfp = await botFitPlan(); gate();       // bot outfits of this match: { ids to build, warm (one per set) } or null
       if (fitMod && (online || E.warmOutfits || bfp)) { try { await fitMod.prepareOutfits(brk, bfp ? bfp.ids : undefined); gate(); for (const wid of (bfp && bfp.warm) || fitMod.WARM_IDS || [fitMod.OUTFIT_SETS[0].id]) for (let l = 0; l < 3; l++) { await brk(); temps.push(createSoldier(scene, { outfit: wid, outfitLod: l })); } } catch (e) { if (e === LOAD_ABORT) throw e; console.warn('[outfit] prepare', e); } }       // someone may wear one: geometry and shaders are ready before the first frame
       await finLoad(temps, brk);
-      await bkLoad(); gate();
+      await bkLoad(); await furnLoad; gate();       // [meubles] module prêt avant la carte
       if (world.id !== cfg.map) {
         for (const a of actors) if (a.sol) { a.sol.dispose(); a.sol = null; }
         let kicked = false;
         await world.loadAsync(cfg.map, async lp => {
           if (lp.phase === 'scene' && !kicked) {            // scene graph complete, textures still blank: start the shader links now, paint while they run
-            kicked = true; props.attach(cfg.map); bkCall('attach', cfg.map); await brk(); grid.build(world.solids); await brk(); mapReady(); await brk(); await kickAll(slice);
+            kicked = true; props.attach(cfg.map); bkCall('attach', cfg.map); { let fk = 0; await furnishSliced(cfg.map, () => { const p = slice(); if (p) loadProgress(0.13 + 0.01 * Math.min(1, ++fk / 120), 'map'); return p; }); } await brk(); grid.build(world.solids); await brk(); mapReady(); await brk(); await kickAll(slice);
           }
           loadProgress(lp.phase === 'tex' ? 0.14 + 0.34 * lp.done / Math.max(1, lp.total) : lp.phase === 'ground' ? 0.49 : lp.phase === 'scene' ? 0.13 : 0.08, lp.phase === 'tex' || lp.phase === 'ground' ? 'textures' : 'map');
           await slice();
@@ -1322,7 +1326,7 @@ export function createEngine(opts) {
       camera.position.set(Math.cos(idle) * r, 11 + Math.sin(idle * 2) * 1.5, Math.sin(idle) * r); camera.rotation.set(0, 0, 0); camera.lookAt(0, 2, 0); camera.updateMatrixWorld();
     }
     vm.tick(dt);
-    if (world.id && !loading) world.update(dt, time, camera.position);
+    if (world.id && !loading) { world.update(dt, time, camera.position); if (furnMod) furnMod.update(camera.position); }       // [meubles]
     simMs = performance.now() - t0;
     if (world.id && !skipRender && !loading) {       // the loader draws its own hidden frames; nothing half-built reaches the screen
       if (++shTick % shadowEvery === 0) renderer.shadowMap.needsUpdate = true;

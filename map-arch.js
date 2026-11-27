@@ -371,7 +371,8 @@ export class Arch {
           QQ(P3(edge + sg * tread * .4, d0, cm(t0)), P3(edge + sg * tread * .4, d1, cm(t1)), P3(back + sg * .004, top, cm(t1)), P3(back + sg * .004, top, cm(t0))); }
         QQ(P3(edge + sg * .012, yb, cm(0)), P3(edge + sg * .012, yb, cm(1)), P3(edge, top - .03, cm(1)), P3(edge, top - .03, cm(0)));      /* contremarche */
       }
-      this.tint(.8); for (const sd of [-1, 1]) { const c = along + sd * (hw + .004); if (ax === 'x') BX(lo, hi, y0, top, Math.min(c, c + sd * .012), Math.max(c, c + sd * .012), 0, 'yY'); else BX(Math.min(c, c + sd * .012), Math.max(c, c + sd * .012), y0, top, lo, hi, 0, 'yY'); }
+      this.tint(.8); { /* [restes] the side strip of the first tread (start end) and the last tread (both ends) stops 3 mm short: its end face was coplanar with a terrain wall at the flight end (z-fight) */ const sl = i === 0 ? (sg > 0 ? [.003, 0] : [0, -.003]) : [0, 0], sf = i === n - 1 ? [.003, -.003] : [0, 0], l2 = lo + sl[0] + sf[0], h2 = hi + sl[1] + sf[1];
+      for (const sd of [-1, 1]) { const c = along + sd * (hw + .004); if (ax === 'x') BX(l2, h2, y0, top, Math.min(c, c + sd * .012), Math.max(c, c + sd * .012), 0, 'yY'); else BX(Math.min(c, c + sd * .012), Math.max(c, c + sd * .012), y0, top, l2, h2, 0, 'yY'); } }
       if (i === n - 1) { const e = p1 + sg * .004; if (ax === 'x') BX(Math.min(e, e + sg * .012), Math.max(e, e + sg * .012), y0, top, along - hw, along + hw, 0, 'yY'); else BX(along - hw, along + hw, y0, top, Math.min(e, e + sg * .012), Math.max(e, e + sg * .012), 0, 'yY'); }
       this.end();
     }
